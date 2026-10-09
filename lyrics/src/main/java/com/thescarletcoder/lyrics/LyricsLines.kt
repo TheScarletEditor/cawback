@@ -216,7 +216,12 @@ private fun GapDots(isCurrent: Boolean, start: Long, end: Long?, offsetMs: Long,
 @Composable
 fun PlainLyrics(s: Shown.Found) {
     val compact = LocalCompact.current
-    LazyColumn(Modifier.fillMaxSize().edgeFade(), contentPadding = PaddingValues(horizontal = 28.dp, vertical = 40.dp)) {
+    val context = LocalContext.current
+    val list = rememberLazyListState()
+    // Same as synced: start right under the header; the top fade only once something has scrolled away.
+    val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0 } }
+    val topFade by animateFloatAsState(if (scrolled) 1f else 0f, tween(Motion.duration(context, Motion.NAV_MS), easing = Motion.NAV_EASE), label = "topFade")
+    LazyColumn(Modifier.fillMaxSize().edgeFade { topFade }, state = list, contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 8.dp, bottom = 40.dp)) {
         item { Text("Not synced to the song. Scroll as you listen.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(bottom = 14.dp)) }
         itemsIndexed(s.lines) { _, line ->
             Text(line.text, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = if (compact) 18.sp else 24.sp,
