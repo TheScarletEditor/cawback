@@ -75,6 +75,12 @@ class LyricsRepo(private val store: LyricsStore) {
         next
     }
 
+    /** Settings: how many tracks have something saved (lyrics, a pick or a timing nudge). */
+    suspend fun savedCount(): Int = withContext(Dispatchers.IO) { store.count() }
+
+    /** Settings: "Clear saved lyrics". Wipes the cache, picks and nudges. */
+    suspend fun clearSaved() = withContext(Dispatchers.IO) { store.clear() }
+
     suspend fun search(q: String): List<Candidate> = withContext(Dispatchers.IO) { LrcLib.search(q) }
     suspend fun searchTitle(title: String): List<Candidate> = withContext(Dispatchers.IO) { LrcLib.searchTitle(title) }
 

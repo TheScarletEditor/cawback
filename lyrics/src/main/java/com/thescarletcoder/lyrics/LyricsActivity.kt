@@ -11,6 +11,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -148,6 +149,7 @@ private fun LyricsScreen(np: NowPlaying, repo: LyricsRepo, hasAccess: Boolean, o
     val scope = rememberCoroutineScope()
     var shown by remember { mutableStateOf<Shown>(Shown.NothingPlaying) }
     var picking by remember { mutableStateOf(false) }
+    var settings by remember { mutableStateOf(false) }
     var reload by remember { mutableStateOf(0) }
 
     LaunchedEffect(hasAccess, track, reload) {
@@ -166,12 +168,15 @@ private fun LyricsScreen(np: NowPlaying, repo: LyricsRepo, hasAccess: Boolean, o
     val inSplit = (LocalContext.current as? android.app.Activity)?.isInMultiWindowMode == true
     androidx.compose.runtime.CompositionLocalProvider(LocalCompact provides compact) {
     Column(Modifier.fillMaxSize()) {
-        Header(track, shown, playing, showSpotify = !inSplit, onWrong = { picking = !picking }, onSpotify = onSpotify, onPlayPause = np::playPause,
+        Header(track, shown, playing, showSpotify = !inSplit, onWrong = { settings = false; picking = !picking }, onSpotify = onSpotify, onPlayPause = np::playPause,
+            onSettings = { picking = false; settings = !settings },
             onNudge = { d -> val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch { shown = s.copy(offsetMs = repo.nudge(t, d)) } })
         Box(Modifier.weight(1f).fillMaxWidth()) {
             val t = track
-            if (picking && t != null) {
+            if (settings) {
+                SettingsPanel(repo, hasAccess, onGrant, onCleared = { reload++ }, onClose = { settings = false })
+            } else if (picking && t != null) {
                 Picker(t, shown as? Shown.Found, repo,
                     onPick = { c -> scope.launch { shown = repo.pin(t, c); picking = false } },
                     onAuto = { scope.launch { shown = Shown.Loading; shown = repo.unpin(t); picking = false } },
@@ -187,7 +192,7 @@ private fun LyricsScreen(np: NowPlaying, repo: LyricsRepo, hasAccess: Boolean, o
                 Shown.NotFound -> Message("No lyrics found", "LRCLIB doesn't have this one yet.", "Search by hand") { picking = true }
                 Shown.Offline -> Message(
                     "Can't reach LRCLIB",
-                    "Check that Rethink lets Scarlet Lyrics through, then try again.",
+                    "Check your internet connection, and any firewall app, then try again.",
                     "Try again",
                 ) { reload++ }
                 is Shown.Found -> when {
@@ -208,9 +213,9 @@ private val LocalCompact = androidx.compose.runtime.staticCompositionLocalOf { f
 @Composable
 private fun Header(
     track: Track?, shown: Shown, playing: Boolean, showSpotify: Boolean,
-    onWrong: () -> Unit, onSpotify: () -> Unit, onPlayPause: () -> Unit, onNudge: (Long) -> Unit,
+    onWrong: () -> Unit, onSpotify: () -> Unit, onPlayPause: () -> Unit, onNudge: (Long) -> Unit, onSettings: () -> Unit,
 ) {
-    if (LocalCompact.current) { CompactHeader(track, shown, playing, showSpotify, onWrong, onSpotify, onPlayPause, onNudge); return }
+    if (LocalCompact.current) { CompactHeader(track, shown, playing, showSpotify, onWrong, onSpotify, onPlayPause, onNudge, onSettings); return }
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
         Text(track?.title ?: "Scarlet Lyrics", fontFamily = Fraunces, fontSize = 30.sp, color = T.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (track != null) Text(track.artist, fontFamily = Inter, fontSize = 17.sp, color = T.soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -229,6 +234,7 @@ private fun Header(
                 if (shown.offsetMs != 0L) Text("%+.2fs".format(shown.offsetMs / 1000.0), fontFamily = Inter, fontSize = 14.sp, color = T.faint)
             }
             if (showSpotify) Chip("Spotify", onSpotify)
+            Chip("Settings", onSettings)
         }
     }
 }
@@ -237,7 +243,7 @@ private fun Header(
 @Composable
 private fun CompactHeader(
     track: Track?, shown: Shown, playing: Boolean, showSpotify: Boolean,
-    onWrong: () -> Unit, onSpotify: () -> Unit, onPlayPause: () -> Unit, onNudge: (Long) -> Unit,
+    onWrong: () -> Unit, onSpotify: () -> Unit, onPlayPause: () -> Unit, onNudge: (Long) -> Unit, onSettings: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.Bottom) {
@@ -259,6 +265,7 @@ private fun CompactHeader(
                 if (shown.offsetMs != 0L) Text("%+.2fs".format(shown.offsetMs / 1000.0), fontFamily = Inter, fontSize = 12.sp, color = T.faint)
             }
             if (showSpotify) SmallChip("Spotify", onSpotify)
+            SmallChip("Settings", onSettings)
         }
     }
 }
@@ -373,7 +380,7 @@ private fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (C
                 results = r
                 status = if (r.isEmpty()) "Nothing found. Try fewer words." else null
             }
-            catch (_: Exception) { status = "Can't reach LRCLIB. Check Rethink." }
+            catch (_: Exception) { status = "Can't reach LRCLIB. Check your internet connection." }
         }
     }
     LaunchedEffect(Unit) { run() }
@@ -423,4 +430,70 @@ private fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (C
             }
         }
     }
+}
+
+/** Settings: saved lyrics (count + clear), notification access, about. Opens in place of the lyrics, like the picker. */
+@Composable
+private fun SettingsPanel(repo: LyricsRepo, hasAccess: Boolean, onGrant: () -> Unit, onCleared: () -> Unit, onClose: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var saved by remember { mutableStateOf<Int?>(null) }
+    var confirming by remember { mutableStateOf(false) }
+    var cleared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { saved = repo.savedCount() }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Text("Settings", fontFamily = Fraunces, fontSize = 28.sp, color = T.text)
+
+        SettingsSection("Saved lyrics")
+        Text(
+            when (val n = saved) {
+                null -> " "
+                0 -> "Nothing saved on this device."
+                1 -> "1 song saved on this device."
+                else -> "$n songs saved on this device."
+            },
+            fontFamily = Inter, fontSize = 17.sp, color = T.text,
+        )
+        Text("Includes your \"Wrong lyrics?\" picks and timing nudges.", fontFamily = Inter, fontSize = 15.sp, color = T.soft, modifier = Modifier.padding(top = 4.dp))
+        Box(Modifier.padding(top = 12.dp)) {
+            when {
+                confirming -> Column {
+                    Text("Clear everything saved? This can't be undone.", fontFamily = Inter, fontSize = 16.sp, color = T.text)
+                    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Chip("Clear", {
+                            scope.launch {
+                                repo.clearSaved()
+                                saved = repo.savedCount()
+                                confirming = false; cleared = true
+                                onCleared()
+                            }
+                        }, accent = true)
+                        Chip("Cancel", { confirming = false })
+                    }
+                }
+                cleared -> Text("Cleared.", fontFamily = Inter, fontSize = 16.sp, color = T.soft)
+                saved != null && saved != 0 -> Chip("Clear saved lyrics", { confirming = true })
+            }
+        }
+
+        SettingsSection("Notification access")
+        Text(
+            if (hasAccess) "On. Scarlet Lyrics can see the song title, artist and position. It never reads your notifications."
+            else "Off. Scarlet Lyrics needs it to see what's playing.",
+            fontFamily = Inter, fontSize = 17.sp, color = T.text,
+        )
+        Box(Modifier.padding(top = 12.dp)) { Chip("Open the setting", onGrant) }
+
+        SettingsSection("About")
+        Text("Scarlet Lyrics ${BuildConfig.VERSION_NAME}", fontFamily = Inter, fontSize = 17.sp, color = T.text)
+        Text("Lyrics from LRCLIB (lrclib.net), the only place this app connects to.", fontFamily = Inter, fontSize = 15.sp, color = T.soft, modifier = Modifier.padding(top = 4.dp))
+        Text("Free and open source (GPL-3.0). By The Scarlet Coder, thescarletcoder.com", fontFamily = Inter, fontSize = 15.sp, color = T.soft, modifier = Modifier.padding(top = 4.dp))
+
+        Box(Modifier.padding(top = 28.dp, bottom = 24.dp)) { Chip("Close", onClose) }
+    }
+}
+
+@Composable
+private fun SettingsSection(title: String) {
+    Text(title, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = T.faint, modifier = Modifier.padding(top = 28.dp, bottom = 8.dp))
 }

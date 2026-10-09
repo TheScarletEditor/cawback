@@ -5,7 +5,7 @@ Lyrics for whatever you're playing, scrolling along with the song. By [The Scarl
 - Follows the song playing on your device (Spotify first, otherwise whatever is playing) and highlights the line being sung.
 - Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library. That is the only place the app connects to.
 - Reads only the song title, artist and position. It never reads your notifications.
-- Keeps no listening history. A small on-device cache stores fetched lyrics under hashed file names, excluded from backups. To wipe it, use Android's App info > Storage > Clear storage for Scarlet Lyrics.
+- Keeps no listening history. A small on-device cache stores fetched lyrics under hashed file names, excluded from backups. Settings shows how many songs are saved and has "Clear saved lyrics".
 - "Wrong lyrics" lets you pick a different match, and it sticks to that track.
 - Works in split screen next to your music app.
 - No ads, no tracking, no account.
