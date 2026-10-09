@@ -195,7 +195,7 @@ private fun LyricsScreen(
         look = if (t == null || a == null) null else AlbumTint.load(t.key, a, thumbPx)
     }
     val songShowing = hasAccess && track != null
-    val tint = look?.swatch?.takeIf { songShowing }?.let { TintMath.tint(p.dark, it, Tunables[LyricsTuning.TINT_STRENGTH]) }
+    val tint = look?.swatch?.takeIf { songShowing }?.let { TintMath.tint(p.dark, it, Tunables[LyricsTuning.TINT_STRENGTH], Tunables[LyricsTuning.TINT_SATURATION].toDouble()) }
     val bg by animateColorAsState(
         Color(0xFF000000.toInt() or (tint ?: (p.bg and 0xFFFFFF))),
         tween(Motion.duration(context, Tunables.int(LyricsTuning.TINT_FADE_MS)), easing = Motion.NAV_EASE), label = "tint",

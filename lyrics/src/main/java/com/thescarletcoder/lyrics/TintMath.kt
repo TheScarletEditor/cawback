@@ -18,11 +18,14 @@ object TintMath {
     const val LIGHT_MIN_LUMINANCE = 0.80
     const val MAX_SATURATION = 0.5
 
-    /** The theme background with [strength] of [swatch] mixed in, clamped. */
-    fun tint(dark: Boolean, swatch: Int, strength: Float): Int {
+    /**
+     * The theme background with [strength] of [swatch] mixed in, clamped. The luminance limits are fixed (they're
+     * what keeps every lyric line readable); saturation can be tuned.
+     */
+    fun tint(dark: Boolean, swatch: Int, strength: Float, maxSaturation: Double = MAX_SATURATION): Int {
         val base = if (dark) CHARCOAL else BONE
         var c = mix(base, swatch, strength.coerceIn(0f, 1f))
-        c = capSaturation(c, MAX_SATURATION)
+        c = capSaturation(c, maxSaturation.coerceIn(0.0, 1.0))
         return if (dark) clampTowards(c, CHARCOAL) { luminance(it) <= DARK_MAX_LUMINANCE }
         else clampTowards(c, BONE) { luminance(it) >= LIGHT_MIN_LUMINANCE }
     }

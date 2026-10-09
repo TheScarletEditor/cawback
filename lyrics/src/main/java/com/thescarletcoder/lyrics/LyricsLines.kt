@@ -61,12 +61,16 @@ import com.thescarletcoder.scarlet.Tunables
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Soft fade at the top and bottom of the lyrics (offscreen layer + DstIn gradient). */
-fun Modifier.edgeFade(): Modifier = this
+/**
+ * Soft fade at the top and bottom of the lyrics (offscreen layer + DstIn gradient). [top] (0..1) fades the top fade
+ * in only once the list has scrolled, so the first lines sit right under the header at the start of a song.
+ */
+fun Modifier.edgeFade(top: () -> Float = { 1f }): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
         drawContent()
-        val a = Tunables[LyricsTuning.FADE_TOP_START]; val b = Tunables[LyricsTuning.FADE_TOP_END]
+        val k = top().coerceIn(0f, 1f)
+        val a = Tunables[LyricsTuning.FADE_TOP_START] * k; val b = Tunables[LyricsTuning.FADE_TOP_END] * k
         val c = Tunables[LyricsTuning.FADE_BOTTOM_START]; val d = Tunables[LyricsTuning.FADE_BOTTOM_END]
         drawRect(
             Brush.verticalGradient(
@@ -101,11 +105,15 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying) {
         if (!dragged && System.currentTimeMillis() - lastTouch > 4000) glideTo(list, current.coerceAtLeast(0), anchor, Motion.duration(context, Tunables.int(LyricsTuning.GLIDE_MS)))
     }
 
+    // At the top of a song the lyrics start right under the header; the current line glides down to the anchor
+    // as the song goes on. The top fade appears once there's something scrolled away above.
+    val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0 } }
+    val topFade by animateFloatAsState(if (scrolled) 1f else 0f, tween(Motion.duration(context, Motion.NAV_MS), easing = Motion.NAV_EASE), label = "topFade")
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val top = maxHeight * anchor
         LazyColumn(
-            state = list, contentPadding = PaddingValues(top = top, bottom = maxHeight - top),
-            modifier = Modifier.fillMaxSize().edgeFade(),
+            state = list, contentPadding = PaddingValues(top = 8.dp, bottom = maxHeight - top),
+            modifier = Modifier.fillMaxSize().edgeFade { topFade },
         ) {
             itemsIndexed(s.lines) { i, line ->
                 val gapEnd = if (line.text.isBlank()) s.lines.getOrNull(i + 1)?.timeMs else null

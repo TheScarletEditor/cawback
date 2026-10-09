@@ -9,6 +9,7 @@ import com.thescarletcoder.scarlet.Tunables
 /** Lyrics' feel values (LYRICS-POLISH-SPEC section 9). Defaults are the spec's starting points. */
 object LyricsTuning {
     const val TINT_STRENGTH = "tint_strength"
+    const val TINT_SATURATION = "tint_saturation"
     const val LINE_SCALE = "line_scale"
     const val GLIDE_MS = "glide_ms"
     const val ANCHOR = "anchor"
@@ -31,7 +32,9 @@ object LyricsTuning {
     }
 
     private val list = listOf(
-        Tunable(TINT_STRENGTH, "Album tint", 0.07f, 0f, 0.3f, 0.01f),
+        // Sam, 2026-10-09: 0.9 (the spec started at 0.07). At this strength the saturation cap sets how vivid it gets.
+        Tunable(TINT_STRENGTH, "Album tint", 0.9f, 0f, 1f, 0.01f),
+        Tunable(TINT_SATURATION, "Album tint", 0.5f, 0f, 1f, 0.01f),
         Tunable(TINT_FADE_MS, "Album tint", 800f, 0f, 2000f, 50f, isInt = true),
         Tunable(LINE_SCALE, "Lines", 1.06f, 1f, 1.2f, 0.01f),
         Tunable(GLIDE_MS, "Lines", 650f, 0f, 1500f, 25f, isInt = true),
@@ -48,7 +51,13 @@ object LyricsTuning {
         Tunable(LOADING_DELAY_MS, "Song changes", 250f, 0f, 1500f, 25f, isInt = true),
     )
 
-    fun init(context: Context) = Tunables.init(context.getSharedPreferences("tuning", Context.MODE_PRIVATE), list)
+    fun init(context: Context) {
+        val store = context.getSharedPreferences("tuning", Context.MODE_PRIVATE)
+        // Once: Sam set the tint to 0.9 as the new starting point (2026-10-09). A value saved under the old 0..0.3 slider
+        // would otherwise hide it.
+        if (!store.getBoolean("tint_default_09", false)) store.edit().remove(TINT_STRENGTH).putBoolean("tint_default_09", true).apply()
+        Tunables.init(store, list)
+    }
 }
 
 /** Lyrics' own settings (only the theme so far). */

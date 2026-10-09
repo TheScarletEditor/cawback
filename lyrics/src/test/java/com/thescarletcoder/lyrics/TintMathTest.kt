@@ -10,16 +10,17 @@ import org.junit.Test
 class TintMathTest {
     private val covers = mapOf("yellow" to 0xFFFF00, "red" to 0xFF0000, "white" to 0xFFFFFF, "black" to 0x000000,
         "blue" to 0x0000FF, "green" to 0x00FF00)
-    private val strengths = listOf(0.07f, 0.2f, 1f)
+    private val strengths = listOf(0.07f, 0.2f, 0.9f, 1f)
+    private val saturations = listOf(0.5, 1.0)
 
     private fun check(dark: Boolean) {
         val text = if (dark) TintMath.BONE else TintMath.CHARCOAL
         val soft = if (dark) 0x908E86 else 0x66635D
         val next = if (dark) 0.60f else 0.72f
         val floor = if (dark) 0.38f else 0.52f
-        for ((name, cover) in covers) for (st in strengths) {
-            val bg = TintMath.tint(dark, cover, st)
-            val tag = "${if (dark) "dark" else "light"} $name @$st"
+        for ((name, cover) in covers) for (st in strengths) for (sat in saturations) {
+            val bg = TintMath.tint(dark, cover, st, sat)
+            val tag = "${if (dark) "dark" else "light"} $name @$st sat $sat"
             val lum = TintMath.luminance(bg)
             if (dark) assertTrue("$tag luminance $lum", lum <= TintMath.DARK_MAX_LUMINANCE + 1e-4)
             else assertTrue("$tag luminance $lum", lum >= TintMath.LIGHT_MIN_LUMINANCE - 1e-4)
