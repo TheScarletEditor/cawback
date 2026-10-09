@@ -4,7 +4,7 @@
 # Run:
 #   powershell -ExecutionPolicy Bypass -File .\release.ps1
 #
-# Output: dist${slug}-<version>.apk and its .sha256, ready for a GitHub release.
+# Output: dist\scarlet-lyrics-<version>.apk and its .sha256, ready for a GitHub release.
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
@@ -14,15 +14,15 @@ $keystore = "$env:USERPROFILE\scarlet-apps.keystore"
 $alias = 'scarletapps'
 if (-not (Test-Path $keystore)) { Write-Host "Signing key not found at $keystore."; exit 1 }
 
-$version = [regex]::Match((Get-Content .${m}\build.gradle.kts -Raw), 'versionName = "([^"]+)"').Groups[1].Value
+$version = [regex]::Match((Get-Content .\lyrics\build.gradle.kts -Raw), 'versionName = "([^"]+)"').Groups[1].Value
 Write-Host "Building Scarlet Lyrics $version (release)..."
 cmd /c ".\gradlew.bat :lyrics:assembleRelease --console=plain -q"
 if ($LASTEXITCODE -ne 0) { Write-Host "Build failed."; exit 1 }
 
 New-Item -ItemType Directory -Force dist | Out-Null
-$out = ".\dist${slug}-$version.apk"
+$out = ".\dist\scarlet-lyrics-$version.apk"
 Write-Host "Signing. Type the key password when asked."
-& $apksigner sign --ks $keystore --ks-key-alias $alias --out $out ".${m}\build\outputs\apk\release${m}-release-unsigned.apk"
+& $apksigner sign --ks $keystore --ks-key-alias $alias --out $out ".\lyrics\build\outputs\apk\release\lyrics-release-unsigned.apk"
 if ($LASTEXITCODE -ne 0) { Write-Host "Signing failed."; exit 1 }
 Remove-Item "$out.idsig" -ErrorAction SilentlyContinue
 
