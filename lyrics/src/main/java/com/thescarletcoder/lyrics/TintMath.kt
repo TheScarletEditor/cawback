@@ -26,9 +26,29 @@ object TintMath {
         val base = if (dark) CHARCOAL else BONE
         var c = mix(base, swatch, strength.coerceIn(0f, 1f))
         c = capSaturation(c, maxSaturation.coerceIn(0.0, 1.0))
-        return if (dark) clampTowards(c, CHARCOAL) { luminance(it) <= DARK_MAX_LUMINANCE }
-        else clampTowards(c, BONE) { luminance(it) >= LIGHT_MIN_LUMINANCE }
+        // Back off toward the plain background until the luminance limit holds AND every lyric row is readable:
+        // a very saturated colour can pass the luminance limit and still sink faint lines (dark + pure blue).
+        return if (dark) clampTowards(c, CHARCOAL) { luminance(it) <= DARK_MAX_LUMINANCE && readable(true, it) }
+        else clampTowards(c, BONE) { luminance(it) >= LIGHT_MIN_LUMINANCE && readable(false, it) }
     }
+
+    /** Current, next and distant lines and the artist name all meet their minimum contrast on [bg]. */
+    fun readable(dark: Boolean, bg: Int): Boolean {
+        val text = if (dark) BONE else CHARCOAL
+        val soft = if (dark) SOFT_DARK else SOFT_LIGHT
+        return contrast(text, bg) >= 4.5 &&
+            contrast(over(text, if (dark) NEXT_DARK else NEXT_LIGHT, bg), bg) >= 4.5 &&
+            contrast(over(text, if (dark) FLOOR_DARK else FLOOR_LIGHT, bg), bg) >= 3.0 &&
+            contrast(soft, bg) >= 4.5
+    }
+
+    // The spec's line alphas and secondary text colours the guarantee is checked against.
+    private const val NEXT_DARK = 0.60f
+    private const val NEXT_LIGHT = 0.72f
+    private const val FLOOR_DARK = 0.38f
+    private const val FLOOR_LIGHT = 0.52f
+    private const val SOFT_DARK = 0x908E86
+    private const val SOFT_LIGHT = 0x66635D
 
     /** [a] to [b] by [t] (0..1), per channel. */
     fun mix(a: Int, b: Int, t: Float): Int {
