@@ -163,27 +163,41 @@ private fun LyricsScreen(
         if (sawWelcome) { sawWelcome = false; youreSet = true; delay(Motion.duration(context, Motion.LUX_MS + 450 + 1100).toLong()); youreSet = false }
     }
 
-    LaunchedEffect(hasAccess, track, reload) {
+    // Reload only when the song itself changes (title and artist). Players update a song's details while it plays
+    // (the length arrives late, the album art, a blank moment between updates); each of those used to drop the
+    // lyrics and fetch them again, so a shaky connection showed "Can't reach LRCLIB" mid-song (Sam, 2026-10-09).
+    val song = track?.let { it.title + "\u0001" + it.artist }
+    var shownFor by remember { mutableStateOf<Pair<String, Int>?>(null) }   // the song and reload the lyrics belong to
+    LaunchedEffect(hasAccess, song, reload) {
+        if (!hasAccess) { shown = Shown.NoAccess; shownFor = null; return@LaunchedEffect }
+        if (song == null) {
+            delay(2_000)   // a blank moment between updates isn't "nothing playing": the lyrics stay meanwhile
+            shown = Shown.NothingPlaying; shownFor = null
+            finding = false; slow = false
+            return@LaunchedEffect
+        }
+        if (shownFor == song to reload && shown is Shown.Found) return@LaunchedEffect   // the same song came back
         if (panel == Panel.PICKER) panel = Panel.NONE
         finding = false; slow = false
-        val t = track
-        when {
-            !hasAccess -> shown = Shown.NoAccess
-            t == null -> shown = Shown.NothingPlaying
-            else -> {
-                shown = null
-                var done = false
-                val timer = launch {
-                    delay(Tunables.int(LyricsTuning.LOADING_DELAY_MS).toLong())
-                    if (!done) finding = true
-                    delay(3000L - Tunables.int(LyricsTuning.LOADING_DELAY_MS))
-                    if (!done) slow = true
-                }
-                val result = repo.load(t)
-                done = true; timer.cancel()
-                finding = false; slow = false
-                shown = result
-            }
+        shown = null
+        shownFor = null
+        var done = false
+        val timer = launch {
+            delay(Tunables.int(LyricsTuning.LOADING_DELAY_MS).toLong())
+            if (!done) finding = true
+            delay(3000L - Tunables.int(LyricsTuning.LOADING_DELAY_MS))
+            if (!done) slow = true
+        }
+        var result = repo.load(track ?: return@LaunchedEffect)
+        done = true; timer.cancel()
+        finding = false; slow = false
+        shown = result
+        shownFor = song to reload
+        // Still offline after the retries: keep trying quietly, so the lyrics appear once the connection is back.
+        while (result is Shown.Offline) {
+            delay(15_000)
+            result = repo.load(track ?: return@LaunchedEffect)
+            if (result !is Shown.Offline) shown = result
         }
     }
 

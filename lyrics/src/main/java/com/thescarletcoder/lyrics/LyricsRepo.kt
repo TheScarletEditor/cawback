@@ -1,6 +1,7 @@
 package com.thescarletcoder.lyrics
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
@@ -17,9 +18,29 @@ sealed interface Shown {
 class LyricsRepo(private val store: LyricsStore) {
     private val retryMissAfterMs = 24 * 3_600_000L
 
-    private companion object {
+    companion object {
         /** When matching last improved (2026-10-08 17:00 PDT): misses remembered before this are tried again. */
-        const val MATCHING_CHANGED_AT = 1_791_504_000_000L
+        private const val MATCHING_CHANGED_AT = 1_791_504_000_000L
+
+        /** Waits before the second and third tries. */
+        val RETRY_DELAYS_MS = listOf(1_500L, 4_000L)
+
+        /**
+         * Run [block], trying again after each delay if the network fails. "Not found" is an answer, not a failure,
+         * so it is never retried. Pure apart from the waits, so it is unit tested.
+         */
+        suspend fun <T> withRetries(delaysMs: List<Long>, block: () -> T): T {
+            for (wait in delaysMs) {
+                try {
+                    return block()
+                } catch (e: LrcLib.NotFound) {
+                    throw e
+                } catch (_: IOException) {
+                    delay(wait)
+                }
+            }
+            return block()
+        }
     }
 
     suspend fun load(t: Track): Shown = withContext(Dispatchers.IO) {
@@ -30,7 +51,9 @@ class LyricsRepo(private val store: LyricsStore) {
             if (System.currentTimeMillis() - cached.fetchedAt < retryMissAfterMs && cached.fetchedAt > MATCHING_CHANGED_AT) return@withContext Shown.NotFound
         }
         try {
-            val c = lookup(t)
+            // A dropped connection gets two more tries before Lyrics says it can't reach LRCLIB (Sam, 2026-10-09:
+            // on the phone the connection dropped often, sometimes mid-song).
+            val c = withRetries(RETRY_DELAYS_MS) { lookup(t) }
             store.save(t.key, LyricsStore.Entry(c, pinned = false, offsetMs = cached?.offsetMs ?: 0, fetchedAt = System.currentTimeMillis()))
             if (c == null) Shown.NotFound else found(c, false, cached?.offsetMs ?: 0)
         } catch (_: IOException) {
