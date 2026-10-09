@@ -60,6 +60,8 @@ import kotlinx.coroutines.launch
 class LyricsActivity : ComponentActivity() {
     private lateinit var nowPlaying: NowPlaying
     private val access = mutableStateOf(false)
+    /** Set when Lyrics is opened fresh; the first start after that checks whether Spotify should join it. */
+    private var checkSpotify = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,7 +69,7 @@ class LyricsActivity : ComponentActivity() {
         val prefs = LyricsPrefs(this)
         nowPlaying = NowPlaying(this)
         val repo = LyricsRepo(LyricsStore(this))
-        if (savedInstanceState == null) maybeOpenSpotify(intent)
+        if (savedInstanceState == null) checkSpotify = !maybeOpenSpotify(intent)
         setContent {
             var choice by remember { mutableStateOf(prefs.theme) }
             val uiMode = LocalConfiguration.current.uiMode // the system flipping light/dark recomposes this
@@ -92,13 +94,19 @@ class LyricsActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        maybeOpenSpotify(intent)
+        if (!maybeOpenSpotify(intent) && intent.action == Intent.ACTION_MAIN) checkSpotify = true   // opened again from the launcher
     }
 
     override fun onStart() {
         super.onStart()
         access.value = nowPlaying.hasAccess()
         nowPlaying.start()
+        if (checkSpotify) {
+            checkSpotify = false
+            // Sam, 2026-10-09: opening Lyrics while Spotify is already playing brings Spotify up beside it, on the
+            // phone and the tablet, unless the screen is already split. Checked once the window knows its mode.
+            window.decorView.post { if (!isInMultiWindowMode && nowPlaying.spotifyPlaying()) openSpotifyAlongside() }
+        }
     }
 
     override fun onStop() {
@@ -106,12 +114,12 @@ class LyricsActivity : ComponentActivity() {
         super.onStop()
     }
 
-    /** Scarlet Command's Listen button sends this extra: open Spotify in the other half of the screen. */
-    private fun maybeOpenSpotify(i: Intent?) {
-        if (i?.getBooleanExtra(EXTRA_OPEN_SPOTIFY, false) == true) {
-            i.removeExtra(EXTRA_OPEN_SPOTIFY)
-            openSpotifyAlongside()
-        }
+    /** Scarlet Command's Listen button sends this extra: open Spotify in the other half of the screen. True if it did. */
+    private fun maybeOpenSpotify(i: Intent?): Boolean {
+        if (i?.getBooleanExtra(EXTRA_OPEN_SPOTIFY, false) != true) return false
+        i.removeExtra(EXTRA_OPEN_SPOTIFY)
+        openSpotifyAlongside()
+        return true
     }
 
     private fun openSpotifyAlongside() {

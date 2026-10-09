@@ -65,6 +65,10 @@ class NowPlaying(private val context: Context) {
         } catch (_: SecurityException) { /* access was revoked between the check and the call */ }
     }
 
+    /** Spotify's own session is the one followed, and it's playing (checked when Lyrics opens). */
+    fun spotifyPlaying(): Boolean =
+        controller?.packageName == SPOTIFY && controller?.playbackState?.state == PlaybackState.STATE_PLAYING
+
     fun stop() {
         runCatching { msm.removeOnActiveSessionsChangedListener(sessionsChanged) }
         attach(null)
