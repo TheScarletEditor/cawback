@@ -7,7 +7,8 @@ Lyrics for whatever you're playing, scrolling along with the song. By [The Scarl
 - Reads only the song title, artist and position. It never reads your notifications. To find the words, it sends the song's title, artist, album and length to lrclib.net.
 - Keeps no listening history. A small on-device cache stores fetched lyrics under hashed file names, excluded from backups. Settings shows how many songs are saved and has "Clear saved lyrics".
 - "Wrong lyrics" lets you pick a different match, and it sticks to that track.
-- Works in split screen next to your music app.
+- Works in split screen next to your music app. Open it while Spotify is playing and Spotify comes up beside it (unless the screen is already split).
+- If the connection drops, it tries again quietly and the lyrics appear once you're back online.
 - Light and dark (or following the system). While a song plays, a little of its album cover tints the background, taken from the art your music app already shares with Android. Art is never downloaded, and the tint is never saved.
 - No ads, no tracking, no account.
 
