@@ -2,6 +2,7 @@ package com.thescarletcoder.lyrics
 
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -34,6 +35,12 @@ class NowPlaying(private val context: Context) {
     val track: StateFlow<Track?> = _track
     private val _playing = MutableStateFlow(false)
     val playing: StateFlow<Boolean> = _playing
+    /**
+     * The cover the music app put in its media session, if any (never fetched from a URI). Separate from [track]:
+     * apps often send the art a moment after the title, and that mustn't trigger a second lyrics lookup.
+     */
+    private val _art = MutableStateFlow<Bitmap?>(null)
+    val art: StateFlow<Bitmap?> = _art
 
     private var controller: MediaController? = null
     private var state: PlaybackState? = null
@@ -88,6 +95,9 @@ class NowPlaying(private val context: Context) {
             md.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 },
         )
         _playing.value = state?.state == PlaybackState.STATE_PLAYING
+        _art.value = md?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: md?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+            ?: md?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
     }
 
     /** Current position, extrapolated from the last update so lines move smoothly between callbacks. */

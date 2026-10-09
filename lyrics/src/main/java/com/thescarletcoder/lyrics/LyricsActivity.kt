@@ -2,84 +2,60 @@ package com.thescarletcoder.lyrics
 
 import android.content.ComponentName
 import android.content.Intent
+import android.graphics.Color.TRANSPARENT
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
+import com.thescarletcoder.scarlet.Motion
+import com.thescarletcoder.scarlet.ScarletTokens
+import com.thescarletcoder.scarlet.ThemeChoice
+import com.thescarletcoder.scarlet.Tunables
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-/** Scarlet Coder dark palette, same values as Scarlet Command's tokens. */
-private object T {
-    val bg = Color(0xFF171614)
-    val surface = Color(0xFF211F1C)
-    val raised = Color(0xFF2A2825)
-    val line = Color(0x1FFAF9F6)
-    val text = Color(0xFFFAF9F6)
-    val soft = Color(0xFF908E86)
-    val faint = Color(0xFF65635E)
-    val scarlet = Color(0xFFE20514)
-    val scarletWash = scarlet.copy(alpha = 0.14f)
-}
-
-private val Fraunces = FontFamily(Font(R.font.fraunces_display))
-private val Inter = FontFamily(Font(R.font.inter_regular), Font(R.font.inter_medium, FontWeight.Medium))
 
 class LyricsActivity : ComponentActivity() {
     private lateinit var nowPlaying: NowPlaying
@@ -87,14 +63,28 @@ class LyricsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        LyricsTuning.init(this)
+        val prefs = LyricsPrefs(this)
         nowPlaying = NowPlaying(this)
         val repo = LyricsRepo(LyricsStore(this))
         if (savedInstanceState == null) maybeOpenSpotify(intent)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = T.scarlet, background = T.bg, surface = T.surface, onSurface = T.text)) {
-                Box(Modifier.fillMaxSize().background(T.bg).safeDrawingPadding()) {
-                    LyricsScreen(nowPlaying, repo, access.value, onGrant = ::openAccessSettings, onSpotify = ::openSpotifyAlongside)
+            var choice by remember { mutableStateOf(prefs.theme) }
+            val uiMode = LocalConfiguration.current.uiMode // the system flipping light/dark recomposes this
+            val p = remember(choice, uiMode) { ScarletTokens.resolve(choice) }
+            LaunchedEffect(p.dark) {
+                val bars = if (p.dark) SystemBarStyle.dark(TRANSPARENT) else SystemBarStyle.light(TRANSPARENT, TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
+            }
+            val scheme = if (p.dark) darkColorScheme(primary = Color(p.text), background = Color(p.bg), surface = Color(p.surface), onSurface = Color(p.text))
+                else lightColorScheme(primary = Color(p.text), background = Color(p.bg), surface = Color(p.surface), onSurface = Color(p.text))
+            MaterialTheme(colorScheme = scheme) {
+                CompositionLocalProvider(LocalPalette provides p) {
+                    LyricsScreen(
+                        nowPlaying, repo, access.value, theme = choice,
+                        onTheme = { c -> choice = c; prefs.theme = c; ScarletTokens.applyToSystem(this, c) },
+                        onGrant = ::openAccessSettings, onSpotify = ::openSpotifyAlongside,
+                    )
                 }
             }
         }
@@ -142,358 +132,177 @@ class LyricsActivity : ComponentActivity() {
     }
 }
 
+private enum class Panel { NONE, PICKER, SETTINGS, TUNING }
+
 @Composable
-private fun LyricsScreen(np: NowPlaying, repo: LyricsRepo, hasAccess: Boolean, onGrant: () -> Unit, onSpotify: () -> Unit) {
+private fun LyricsScreen(
+    np: NowPlaying, repo: LyricsRepo, hasAccess: Boolean, theme: ThemeChoice, onTheme: (ThemeChoice) -> Unit,
+    onGrant: () -> Unit, onSpotify: () -> Unit,
+) {
+    val context = LocalContext.current
     val track by np.track.collectAsState()
     val playing by np.playing.collectAsState()
+    val art by np.art.collectAsState()
     val scope = rememberCoroutineScope()
-    var shown by remember { mutableStateOf<Shown>(Shown.NothingPlaying) }
-    var picking by remember { mutableStateOf(false) }
-    var settings by remember { mutableStateOf(false) }
-    var reload by remember { mutableStateOf(0) }
+    @Suppress("UNUSED_VARIABLE") val tuned = Tunables.version.intValue // live tuning
+    val p = L.p
+
+    // null = nothing yet for this song (the old lyrics have faded out; "Finding lyrics..." only if it takes a while).
+    var shown by remember { mutableStateOf<Shown?>(null) }
+    var finding by remember { mutableStateOf(false) }
+    var slow by remember { mutableStateOf(false) }
+    var panel by remember { mutableStateOf(Panel.NONE) }
+    var sheet by remember { mutableStateOf(false) }
+    var reload by remember { mutableIntStateOf(0) }
+
+    // "You're set": access was just granted while Lyrics was showing the welcome screen.
+    var sawWelcome by remember { mutableStateOf(!hasAccess) }
+    var youreSet by remember { mutableStateOf(false) }
+    LaunchedEffect(hasAccess) {
+        if (!hasAccess) { sawWelcome = true; return@LaunchedEffect }
+        if (sawWelcome) { sawWelcome = false; youreSet = true; delay(Motion.duration(context, Motion.LUX_MS + 450 + 1100).toLong()); youreSet = false }
+    }
 
     LaunchedEffect(hasAccess, track, reload) {
-        picking = false
+        if (panel == Panel.PICKER) panel = Panel.NONE
+        finding = false; slow = false
         val t = track
-        shown = when {
-            !hasAccess -> Shown.NoAccess
-            t == null -> Shown.NothingPlaying
-            else -> { shown = Shown.Loading; repo.load(t) }
-        }
-    }
-
-    // Short window (the Flip's split screen gives Lyrics the top half): compact header and smaller lyrics.
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-    val compact = maxHeight < 560.dp
-    val inSplit = (LocalContext.current as? android.app.Activity)?.isInMultiWindowMode == true
-    androidx.compose.runtime.CompositionLocalProvider(LocalCompact provides compact) {
-    Column(Modifier.fillMaxSize()) {
-        Header(track, shown, playing, showSpotify = !inSplit, onWrong = { settings = false; picking = !picking }, onSpotify = onSpotify, onPlayPause = np::playPause,
-            onSettings = { picking = false; settings = !settings },
-            onNudge = { d -> val t = track; val s = shown
-                if (t != null && s is Shown.Found) scope.launch { shown = s.copy(offsetMs = repo.nudge(t, d)) } })
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            val t = track
-            if (settings) {
-                SettingsPanel(repo, hasAccess, onGrant, onCleared = { reload++ }, onClose = { settings = false })
-            } else if (picking && t != null) {
-                Picker(t, shown as? Shown.Found, repo,
-                    onPick = { c -> scope.launch { shown = repo.pin(t, c); picking = false } },
-                    onAuto = { scope.launch { shown = Shown.Loading; shown = repo.unpin(t); picking = false } },
-                    onClose = { picking = false })
-            } else when (val s = shown) {
-                Shown.NoAccess -> Message(
-                    "Scarlet Lyrics needs to see what's playing.",
-                    "Turn on notification access for Scarlet Lyrics. It only reads the song title, artist and position. It never reads your notifications.",
-                    "Open the setting", onGrant,
-                )
-                Shown.NothingPlaying -> Message("Nothing playing", "Start a song in Spotify and the lyrics show up here.", "Open Spotify", onSpotify)
-                Shown.Loading -> Message("Finding lyrics...", null, null, null)
-                Shown.NotFound -> Message("No lyrics found", "LRCLIB doesn't have this one yet.", "Search by hand") { picking = true }
-                Shown.Offline -> Message(
-                    "Can't reach LRCLIB",
-                    "Check your internet connection, and any firewall app, then try again.",
-                    "Try again",
-                ) { reload++ }
-                is Shown.Found -> when {
-                    s.lines.isEmpty() -> Message(if (s.candidate.instrumental) "Instrumental" else "No words for this one", null, null, null)
-                    s.synced -> SyncedLyrics(s, np)
-                    else -> PlainLyrics(s)
+        when {
+            !hasAccess -> shown = Shown.NoAccess
+            t == null -> shown = Shown.NothingPlaying
+            else -> {
+                shown = null
+                var done = false
+                val timer = launch {
+                    delay(Tunables.int(LyricsTuning.LOADING_DELAY_MS).toLong())
+                    if (!done) finding = true
+                    delay(3000L - Tunables.int(LyricsTuning.LOADING_DELAY_MS))
+                    if (!done) slow = true
                 }
+                val result = repo.load(t)
+                done = true; timer.cancel()
+                finding = false; slow = false
+                shown = result
             }
         }
     }
-    }
-    }
-}
 
-/** True when Lyrics has a short window (split screen): everything gets smaller so the words have room. */
-private val LocalCompact = androidx.compose.runtime.staticCompositionLocalOf { false }
+    // Album look for this track (thumbnail and tint), from the media session's own bitmap.
+    var look by remember { mutableStateOf<AlbumLook?>(null) }
+    val thumbPx = with(LocalDensity.current) { 44.dp.roundToPx() }
+    LaunchedEffect(track?.key, art) {
+        val t = track; val a = art
+        look = if (t == null || a == null) null else AlbumTint.load(t.key, a, thumbPx)
+    }
+    val songShowing = hasAccess && track != null
+    val tint = look?.swatch?.takeIf { songShowing }?.let { TintMath.tint(p.dark, it, Tunables[LyricsTuning.TINT_STRENGTH]) }
+    val bg by animateColorAsState(
+        Color(0xFF000000.toInt() or (tint ?: (p.bg and 0xFFFFFF))),
+        tween(Motion.duration(context, Tunables.int(LyricsTuning.TINT_FADE_MS)), easing = Motion.NAV_EASE), label = "tint",
+    )
 
-@Composable
-private fun Header(
-    track: Track?, shown: Shown, playing: Boolean, showSpotify: Boolean,
-    onWrong: () -> Unit, onSpotify: () -> Unit, onPlayPause: () -> Unit, onNudge: (Long) -> Unit, onSettings: () -> Unit,
-) {
-    if (LocalCompact.current) { CompactHeader(track, shown, playing, showSpotify, onWrong, onSpotify, onPlayPause, onNudge, onSettings); return }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
-        Text(track?.title ?: "Scarlet Lyrics", fontFamily = Fraunces, fontSize = 30.sp, color = T.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (track != null) Text(track.artist, fontFamily = Inter, fontSize = 17.sp, color = T.soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.padding(top = 10.dp))
-        // Wraps onto a second line on narrow screens (the phone) instead of squeezing the last button.
-        androidx.compose.foundation.layout.FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (track != null) Chip(if (playing) "Pause" else "Play", onPlayPause)
-            if (track != null && shown !is Shown.NoAccess) Chip("Wrong lyrics?", onWrong)
-            if (shown is Shown.Found && shown.synced) {
-                Chip("Earlier", { onNudge(250) })
-                Chip("Later", { onNudge(-250) })
-                if (shown.offsetMs != 0L) Text("%+.2fs".format(shown.offsetMs / 1000.0), fontFamily = Inter, fontSize = 14.sp, color = T.faint)
-            }
-            if (showSpotify) Chip("Spotify", onSpotify)
-            Chip("Settings", onSettings)
+    // Header auto-hide (Sam's ruling): while a song plays with no sheet or panel open, fade 3 s after the last touch.
+    var chrome by remember { mutableStateOf(true) }
+    var touches by remember { mutableIntStateOf(0) }
+    val canHide = playing && songShowing && !sheet && panel == Panel.NONE && shown is Shown.Found
+    LaunchedEffect(canHide, touches) {
+        chrome = true
+        if (canHide) { delay(Tunables.int(LyricsTuning.CHROME_HIDE_MS).toLong()); chrome = false }
+    }
+    val fadeMs = Motion.duration(context, Tunables.int(LyricsTuning.CHROME_FADE_MS))
+    val chromeAlpha by animateFloatAsState(if (chrome) 1f else 0f, tween(fadeMs, easing = Motion.NAV_EASE), label = "chrome")
+    val chromeLift by animateDpAsState(if (chrome) 0.dp else (-6).dp, tween(fadeMs, easing = Motion.NAV_EASE), label = "lift")
+
+    BackHandler(enabled = sheet || panel != Panel.NONE) {
+        when {
+            sheet -> sheet = false
+            panel == Panel.TUNING -> panel = Panel.SETTINGS
+            else -> panel = Panel.NONE
         }
     }
-}
 
-/** Split screen: title and artist on one line, the buttons in one small row you swipe sideways. */
-@Composable
-private fun CompactHeader(
-    track: Track?, shown: Shown, playing: Boolean, showSpotify: Boolean,
-    onWrong: () -> Unit, onSpotify: () -> Unit, onPlayPause: () -> Unit, onNudge: (Long) -> Unit, onSettings: () -> Unit,
-) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            // The title comes first and takes the room it needs; the artist gets what's left (Sam, 2026-10-08).
-            Text(track?.title ?: "Scarlet Lyrics", fontFamily = Fraunces, fontSize = 20.sp, color = T.text, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
-            if (track != null) Text("  " + track.artist, fontFamily = Inter, fontSize = 13.sp, color = T.soft, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-        }
-        Row(
-            Modifier.padding(top = 6.dp).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (track != null) SmallChip(if (playing) "Pause" else "Play", onPlayPause)
-            if (track != null && shown !is Shown.NoAccess) SmallChip("Wrong lyrics?", onWrong)
-            if (shown is Shown.Found && shown.synced) {
-                SmallChip("Earlier", { onNudge(250) })
-                SmallChip("Later", { onNudge(-250) })
-                if (shown.offsetMs != 0L) Text("%+.2fs".format(shown.offsetMs / 1000.0), fontFamily = Inter, fontSize = 12.sp, color = T.faint)
-            }
-            if (showSpotify) SmallChip("Spotify", onSpotify)
-            SmallChip("Settings", onSettings)
-        }
-    }
-}
-
-@Composable
-private fun SmallChip(label: String, onClick: () -> Unit) {
-    Box(
-        Modifier.heightIn(min = 40.dp).background(T.raised, RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) { Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = T.text) }
-}
-
-@Composable
-private fun Chip(label: String, onClick: () -> Unit, accent: Boolean = false) {
-    Box(
-        Modifier.heightIn(min = 48.dp)
-            .background(if (accent) T.scarlet else T.raised, RoundedCornerShape(24.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) { Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = T.text) }
-}
-
-@Composable
-private fun Message(title: String, body: String?, action: String?, onAction: (() -> Unit)?) {
-    Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, fontFamily = Fraunces, fontSize = 28.sp, color = T.text)
-        if (body != null) Text(body, fontFamily = Inter, fontSize = 17.sp, color = T.soft, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 10.dp).width(460.dp))
-        if (action != null && onAction != null) Box(Modifier.padding(top = 20.dp)) { Chip(action, onAction, accent = true) }
-    }
-}
-
-@Composable
-private fun SyncedLyrics(s: Shown.Found, np: NowPlaying) {
-    val list = rememberLazyListState()
-    val dragged by list.interactionSource.collectIsDraggedAsState()
-    var pos by remember { mutableLongStateOf(0L) }
-    var lastTouch by remember { mutableLongStateOf(0L) }
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-
-    LaunchedEffect(s) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (true) { pos = np.positionMs() + s.offsetMs; delay(60) }
-        }
-    }
-    LaunchedEffect(dragged) { if (dragged) lastTouch = System.currentTimeMillis() }
-    val current = Lrc.indexAt(s.lines, pos)
-    LaunchedEffect(current) {
-        // Follow the song unless Sam scrolled in the last 4 seconds.
-        if (!dragged && System.currentTimeMillis() - lastTouch > 4000) list.animateScrollToItem(current.coerceAtLeast(0))
-    }
-
-    val compact = LocalCompact.current
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val lead = maxHeight * if (compact) 0.25f else 0.36f
-        LazyColumn(state = list, contentPadding = PaddingValues(top = lead, bottom = maxHeight - lead), modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(s.lines) { i, line ->
-                val color by animateColorAsState(
-                    when { i == current -> T.text; i < current -> T.faint; else -> T.soft }, label = "line",
-                )
-                Row(
-                    Modifier.fillMaxWidth()
-                        .clickable { line.timeMs?.let { np.seekTo((it - s.offsetMs).coerceAtLeast(0)); lastTouch = 0 } }
-                        .padding(horizontal = if (compact) 16.dp else 24.dp, vertical = if (compact) 4.dp else 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.width(4.dp).heightIn(min = 34.dp).background(if (i == current) T.scarlet else Color.Transparent, RoundedCornerShape(2.dp)))
-                    Text(
-                        line.text.ifBlank { "♪" },
-                        fontFamily = Inter,
-                        fontWeight = if (i == current) FontWeight.Medium else FontWeight.Normal,
-                        fontSize = if (compact) (if (i == current) 22.sp else 18.sp) else if (i == current) 32.sp else 26.sp,
-                        lineHeight = if (compact) (if (i == current) 28.sp else 24.sp) else if (i == current) 40.sp else 34.sp,
-                        color = color,
-                        modifier = Modifier.padding(start = 16.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PlainLyrics(s: Shown.Found) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 28.dp, vertical = 12.dp)) {
-        item { Text("Not synced to the song. Scroll as you listen.", fontFamily = Inter, fontSize = 14.sp, color = T.faint, modifier = Modifier.padding(bottom = 14.dp)) }
-        itemsIndexed(s.lines) { _, line ->
-            val compact = LocalCompact.current
-            Text(line.text, fontFamily = Inter, fontSize = if (compact) 18.sp else 24.sp, lineHeight = if (compact) 24.sp else 34.sp, color = T.text)
-        }
-    }
-}
-
-@Composable
-private fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate) -> Unit, onAuto: () -> Unit, onClose: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    // TextFieldValue so the cursor starts at the end of the pre-filled search (Sam couldn't reach the end on the phone).
-    var query by remember {
-        val start = "${Matching.cleanTitle(t.title)} ${t.artist}"
-        mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(start, androidx.compose.ui.text.TextRange(start.length)))
-    }
-    var results by remember { mutableStateOf<List<Candidate>?>(null) }
-    var status by remember { mutableStateOf<String?>(null) }
-    fun run() {
-        status = "Searching..."; results = null
-        scope.launch {
-            try {
-                var r = repo.search(query.text.trim())
-                // Nothing for title + artist? Try the title alone: some songs are filed under a label or composer.
-                if (r.isEmpty()) r = repo.searchTitle(Matching.cleanTitle(t.title))
-                results = r
-                status = if (r.isEmpty()) "Nothing found. Try fewer words." else null
-            }
-            catch (_: Exception) { status = "Can't reach LRCLIB. Check your internet connection." }
-        }
-    }
-    LaunchedEffect(Unit) { run() }
-
-    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-        // The field gets the full width; the buttons go underneath (narrow phone screens).
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(
-                value = query, onValueChange = { query = it }, singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { run() }),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = T.text, unfocusedTextColor = T.text,
-                    focusedBorderColor = T.soft, unfocusedBorderColor = T.line, cursorColor = T.text,
-                ),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Chip("Search", ::run)
-                Chip("Close", onClose)
-            }
-        }
-        if (current?.pinned == true) Box(Modifier.padding(top = 10.dp)) { Chip("Go back to the automatic match", onAuto) }
-        status?.let { Text(it, fontFamily = Inter, fontSize = 16.sp, color = T.soft, modifier = Modifier.padding(top = 14.dp)) }
-        LazyColumn(Modifier.fillMaxSize().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            itemsIndexed(results.orEmpty()) { _, c ->
-                val chosen = current?.candidate?.id == c.id
-                val durDiff = t.durationMs?.let { Math.abs(c.durationSec - it / 1000.0) }
-                Column(
-                    Modifier.fillMaxWidth()
-                        .background(if (chosen) T.scarletWash else T.surface, RoundedCornerShape(14.dp))
-                        .clickable { onPick(c) }
-                        .padding(16.dp),
-                ) {
-                    Text(c.track, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 18.sp, color = T.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        listOfNotNull(
-                            c.artist, c.album.ifBlank { null },
-                            "%d:%02d".format(c.durationSec.toInt() / 60, c.durationSec.toInt() % 60),
-                            when { c.synced != null -> "Synced"; c.plain != null -> "Words only"; c.instrumental -> "Instrumental"; else -> null },
-                            durDiff?.takeIf { it > 3 }?.let { "length differs by ${it.toInt()}s" },
-                            if (chosen) "Showing now" else null,
-                        ).joinToString("  ·  "),
-                        fontFamily = Inter, fontSize = 15.sp, color = T.soft, maxLines = 2,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Settings: saved lyrics (count + clear), notification access, about. Opens in place of the lyrics, like the picker. */
-@Composable
-private fun SettingsPanel(repo: LyricsRepo, hasAccess: Boolean, onGrant: () -> Unit, onCleared: () -> Unit, onClose: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var saved by remember { mutableStateOf<Int?>(null) }
-    var confirming by remember { mutableStateOf(false) }
-    var cleared by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { saved = repo.savedCount() }
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
-        Text("Settings", fontFamily = Fraunces, fontSize = 28.sp, color = T.text)
-
-        SettingsSection("Saved lyrics")
-        Text(
-            when (val n = saved) {
-                null -> " "
-                0 -> "Nothing saved on this device."
-                1 -> "1 song saved on this device."
-                else -> "$n songs saved on this device."
-            },
-            fontFamily = Inter, fontSize = 17.sp, color = T.text,
-        )
-        Text("Includes your \"Wrong lyrics?\" picks and timing nudges.", fontFamily = Inter, fontSize = 15.sp, color = T.soft, modifier = Modifier.padding(top = 4.dp))
-        Box(Modifier.padding(top = 12.dp)) {
-            when {
-                confirming -> Column {
-                    Text("Clear everything saved? This can't be undone.", fontFamily = Inter, fontSize = 16.sp, color = T.text)
-                    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Chip("Clear", {
-                            scope.launch {
-                                repo.clearSaved()
-                                saved = repo.savedCount()
-                                confirming = false; cleared = true
-                                onCleared()
-                            }
-                        }, accent = true)
-                        Chip("Cancel", { confirming = false })
+    BoxWithConstraints(
+        Modifier.fillMaxSize().background(bg)
+            .pointerInput(Unit) {
+                // Every touch resets the hide timer. While the header is hidden, a tap only brings it back
+                // (it doesn't seek); a swipe still scrolls the lyrics.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    touches++
+                    if (chrome) return@awaitEachGesture
+                    var moved = false
+                    while (true) {
+                        val ev = awaitPointerEvent(PointerEventPass.Initial)
+                        val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                        if ((ch.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+                        if (!ch.pressed) { if (!moved) { ch.consume(); chrome = true }; break }
                     }
                 }
-                cleared -> Text("Cleared.", fontFamily = Inter, fontSize = 16.sp, color = T.soft)
-                saved != null && saved != 0 -> Chip("Clear saved lyrics", { confirming = true })
             }
+            .safeDrawingPadding(),
+    ) {
+        val compact = maxHeight < 560.dp
+        val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
+        CompositionLocalProvider(LocalCompact provides compact) {
+            Column(Modifier.fillMaxSize()) {
+                // The header keeps its space while hidden, so nothing moves when it fades.
+                Box(Modifier.fillMaxWidth().offset(y = chromeLift).graphicsLayer { alpha = chromeAlpha }) {
+                    Header(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    val t = track
+                    when {
+                        panel == Panel.TUNING -> TuningPage { panel = Panel.SETTINGS }
+                        panel == Panel.SETTINGS -> SettingsPanel(repo, hasAccess, theme, onTheme, onGrant, onCleared = { reload++ },
+                            onTuning = { panel = Panel.TUNING }, onClose = { panel = Panel.NONE })
+                        panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
+                            onPick = { c -> scope.launch { shown = repo.pin(t, c); panel = Panel.NONE } },
+                            onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } },
+                            onClose = { panel = Panel.NONE })
+                        youreSet -> YoureSet()
+                        else -> Content(shown, finding, slow, np, onGrant, onSpotify, onPick = { panel = Panel.PICKER }, onRetry = { reload++ })
+                    }
+                }
+            }
+            MoreSheet(
+                sheet, shown, hasTrack = track != null && hasAccess, showSpotify = !inSplit,
+                onClose = { sheet = false }, onWrong = { panel = Panel.PICKER },
+                onNudge = { d -> val t = track; val s = shown
+                    if (t != null && s is Shown.Found) scope.launch { shown = s.copy(offsetMs = repo.nudge(t, d)) } },
+                onSpotify = onSpotify, onSettings = { panel = Panel.SETTINGS },
+            )
         }
-
-        SettingsSection("Notification access")
-        Text(
-            if (hasAccess) "On. Scarlet Lyrics can see the song title, artist and position. It never reads your notifications."
-            else "Off. Scarlet Lyrics needs it to see what's playing.",
-            fontFamily = Inter, fontSize = 17.sp, color = T.text,
-        )
-        Box(Modifier.padding(top = 12.dp)) { Chip("Open the setting", onGrant) }
-
-        SettingsSection("About")
-        Text("Scarlet Lyrics ${BuildConfig.VERSION_NAME}", fontFamily = Inter, fontSize = 17.sp, color = T.text)
-        Text("Lyrics from LRCLIB (lrclib.net), the only place this app connects to.", fontFamily = Inter, fontSize = 15.sp, color = T.soft, modifier = Modifier.padding(top = 4.dp))
-        Text("Free and open source (GPL-3.0). By The Scarlet Coder, thescarletcoder.com", fontFamily = Inter, fontSize = 15.sp, color = T.soft, modifier = Modifier.padding(top = 4.dp))
-
-        Box(Modifier.padding(top = 28.dp, bottom = 24.dp)) { Chip("Close", onClose) }
     }
 }
 
+/** What fills the screen under the header. Old content fades out, then the new fades in. */
 @Composable
-private fun SettingsSection(title: String) {
-    Text(title, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = T.faint, modifier = Modifier.padding(top = 28.dp, bottom = 8.dp))
+private fun Content(
+    shown: Shown?, finding: Boolean, slow: Boolean, np: NowPlaying,
+    onGrant: () -> Unit, onSpotify: () -> Unit, onPick: () -> Unit, onRetry: () -> Unit,
+) {
+    val swap = Motion.duration(LocalContext.current, Tunables.int(LyricsTuning.SWAP_MS))
+    AnimatedContent(
+        targetState = shown, label = "content",
+        contentKey = { s -> if (s is Shown.Found) "found:${s.candidate.id}:${s.synced}" else s?.javaClass?.simpleName ?: "none" },
+        transitionSpec = { fadeIn(tween(swap, delayMillis = swap)) togetherWith fadeOut(tween(swap)) },
+    ) { s ->
+        when (s) {
+            null -> if (finding) Finding(slow) else Box(Modifier.fillMaxSize())
+            Shown.NoAccess -> Welcome(onGrant)
+            Shown.NothingPlaying -> EmptyState("Nothing playing", "Start a song and the lyrics show up here.", "Open Spotify", onSpotify)
+            Shown.Loading -> Finding(slow)
+            Shown.NotFound -> EmptyState("No lyrics found", "LRCLIB doesn't have this one yet.", "Search by hand", onPick)
+            Shown.Offline -> EmptyState(
+                "Can't reach LRCLIB",
+                "Check your internet connection. If you use a firewall app, let Scarlet Lyrics reach lrclib.net.",
+                "Try again", onRetry,
+            )
+            is Shown.Found -> when {
+                s.lines.isEmpty() -> EmptyState(if (s.candidate.instrumental) "Instrumental" else "No words for this one", null, null, null, raven = false)
+                s.synced -> SyncedLyrics(s, np)
+                else -> PlainLyrics(s)
+            }
+        }
+    }
 }

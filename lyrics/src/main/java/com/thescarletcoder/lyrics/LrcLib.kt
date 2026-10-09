@@ -23,7 +23,7 @@ data class Candidate(
 /** The only network client in Scarlet Lyrics. It can only reach https://lrclib.net. */
 object LrcLib {
     private const val HOST = "lrclib.net"
-    private const val AGENT = "ScarletLyrics/0.1 (personal app; thescarletcoder.com)"
+    private val AGENT = "ScarletLyrics/${BuildConfig.VERSION_NAME.substringBefore('+')} (+https://github.com/TheScarletEditor/scarlet-lyrics)"
 
     class NotFound : IOException()
 
