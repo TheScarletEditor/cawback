@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 // The commit this build came from (e.g. 0.1.0+712d74c, "-dirty" with uncommitted changes), so versions.ps1 can spot drift.
@@ -10,6 +11,9 @@ val gitRev: String = runCatching {
     val h = git("rev-parse", "--short", "HEAD")
     if (h.isEmpty()) "nogit" else h + if (git("status", "--porcelain").isNotEmpty()) "-dirty" else ""
 }.getOrDefault("nogit")
+
+// The Library's schema history, kept in the repo so every migration can be checked.
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
 android {
     namespace = "com.thescarletcoder.lyrics"
@@ -70,5 +74,11 @@ dependencies {
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     // Flex mode on the Flip: where the fold is when it's half-open (no permission, no network).
     implementation("androidx.window:window:1.3.0")
+    // The Library (0.4): Room on SQLCipher, key wrapped by Android Keystore, same as Scarlet Command.
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
+    implementation(libs.sqlcipher.android)
+    implementation(libs.androidx.sqlite)
     testImplementation("junit:junit:4.13.2")
 }

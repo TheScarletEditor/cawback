@@ -9,9 +9,11 @@ import android.media.AudioManager
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.thescarletcoder.lyrics.library.History
 
 /** The settings, for screens deep in the tree (provided by LyricsActivity). */
 val LocalSettings = staticCompositionLocalOf<LyricsSettings> { error("LyricsSettings not provided") }
@@ -51,6 +53,13 @@ class LyricsSettings(context: Context) {
     var delayWired by mutableIntStateOf(p.getInt("delay_wired", 0)); private set
     var delayBluetooth by mutableIntStateOf(p.getInt("delay_bluetooth", 0)); private set
 
+    /** Listening history (the Library, 0.4): off until Sam turns it on. Read by the recorders through History. */
+    var historyMode by mutableStateOf(History.mode(p)); private set
+    /** History paused until this time (History.PAUSED_UNTIL_ON = until turned back on); 0 = not paused. */
+    var historyPausedUntil by mutableLongStateOf(p.getLong(History.PAUSED, 0)); private set
+    /** Keep plays for this many days; 0 = forever. */
+    var keepPlaysDays by mutableIntStateOf(p.getInt(History.KEEP, 0)); private set
+
     fun choosePlayer(pkg: String) { player = pkg; p.edit().putString("player", pkg).apply() }
     fun followOnlyPlayer(on: Boolean) { onlyPlayer = on; p.edit().putBoolean("only_player", on).apply() }
     fun setIgnored(pkg: String, ignore: Boolean) {
@@ -69,6 +78,12 @@ class LyricsSettings(context: Context) {
             Output.BLUETOOTH -> { delayBluetooth = next; p.edit().putInt("delay_bluetooth", next).apply() }
         }
     }
+    fun chooseHistory(m: History.Mode) { historyMode = m; p.edit().putString(History.MODE, m.id).apply() }
+    /** Pause for [ms] (or History.PAUSED_UNTIL_ON); 0 resumes. */
+    fun pauseHistory(untilMs: Long) { historyPausedUntil = untilMs; p.edit().putLong(History.PAUSED, untilMs).apply() }
+    fun chooseKeepPlays(days: Int) { keepPlaysDays = days; p.edit().putInt(History.KEEP, days).apply() }
+    fun historyPaused(now: Long = System.currentTimeMillis()) = now < historyPausedUntil
+
     fun delayFor(out: Output) = when (out) { Output.SPEAKER -> delaySpeaker; Output.WIRED -> delayWired; Output.BLUETOOTH -> delayBluetooth }
 
     /** The app actually followed: the chosen one, or Spotify when nothing's chosen yet and it's installed. */

@@ -1,0 +1,124 @@
+package com.thescarletcoder.lyrics
+
+import com.thescarletcoder.lyrics.library.History
+import com.thescarletcoder.lyrics.library.History.Mode
+import com.thescarletcoder.lyrics.library.History.Where
+import com.thescarletcoder.lyrics.library.PlayRule
+import com.thescarletcoder.lyrics.library.PlayTracker
+import com.thescarletcoder.lyrics.library.SongKey
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class LibraryRulesTest {
+    // --- PlayRule ---
+
+    @Test fun shortTracksNeverCount() {
+        assertFalse(PlayRule.counts(30_000, 30_000))
+        assertFalse(PlayRule.counts(20_000, 20_000))
+    }
+
+    @Test fun halfTheSongCounts() {
+        assertTrue(PlayRule.counts(200_000, 100_000))
+        assertFalse(PlayRule.counts(200_000, 99_999))
+    }
+
+    @Test fun fourMinutesCountsForLongSongs() {
+        assertTrue(PlayRule.counts(20 * 60_000L, 240_000))
+        assertFalse(PlayRule.counts(20 * 60_000L, 239_000))
+    }
+
+    @Test fun unknownLengthNeedsFourMinutes() {
+        assertFalse(PlayRule.counts(null, 200_000))
+        assertTrue(PlayRule.counts(null, 240_000))
+    }
+
+    // --- PlayTracker ---
+
+    private fun PlayTracker.at(key: String?, playing: Boolean, now: Long, duration: Long? = 200_000) =
+        update(key, "Title", "Artist", null, duration, playing, now)
+
+    @Test fun pausedTimeDoesNotCount() {
+        val t = PlayTracker()
+        assertNull(t.at("a", true, 0))
+        t.at("a", false, 30_000)        // 30 s played
+        t.at("a", true, 600_000)        // paused ten minutes
+        val f = t.at("b", true, 650_000) // 50 s more, then the next song
+        assertEquals("a", f!!.trackKey)
+        assertEquals(80_000, f.listenedMs)
+        assertEquals(0, f.startedAt)
+    }
+
+    @Test fun seekingDoesNotAddTime() {
+        // Skipping to the end of a song is just more wall-clock time at whatever position: only 5 s were heard.
+        val t = PlayTracker()
+        t.at("a", true, 0)
+        val f = t.at("b", true, 5_000)!!
+        assertEquals(5_000, f.listenedMs)
+        assertFalse(PlayRule.counts(f.durationMs, f.listenedMs))
+    }
+
+    @Test fun lateDurationIsPickedUp() {
+        val t = PlayTracker()
+        t.at("a", true, 0, duration = null)
+        t.at("a", true, 1_000, duration = 180_000)
+        assertEquals(180_000L, t.close(100_000)!!.durationMs)
+    }
+
+    @Test fun closeFinishesTheSongOnce() {
+        val t = PlayTracker()
+        t.at("a", true, 0)
+        assertEquals(120_000, t.close(120_000)!!.listenedMs)
+        assertNull(t.close(130_000))
+    }
+
+    @Test fun nothingPlayingEndsTheSong() {
+        val t = PlayTracker()
+        t.at("a", true, 0)
+        assertEquals(10_000, t.at(null, false, 10_000)!!.listenedMs)
+        assertNull(t.close(20_000))
+    }
+
+    // --- SongKey ---
+
+    @Test fun versionsOfATitleShareASong() {
+        val k = SongKey.of("Three Ravens", "Example Band")
+        assertEquals(k, SongKey.of("Three Ravens - Remastered 2011", "Example Band"))
+        assertEquals(k, SongKey.of("Three Ravens (feat. Someone)", "Example Band, Someone"))
+        assertEquals(k, SongKey.of("three ravens", "EXAMPLE BAND & Friend"))
+    }
+
+    @Test fun differentSongsStayApart() {
+        assertNotEquals(SongKey.of("Three Ravens", "Example Band"), SongKey.of("Three Ravens", "Other Band"))
+        assertNotEquals(SongKey.of("Three Ravens", "Example Band"), SongKey.of("Two Ravens", "Example Band"))
+        // A dash that isn't a version marker is part of the title.
+        assertNotEquals(SongKey.of("Part One - The Beginning", "Example Band"), SongKey.of("Part One", "Example Band"))
+    }
+
+    // --- History ---
+
+    @Test fun historyOffRecordsNothingAnywhere() {
+        for (w in Where.entries) assertFalse(History.records(Mode.OFF, w, 0, 1_000))
+    }
+
+    @Test fun eachModeHasExactlyOneRecorder() {
+        assertTrue(History.records(Mode.WHILE_OPEN, Where.SCREEN, 0, 1_000))
+        assertFalse(History.records(Mode.WHILE_OPEN, Where.BACKGROUND, 0, 1_000))
+        assertTrue(History.records(Mode.ALWAYS, Where.BACKGROUND, 0, 1_000))
+        assertFalse(History.records(Mode.ALWAYS, Where.SCREEN, 0, 1_000))
+    }
+
+    @Test fun pauseStopsRecordingUntilItEnds() {
+        assertFalse(History.records(Mode.ALWAYS, Where.BACKGROUND, 5_000, 1_000))
+        assertTrue(History.records(Mode.ALWAYS, Where.BACKGROUND, 5_000, 5_000))
+        assertFalse(History.records(Mode.ALWAYS, Where.BACKGROUND, History.PAUSED_UNTIL_ON, Long.MAX_VALUE - 1))
+    }
+
+    @Test fun unknownModeIsOff() {
+        assertEquals(Mode.OFF, Mode.of(null))
+        assertEquals(Mode.OFF, Mode.of("something"))
+    }
+}

@@ -10,12 +10,61 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.content.SharedPreferences
 import android.service.notification.NotificationListenerService
+import com.thescarletcoder.lyrics.library.History
+import com.thescarletcoder.lyrics.library.PlayRecorder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/** Present only so Android grants access to media sessions. Notifications themselves are ignored. */
-class NowPlayingListener : NotificationListenerService()
+/**
+ * Present so Android grants access to media sessions; notifications themselves are ignored. With listening history
+ * set to "Always" it also follows what's playing while Lyrics is closed and records plays (the Library). In any other
+ * mode it does nothing at all.
+ */
+class NowPlayingListener : NotificationListenerService() {
+    private var follow: NowPlaying? = null
+    private var recorder: PlayRecorder? = null
+    private var scope: CoroutineScope? = null
+    private val prefsChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> sync() }
+
+    override fun onListenerConnected() {
+        History.prefs(this).registerOnSharedPreferenceChangeListener(prefsChanged)
+        sync()
+    }
+
+    override fun onListenerDisconnected() {
+        History.prefs(this).unregisterOnSharedPreferenceChangeListener(prefsChanged)
+        stopFollowing()
+    }
+
+    override fun onDestroy() { stopFollowing(); super.onDestroy() }
+
+    /** Follow while history is "Always"; stop (finishing the song being timed) when it isn't. */
+    private fun sync() {
+        val always = History.mode(History.prefs(this)) == History.Mode.ALWAYS
+        if (always && follow == null) {
+            val np = NowPlaying(this) { LyricsSettings(this).rules(this) }   // fresh settings every pick
+            val rec = PlayRecorder(this, History.Where.BACKGROUND)
+            val s = MainScope()
+            follow = np; recorder = rec; scope = s
+            np.start()
+            s.launch { combine(np.track, np.playing) { t, p -> t to p }.collect { (t, p) -> rec.onState(t, p) } }
+        } else if (always) follow?.refresh()   // the chosen app or the ignore list may have changed
+        else stopFollowing()
+    }
+
+    private fun stopFollowing() {
+        scope?.cancel(); scope = null
+        recorder?.close(); recorder = null
+        follow?.stop(); follow = null
+    }
+}
 
 data class Track(val title: String, val artist: String, val album: String?, val durationMs: Long?) {
     /** Stable key for caching and "wrong lyrics" picks. Hashed before it touches disk. */

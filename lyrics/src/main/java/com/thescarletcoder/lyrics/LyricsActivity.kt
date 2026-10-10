@@ -62,13 +62,21 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
+import com.thescarletcoder.lyrics.library.History
+import com.thescarletcoder.lyrics.library.LibraryDatabase
+import com.thescarletcoder.lyrics.library.LibraryRepo
+import com.thescarletcoder.lyrics.library.PlayRecorder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class LyricsActivity : ComponentActivity() {
     private lateinit var nowPlaying: NowPlaying
     private lateinit var settings: LyricsSettings
     private lateinit var route: AudioRoute
+    /** Times plays while Lyrics is on screen; records only in "only while Lyrics is open" (History.records). */
+    private lateinit var recorder: PlayRecorder
     private val access = mutableStateOf(false)
     /** Flip half-folded on a table: where the fold is, in this window (px from the top), else null (Flex mode). */
     private val foldTop = mutableStateOf<Int?>(null)
@@ -82,6 +90,15 @@ class LyricsActivity : ComponentActivity() {
         settings = LyricsSettings(this)
         route = AudioRoute(this)
         nowPlaying = NowPlaying(this) { settings.rules(this) }
+        recorder = PlayRecorder(this, History.Where.SCREEN)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(nowPlaying.track, nowPlaying.playing) { t, p -> t to p }.collect { (t, p) -> recorder.onState(t, p) }
+            }
+        }
+        if (savedInstanceState == null && settings.keepPlaysDays > 0 && LibraryDatabase.exists(this)) {
+            lifecycleScope.launch(Dispatchers.IO) { runCatching { LibraryRepo(this@LyricsActivity).prune(settings.keepPlaysDays) } }
+        }
         val repo = LyricsRepo(LyricsStore(this))
         if (savedInstanceState == null) checkPlayer = !maybeOpenPlayer(intent)
         watchFold()
@@ -137,6 +154,7 @@ class LyricsActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        recorder.close()
         nowPlaying.stop()
         route.stop()
         super.onStop()

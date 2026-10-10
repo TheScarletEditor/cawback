@@ -1,3 +1,7 @@
+# SQLCipher's native bridge (the Library database).
+-keep class net.zetetic.database.** { *; }
+-dontwarn net.zetetic.database.**
+
 # Release builds strip every android.util.Log call (spec 0.5: no content logging).
 -assumenosideeffects class android.util.Log {
     public static *** v(...);

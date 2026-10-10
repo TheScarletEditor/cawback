@@ -14,10 +14,7 @@ class LyricsStore(context: Context) {
 
     data class Entry(val candidate: Candidate?, val pinned: Boolean, val offsetMs: Long, val fetchedAt: Long)
 
-    private fun file(key: String): File {
-        val h = MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
-        return File(dir, "$h.json")
-    }
+    private fun file(key: String) = File(dir, "${hash(key)}.json")
 
     fun load(key: String): Entry? = runCatching {
         val o = JSONObject(file(key).takeIf { it.exists() }?.readText() ?: return null)
@@ -65,7 +62,18 @@ class LyricsStore(context: Context) {
         }
     }
 
+    /** "Forget this song" in the Library: its cached lyrics, by the hashed keys the Library kept. */
+    fun forgetHashed(hashes: List<String>) {
+        hashes.filter { it.matches(Regex("[0-9a-f]{64}")) }.forEach { File(dir, "$it.json").delete() }
+    }
+
     /** Wipes everything (Settings: "Clear saved lyrics"). */
     fun clear() { dir.listFiles()?.forEach { it.delete() } }
     fun count() = dir.listFiles()?.count { it.name.endsWith(".json") } ?: 0
+
+    companion object {
+        /** A track key as it's stored anywhere on disk: SHA-256, hex. */
+        fun hash(key: String): String =
+            MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
+    }
 }
