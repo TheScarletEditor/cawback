@@ -81,6 +81,35 @@ fun Header(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> 
     }
 }
 
+/**
+ * Flex mode (the Flip half-folded on a table): below the fold, the song with its cover, and big play/pause and more
+ * buttons that are easy to reach on the bottom half. Lyrics fill the top half.
+ */
+@Composable
+fun FlexControls(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> Unit, onMore: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (art != null) {
+                Image(art.thumb, contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)))
+                Spacer(Modifier.width(14.dp))
+            }
+            Column(Modifier.weight(1f, fill = false)) {
+                Text(track?.title ?: "Scarlet Lyrics", fontFamily = Fraunces, fontSize = 20.sp, color = L.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (track != null) Text(track.artist, fontFamily = Inter, fontSize = 14.sp, color = L.soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Spacer(Modifier.size(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (track != null) IconButton(64.dp, onPlayPause, if (playing) Icons.pause else Icons.play)
+            IconButton(52.dp, onMore, Icons.more)
+        }
+    }
+}
+
 /** Timing nudge in words: "Lyrics earlier by 0.25s". */
 fun timingLabel(offsetMs: Long): String = when {
     offsetMs > 0 -> "Lyrics earlier by %.2fs".format(offsetMs / 1000.0)
@@ -91,8 +120,8 @@ fun timingLabel(offsetMs: Long): String = when {
 /** The More sheet (slides up with the NAV voice). Tapping outside it closes it. */
 @Composable
 fun MoreSheet(
-    open: Boolean, shown: Shown?, hasTrack: Boolean, showSpotify: Boolean,
-    onClose: () -> Unit, onWrong: () -> Unit, onNudge: (Long) -> Unit, onSpotify: () -> Unit, onSettings: () -> Unit,
+    open: Boolean, shown: Shown?, hasTrack: Boolean, playerLabel: String?,
+    onClose: () -> Unit, onWrong: () -> Unit, onNudge: (Long) -> Unit, onPlayer: () -> Unit, onSettings: () -> Unit,
 ) {
     val ms = Motion.duration(LocalContext.current, Motion.NAV_MS)
     AnimatedVisibility(open, enter = fadeIn(tween(ms, easing = Motion.NAV_EASE)), exit = fadeOut(tween(ms, easing = Motion.NAV_EASE))) {
@@ -122,7 +151,7 @@ fun MoreSheet(
                         }
                     }
                 }
-                if (showSpotify) SheetRow("Open Spotify", null) { onClose(); onSpotify() }
+                if (playerLabel != null) SheetRow("Open $playerLabel", null) { onClose(); onPlayer() }
                 SheetRow("Settings", null) { onClose(); onSettings() }
             }
         }

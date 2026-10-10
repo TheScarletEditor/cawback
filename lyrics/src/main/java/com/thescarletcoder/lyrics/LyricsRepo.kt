@@ -101,6 +101,9 @@ class LyricsRepo(private val store: LyricsStore) {
     /** Settings: how many tracks have something saved (lyrics, a pick or a timing nudge). */
     suspend fun savedCount(): Int = withContext(Dispatchers.IO) { store.count() }
 
+    /** Settings: "Reset all timing nudges". */
+    suspend fun resetNudges() = withContext(Dispatchers.IO) { store.resetOffsets() }
+
     /** Settings: "Clear saved lyrics". Wipes the cache, picks and nudges. */
     suspend fun clearSaved() = withContext(Dispatchers.IO) { store.clear() }
 

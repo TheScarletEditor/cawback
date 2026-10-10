@@ -68,5 +68,7 @@ dependencies {
     implementation("androidx.palette:palette-ktx:1.0.0")
     // Installs Compose's bundled baseline profiles for sideloaded builds (no Play cloud profiles).
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    // Flex mode on the Flip: where the fold is when it's half-open (no permission, no network).
+    implementation("androidx.window:window:1.3.0")
     testImplementation("junit:junit:4.13.2")
 }

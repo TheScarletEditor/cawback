@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
@@ -91,18 +92,21 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying) {
     val context = LocalContext.current
     val compact = LocalCompact.current
     val anchor = Tunables[if (compact) LyricsTuning.ANCHOR_COMPACT else LyricsTuning.ANCHOR]
+    val settings = LocalSettings.current
+    // This song's nudge plus the delay for the output in use (Bluetooth buds lag; Settings, Timing).
+    val offset by rememberUpdatedState(s.offsetMs + LocalOutputDelay.current)
 
     LaunchedEffect(s) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (true) { pos = np.positionMs() + s.offsetMs; delay(60) }
+            while (true) { pos = np.positionMs() + offset; delay(60) }
         }
     }
     // Only the line index drives the list, so it recomposes when the line changes, not 16 times a second.
     val current by remember(s) { derivedStateOf { Lrc.indexAt(s.lines, pos) } }
     LaunchedEffect(dragged) { if (dragged) lastTouch = System.currentTimeMillis() }
     LaunchedEffect(current) {
-        // Follow the song unless Sam scrolled in the last 4 seconds.
-        if (!dragged && System.currentTimeMillis() - lastTouch > 4000) glideTo(list, current.coerceAtLeast(0), anchor, Motion.duration(context, Tunables.int(LyricsTuning.GLIDE_MS)))
+        // Follow the song unless Sam scrolled in the last few seconds (Settings: 2, 4 or 8).
+        if (!dragged && System.currentTimeMillis() - lastTouch > settings.followDelaySec * 1000L) glideTo(list, current.coerceAtLeast(0), anchor, Motion.duration(context, Tunables.int(LyricsTuning.GLIDE_MS)))
     }
 
     // At the top of a song the lyrics start right under the header; the current line glides down to the anchor
@@ -117,8 +121,8 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying) {
         ) {
             itemsIndexed(s.lines) { i, line ->
                 val gapEnd = if (line.text.isBlank()) s.lines.getOrNull(i + 1)?.timeMs else null
-                LyricRow(i, line, current, compact, gapEnd, s.offsetMs, np) {
-                    line.timeMs?.let { np.seekTo((it - s.offsetMs).coerceAtLeast(0)); lastTouch = 0 }
+                LyricRow(i, line, current, compact, gapEnd, offset, np, settings) {
+                    line.timeMs?.let { np.seekTo((it - offset).coerceAtLeast(0)); lastTouch = 0 }
                 }
             }
         }
@@ -137,7 +141,8 @@ private suspend fun glideTo(list: LazyListState, i: Int, anchor: Float, ms: Int)
 
 @Composable
 private fun LyricRow(
-    i: Int, line: LyricLine, current: Int, compact: Boolean, gapEnd: Long?, offsetMs: Long, np: NowPlaying, onSeek: () -> Unit,
+    i: Int, line: LyricLine, current: Int, compact: Boolean, gapEnd: Long?, offsetMs: Long, np: NowPlaying, settings: LyricsSettings,
+    onSeek: () -> Unit,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -148,6 +153,7 @@ private fun LyricRow(
     val floor = Tunables[LyricsTuning.alphaName(dark, 4)]
     val alphaTarget = when {
         isCurrent -> 1f
+        i < current && settings.hidePast -> 0f   // Settings: lines already sung hidden instead of dimmed
         else -> {
             val a = Tunables[LyricsTuning.alphaName(dark, distance.coerceAtMost(4))]
             if (i < current) maxOf(a * 0.9f, floor) else a // sung lines dim a little more, never below the floor
@@ -185,7 +191,8 @@ private fun LyricRow(
             Text(
                 line.text,
                 fontFamily = Inter, fontWeight = FontWeight.Medium,
-                fontSize = if (compact) 18.sp else 26.sp, lineHeight = if (compact) 24.sp else 34.sp,
+                fontSize = (if (compact) 18f else 26f).times(LyricsSettings.TEXT_SCALE[settings.textSize]).sp,
+                lineHeight = (if (compact) 24f else 34f).times(LyricsSettings.TEXT_SCALE[settings.textSize]).sp,
                 color = text,
                 modifier = Modifier.fillMaxWidth(0.94f).graphicsLayer {
                     this.alpha = alpha
@@ -217,6 +224,7 @@ private fun GapDots(isCurrent: Boolean, start: Long, end: Long?, offsetMs: Long,
 fun PlainLyrics(s: Shown.Found) {
     val compact = LocalCompact.current
     val context = LocalContext.current
+    val k = LyricsSettings.TEXT_SCALE[LocalSettings.current.textSize]
     val list = rememberLazyListState()
     // Same as synced: start right under the header; the top fade only once something has scrolled away.
     val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0 } }
@@ -224,8 +232,8 @@ fun PlainLyrics(s: Shown.Found) {
     LazyColumn(Modifier.fillMaxSize().edgeFade { topFade }, state = list, contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 8.dp, bottom = 40.dp)) {
         item { Text("Not synced to the song. Scroll as you listen.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(bottom = 14.dp)) }
         itemsIndexed(s.lines) { _, line ->
-            Text(line.text, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = if (compact) 18.sp else 24.sp,
-                lineHeight = if (compact) 24.sp else 34.sp, color = L.text)
+            Text(line.text, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = ((if (compact) 18f else 24f) * k).sp,
+                lineHeight = ((if (compact) 24f else 34f) * k).sp, color = L.text)
         }
     }
 }

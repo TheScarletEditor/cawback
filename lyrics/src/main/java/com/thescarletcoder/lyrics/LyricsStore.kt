@@ -50,6 +50,21 @@ class LyricsStore(context: Context) {
         tmp.renameTo(f)
     }
 
+    /** Settings: "Reset all timing nudges". Every song's offset back to 0; lyrics and picks stay. */
+    fun resetOffsets() {
+        dir.listFiles()?.filter { it.name.endsWith(".json") }?.forEach { f ->
+            runCatching {
+                val o = JSONObject(f.readText())
+                if (o.optLong("offset") != 0L) {
+                    o.put("offset", 0L)
+                    val tmp = File(dir, f.name + ".tmp")
+                    tmp.writeText(o.toString())
+                    tmp.renameTo(f)
+                }
+            }
+        }
+    }
+
     /** Wipes everything (Settings: "Clear saved lyrics"). */
     fun clear() { dir.listFiles()?.forEach { it.delete() } }
     fun count() = dir.listFiles()?.count { it.name.endsWith(".json") } ?: 0

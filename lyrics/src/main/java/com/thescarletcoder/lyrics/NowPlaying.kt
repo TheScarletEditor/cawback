@@ -23,10 +23,10 @@ data class Track(val title: String, val artist: String, val album: String?, val 
 }
 
 /**
- * What's playing, via MediaSessionManager. Prefers Spotify, otherwise whatever is playing.
- * Holds no history: only the current track and its playback clock.
+ * What's playing, via MediaSessionManager. Follows the music app Sam chose (or whatever is playing), and never an app
+ * on the ignore list ([rules], read fresh at every change). Holds no history: only the current track and its clock.
  */
-class NowPlaying(private val context: Context) {
+class NowPlaying(private val context: Context, private val rules: () -> SessionPick.Rules) {
     private val msm = context.getSystemService(MediaSessionManager::class.java)
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val main = Handler(Looper.getMainLooper())
@@ -65,9 +65,18 @@ class NowPlaying(private val context: Context) {
         } catch (_: SecurityException) { /* access was revoked between the check and the call */ }
     }
 
-    /** Spotify's own session is the one followed, and it's playing (checked when Lyrics opens). */
-    fun spotifyPlaying(): Boolean =
-        controller?.packageName == SPOTIFY && controller?.playbackState?.state == PlaybackState.STATE_PLAYING
+    /** The app whose session is being followed (null when nothing is). */
+    val currentPackage: String? get() = controller?.packageName
+
+    /** [pkg]'s session is the one followed, and it's playing (checked when Lyrics opens). */
+    fun isPlaying(pkg: String): Boolean =
+        controller?.packageName == pkg && controller?.playbackState?.state == PlaybackState.STATE_PLAYING
+
+    /** The choice of app or the ignore list changed: pick again. */
+    fun refresh() {
+        if (!hasAccess()) return
+        runCatching { pick(msm.getActiveSessions(listener)) }
+    }
 
     fun stop() {
         runCatching { msm.removeOnActiveSessionsChangedListener(sessionsChanged) }
@@ -75,9 +84,10 @@ class NowPlaying(private val context: Context) {
     }
 
     private fun pick(sessions: List<MediaController>) {
-        val best = sessions.firstOrNull { it.packageName == SPOTIFY }
-            ?: sessions.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
-            ?: sessions.firstOrNull()
+        val chosen = SessionPick.choose(
+            sessions.map { SessionPick.Session(it.packageName, it.playbackState?.state == PlaybackState.STATE_PLAYING) }, rules(),
+        )
+        val best = chosen?.let { c -> sessions.firstOrNull { it.packageName == c.pkg } }
         if (best?.sessionToken != controller?.sessionToken) attach(best)
     }
 

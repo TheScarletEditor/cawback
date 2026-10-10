@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -187,20 +188,110 @@ private fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Uni
     )
 }
 
-/** Settings: theme, saved lyrics (count + clear), notification access, about, and Tuning in personal builds. */
+/**
+ * Settings (scope section 8, in order): your music app, lyrics display, timing, theme, saved lyrics, notification
+ * access, about, and Tuning in personal builds.
+ */
 @Composable
 fun SettingsPanel(
     repo: LyricsRepo, hasAccess: Boolean, theme: ThemeChoice, onTheme: (ThemeChoice) -> Unit,
-    onGrant: () -> Unit, onCleared: () -> Unit, onTuning: () -> Unit, onClose: () -> Unit,
+    onGrant: () -> Unit, onCleared: () -> Unit, output: Output, onFollowChanged: () -> Unit, onPinShortcut: () -> Unit,
+    onTuning: () -> Unit, onClose: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val settings = LocalSettings.current
     var saved by remember { mutableStateOf<Int?>(null) }
     var confirming by remember { mutableStateOf(false) }
     var cleared by remember { mutableStateOf(false) }
+    var resetNudges by remember { mutableStateOf(0) }   // 0 = not asked, 1 = confirming, 2 = done
+    val apps = remember { MediaApps.all(context) }
     LaunchedEffect(Unit) { saved = repo.savedCount() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Text("Settings", fontFamily = Fraunces, fontSize = 28.sp, color = L.text)
+
+        // ---- your music app ----
+        SettingsSection("Your music app")
+        val chosen = settings.effectivePlayer(context) ?: ""
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            apps.forEach { a -> Choice(a.label, chosen == a.pkg) { settings.choosePlayer(a.pkg); onFollowChanged() } }
+            Choice("Whatever is playing", chosen == "") { settings.choosePlayer(""); onFollowChanged() }
+        }
+        if (chosen != "") {
+            val name = MediaApps.label(context, chosen)
+            Text(
+                if (settings.onlyPlayer) "Lyrics follows only $name. Podcasts and other apps are never looked up."
+                else "Lyrics prefers $name, and follows other apps when they play.",
+                fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 10.dp),
+            )
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Choice("Only $name", settings.onlyPlayer) { settings.followOnlyPlayer(true); onFollowChanged() }
+                Choice("Other apps too", !settings.onlyPlayer) { settings.followOnlyPlayer(false); onFollowChanged() }
+            }
+            Box(Modifier.padding(top = 12.dp)) { Washed("Add \"Lyrics + $name\" to the home screen", onPinShortcut) }
+        }
+        if (chosen == "" || !settings.onlyPlayer) {
+            Text("Never follow", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+            Text("Ignored apps are never looked up on lrclib.net.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                apps.filter { it.pkg != chosen }.forEach { a ->
+                    val off = a.pkg in settings.ignored
+                    Choice(if (off) "${a.label}: ignored" else a.label, off) { settings.setIgnored(a.pkg, !off); onFollowChanged() }
+                }
+            }
+        }
+
+        // ---- lyrics display ----
+        SettingsSection("Lyrics")
+        Text("Text size", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            LyricsSettings.TEXT_SIZES.forEachIndexed { i, n -> Choice(n, settings.textSize == i) { settings.chooseTextSize(i) } }
+        }
+        Text("Lines already sung", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Choice("Dimmed", !settings.hidePast) { settings.hidePastLines(false) }
+            Choice("Hidden", settings.hidePast) { settings.hidePastLines(true) }
+        }
+        Text("After you scroll, follow the song again after", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            LyricsSettings.FOLLOW_DELAYS.forEach { s -> Choice("$s seconds", settings.followDelaySec == s) { settings.chooseFollowDelay(s) } }
+        }
+        Text("Keep the screen on while synced lyrics play", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Choice("On", settings.keepScreenOn) { settings.keepOn(true) }
+            Choice("Off", !settings.keepScreenOn) { settings.keepOn(false) }
+        }
+
+        // ---- timing ----
+        SettingsSection("Timing")
+        Text(
+            "Some headphones play a little late. Set each one once and Lyrics applies it whenever it's connected. Playing through: ${output.label}.",
+            fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp),
+        )
+        Output.entries.forEach { out ->
+            Column(Modifier.padding(top = 8.dp)) {
+                Text(out.label + if (out == output) "  (now)" else "", fontFamily = Inter, fontSize = 16.sp, color = L.text)
+                Text(timingLabel(settings.delayFor(out).toLong()), fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Washed("Earlier", { settings.nudgeOutput(out, 50) }, small = true)
+                    Washed("Later", { settings.nudgeOutput(out, -50) }, small = true)
+                }
+            }
+        }
+        Box(Modifier.padding(top = 14.dp)) {
+            when (resetNudges) {
+                1 -> Column {
+                    Text("Reset the timing nudges on every song? Lyrics you picked by hand stay.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
+                    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Washed("Reset", { scope.launch { repo.resetNudges(); resetNudges = 2; onCleared() } })
+                        Washed("Cancel", { resetNudges = 0 })
+                    }
+                }
+                2 -> Text("Every song is back to its own timing.", fontFamily = Inter, fontSize = 16.sp, color = L.soft)
+                else -> Washed("Reset all timing nudges", { resetNudges = 1 })
+            }
+        }
 
         SettingsSection("Theme")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

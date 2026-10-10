@@ -26,6 +26,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
@@ -54,22 +57,35 @@ import com.thescarletcoder.scarlet.Motion
 import com.thescarletcoder.scarlet.ScarletTokens
 import com.thescarletcoder.scarlet.ThemeChoice
 import com.thescarletcoder.scarlet.Tunables
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoTracker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class LyricsActivity : ComponentActivity() {
     private lateinit var nowPlaying: NowPlaying
+    private lateinit var settings: LyricsSettings
+    private lateinit var route: AudioRoute
     private val access = mutableStateOf(false)
-    /** Set when Lyrics is opened fresh; the first start after that checks whether Spotify should join it. */
-    private var checkSpotify = false
+    /** Flip half-folded on a table: where the fold is, in this window (px from the top), else null (Flex mode). */
+    private val foldTop = mutableStateOf<Int?>(null)
+    /** Set when Lyrics is opened fresh; the first start after that checks whether your music app should join it. */
+    private var checkPlayer = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         LyricsTuning.init(this)
         val prefs = LyricsPrefs(this)
-        nowPlaying = NowPlaying(this)
+        settings = LyricsSettings(this)
+        route = AudioRoute(this)
+        nowPlaying = NowPlaying(this) { settings.rules(this) }
         val repo = LyricsRepo(LyricsStore(this))
-        if (savedInstanceState == null) checkSpotify = !maybeOpenSpotify(intent)
+        if (savedInstanceState == null) checkPlayer = !maybeOpenPlayer(intent)
+        watchFold()
+        updateShortcuts()
         setContent {
             var choice by remember { mutableStateOf(prefs.theme) }
             val uiMode = LocalConfiguration.current.uiMode // the system flipping light/dark recomposes this
@@ -81,11 +97,18 @@ class LyricsActivity : ComponentActivity() {
             val scheme = if (p.dark) darkColorScheme(primary = Color(p.text), background = Color(p.bg), surface = Color(p.surface), onSurface = Color(p.text))
                 else lightColorScheme(primary = Color(p.text), background = Color(p.bg), surface = Color(p.surface), onSurface = Color(p.text))
             MaterialTheme(colorScheme = scheme) {
-                CompositionLocalProvider(LocalPalette provides p) {
+                CompositionLocalProvider(
+                    LocalPalette provides p, LocalSettings provides settings,
+                    LocalOutputDelay provides settings.delayFor(route.output),
+                ) {
                     LyricsScreen(
                         nowPlaying, repo, access.value, theme = choice,
                         onTheme = { c -> choice = c; prefs.theme = c; ScarletTokens.applyToSystem(this, c) },
-                        onGrant = ::openAccessSettings, onSpotify = ::openSpotifyAlongside,
+                        onGrant = ::openAccessSettings, onPlayer = ::openPlayerAlongside,
+                        playerLabel = settings.effectivePlayer(this)?.let { MediaApps.label(this, it) },
+                        output = route.output, foldTop = foldTop.value,
+                        onFollowChanged = { nowPlaying.refresh(); updateShortcuts() },
+                        onPinShortcut = ::pinShortcut,
                     )
                 }
             }
@@ -94,38 +117,91 @@ class LyricsActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (!maybeOpenSpotify(intent) && intent.action == Intent.ACTION_MAIN) checkSpotify = true   // opened again from the launcher
+        if (!maybeOpenPlayer(intent) && intent.action == Intent.ACTION_MAIN) checkPlayer = true   // opened again from the launcher
     }
 
     override fun onStart() {
         super.onStart()
         access.value = nowPlaying.hasAccess()
         nowPlaying.start()
-        if (checkSpotify) {
-            checkSpotify = false
-            // Sam, 2026-10-09: opening Lyrics while Spotify is already playing brings Spotify up beside it, on the
+        route.start()
+        if (checkPlayer) {
+            checkPlayer = false
+            // Sam, 2026-10-09: opening Lyrics while your music app is already playing brings it up beside Lyrics, on the
             // phone and the tablet, unless the screen is already split. Checked once the window knows its mode.
-            window.decorView.post { if (!isInMultiWindowMode && nowPlaying.spotifyPlaying()) openSpotifyAlongside() }
+            window.decorView.post {
+                val pkg = settings.effectivePlayer(this)
+                if (!isInMultiWindowMode && pkg != null && nowPlaying.isPlaying(pkg)) openPlayerAlongside()
+            }
         }
     }
 
     override fun onStop() {
         nowPlaying.stop()
+        route.stop()
         super.onStop()
     }
 
-    /** Scarlet Command's Listen button sends this extra: open Spotify in the other half of the screen. True if it did. */
-    private fun maybeOpenSpotify(i: Intent?): Boolean {
-        if (i?.getBooleanExtra(EXTRA_OPEN_SPOTIFY, false) != true) return false
-        i.removeExtra(EXTRA_OPEN_SPOTIFY)
-        openSpotifyAlongside()
+    /**
+     * Scarlet Command's Listen button and the "Lyrics + your app" shortcuts send this: open your music app in the other
+     * half of the screen. True if it did. (OPEN_SPOTIFY is the older name, still understood.)
+     */
+    private fun maybeOpenPlayer(i: Intent?): Boolean {
+        if (i == null) return false
+        val asked = i.getBooleanExtra(EXTRA_OPEN_PLAYER, false) || i.getBooleanExtra(EXTRA_OPEN_SPOTIFY, false)
+        if (!asked) return false
+        i.removeExtra(EXTRA_OPEN_PLAYER); i.removeExtra(EXTRA_OPEN_SPOTIFY)
+        openPlayerAlongside()
         return true
     }
 
-    private fun openSpotifyAlongside() {
-        val launch = packageManager.getLaunchIntentForPackage(NowPlaying.SPOTIFY) ?: return
+    /** Your music app (or, with "whatever is playing", the app playing now) in the other half of the screen. */
+    private fun openPlayerAlongside() {
+        val pkg = settings.effectivePlayer(this) ?: nowPlaying.currentPackage ?: return
+        val launch = packageManager.getLaunchIntentForPackage(pkg) ?: return
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
         runCatching { startActivity(launch) }
+    }
+
+    private fun shortcutIntent() = Intent(this, LyricsActivity::class.java)
+        .setAction(ACTION_WITH_PLAYER).putExtra(EXTRA_OPEN_PLAYER, true)
+
+    /** The long-press shortcut "Lyrics + <your app>", kept in step with the chosen app. */
+    private fun updateShortcuts() {
+        val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
+        val pkg = settings.effectivePlayer(this)
+        if (pkg == null) { runCatching { sm.removeAllDynamicShortcuts() }; return }
+        val s = android.content.pm.ShortcutInfo.Builder(this, SHORTCUT_ID)
+            .setShortLabel("Lyrics + " + MediaApps.label(this, pkg))
+            .setIcon(android.graphics.drawable.Icon.createWithResource(this, R.mipmap.ic_launcher))
+            .setIntent(shortcutIntent()).build()
+        runCatching { sm.dynamicShortcuts = listOf(s) }
+    }
+
+    /** Settings: put "Lyrics + <your app>" on the home screen (Android asks first). */
+    private fun pinShortcut() {
+        val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
+        val pkg = settings.effectivePlayer(this) ?: return
+        if (!sm.isRequestPinShortcutSupported) return
+        val s = android.content.pm.ShortcutInfo.Builder(this, SHORTCUT_ID)
+            .setShortLabel("Lyrics + " + MediaApps.label(this, pkg))
+            .setIcon(android.graphics.drawable.Icon.createWithResource(this, R.mipmap.ic_launcher))
+            .setIntent(shortcutIntent()).build()
+        runCatching { sm.requestPinShortcut(s, null) }
+    }
+
+    /** Flex mode on the Flip: half-folded with the fold across the screen, lyrics above it and controls below. */
+    private fun watchFold() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                WindowInfoTracker.getOrCreate(this@LyricsActivity).windowLayoutInfo(this@LyricsActivity).collect { info ->
+                    val fold = info.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull {
+                        it.state == FoldingFeature.State.HALF_OPENED && it.orientation == FoldingFeature.Orientation.HORIZONTAL
+                    }
+                    foldTop.value = fold?.bounds?.top
+                }
+            }
+        }
     }
 
     private fun openAccessSettings() {
@@ -137,6 +213,9 @@ class LyricsActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OPEN_SPOTIFY = "com.thescarletcoder.lyrics.OPEN_SPOTIFY"
+        const val EXTRA_OPEN_PLAYER = "com.thescarletcoder.lyrics.OPEN_PLAYER"
+        private const val ACTION_WITH_PLAYER = "com.thescarletcoder.lyrics.WITH_PLAYER"
+        private const val SHORTCUT_ID = "with_player"
     }
 }
 
@@ -145,8 +224,10 @@ private enum class Panel { NONE, PICKER, SETTINGS, TUNING }
 @Composable
 private fun LyricsScreen(
     np: NowPlaying, repo: LyricsRepo, hasAccess: Boolean, theme: ThemeChoice, onTheme: (ThemeChoice) -> Unit,
-    onGrant: () -> Unit, onSpotify: () -> Unit,
+    onGrant: () -> Unit, onPlayer: () -> Unit, playerLabel: String?, output: Output, foldTop: Int?,
+    onFollowChanged: () -> Unit, onPinShortcut: () -> Unit,
 ) {
+    val settings = LocalSettings.current
     val context = LocalContext.current
     val track by np.track.collectAsState()
     val playing by np.playing.collectAsState()
@@ -235,6 +316,14 @@ private fun LyricsScreen(
     val chromeAlpha by animateFloatAsState(if (chrome) 1f else 0f, tween(fadeMs, easing = Motion.NAV_EASE), label = "chrome")
     val chromeLift by animateDpAsState(if (chrome) 0.dp else (-6).dp, tween(fadeMs, easing = Motion.NAV_EASE), label = "lift")
 
+    // Keep the screen on while synced lyrics play (Settings, default on: the tablet on the nightstand).
+    val keepOn = settings.keepScreenOn && playing && (shown as? Shown.Found)?.synced == true
+    LaunchedEffect(keepOn) {
+        val w = (context as? android.app.Activity)?.window ?: return@LaunchedEffect
+        if (keepOn) w.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
     BackHandler(enabled = sheet || panel != Panel.NONE) {
         when {
             sheet -> sheet = false
@@ -265,33 +354,41 @@ private fun LyricsScreen(
     ) {
         val compact = maxHeight < 560.dp
         val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
-        CompositionLocalProvider(LocalCompact provides compact) {
-            Column(Modifier.fillMaxSize()) {
-                // The header keeps its space while hidden, so nothing moves when it fades.
-                Box(Modifier.fillMaxWidth().offset(y = chromeLift).graphicsLayer { alpha = chromeAlpha }) {
+        val density = LocalDensity.current
+        // Flex mode: the fold's position inside this box (it's measured in window pixels).
+        var boxTop by remember { mutableIntStateOf(0) }
+        val flexTop = foldTop?.let { with(density) { (it - boxTop).toDp() } }?.takeIf { it > 120.dp && it < maxHeight - 120.dp }
+        CompositionLocalProvider(LocalCompact provides (compact || flexTop != null)) {
+            Column(Modifier.fillMaxSize().onGloballyPositioned { boxTop = it.positionInWindow().y.toInt() }) {
+                // The header keeps its space while hidden, so nothing moves when it fades. In Flex mode the controls
+                // sit below the fold instead.
+                if (flexTop == null) Box(Modifier.fillMaxWidth().offset(y = chromeLift).graphicsLayer { alpha = chromeAlpha }) {
                     Header(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
                 }
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+                Box(if (flexTop != null) Modifier.height(flexTop).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth()) {
                     val t = track
                     when {
                         panel == Panel.TUNING -> TuningPage { panel = Panel.SETTINGS }
                         panel == Panel.SETTINGS -> SettingsPanel(repo, hasAccess, theme, onTheme, onGrant, onCleared = { reload++ },
+                            output = output, onFollowChanged = onFollowChanged, onPinShortcut = onPinShortcut,
                             onTuning = { panel = Panel.TUNING }, onClose = { panel = Panel.NONE })
                         panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
                             onPick = { c -> scope.launch { shown = repo.pin(t, c); panel = Panel.NONE } },
                             onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } },
                             onClose = { panel = Panel.NONE })
                         youreSet -> YoureSet()
-                        else -> Content(shown, finding, slow, np, onGrant, onSpotify, onPick = { panel = Panel.PICKER }, onRetry = { reload++ })
+                        else -> Content(shown, finding, slow, np, onGrant, playerLabel, onPlayer, onChoosePlayer = { panel = Panel.SETTINGS },
+                            onPick = { panel = Panel.PICKER }, onRetry = { reload++ })
                     }
                 }
+                if (flexTop != null) FlexControls(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
             }
             MoreSheet(
-                sheet, shown, hasTrack = track != null && hasAccess, showSpotify = !inSplit,
+                sheet, shown, hasTrack = track != null && hasAccess, playerLabel = playerLabel?.takeIf { !inSplit },
                 onClose = { sheet = false }, onWrong = { panel = Panel.PICKER },
                 onNudge = { d -> val t = track; val s = shown
                     if (t != null && s is Shown.Found) scope.launch { shown = s.copy(offsetMs = repo.nudge(t, d)) } },
-                onSpotify = onSpotify, onSettings = { panel = Panel.SETTINGS },
+                onPlayer = onPlayer, onSettings = { panel = Panel.SETTINGS },
             )
         }
     }
@@ -301,7 +398,7 @@ private fun LyricsScreen(
 @Composable
 private fun Content(
     shown: Shown?, finding: Boolean, slow: Boolean, np: NowPlaying,
-    onGrant: () -> Unit, onSpotify: () -> Unit, onPick: () -> Unit, onRetry: () -> Unit,
+    onGrant: () -> Unit, playerLabel: String?, onPlayer: () -> Unit, onChoosePlayer: () -> Unit, onPick: () -> Unit, onRetry: () -> Unit,
 ) {
     val swap = Motion.duration(LocalContext.current, Tunables.int(LyricsTuning.SWAP_MS))
     AnimatedContent(
@@ -312,7 +409,9 @@ private fun Content(
         when (s) {
             null -> if (finding) Finding(slow) else Box(Modifier.fillMaxSize())
             Shown.NoAccess -> Welcome(onGrant)
-            Shown.NothingPlaying -> EmptyState("Nothing playing", "Start a song and the lyrics show up here.", "Open Spotify", onSpotify)
+            Shown.NothingPlaying ->
+                if (playerLabel != null) EmptyState("Nothing playing", "Start a song and the lyrics show up here.", "Open $playerLabel", onPlayer)
+                else EmptyState("Nothing playing", "Start a song in any music app and the lyrics show up here.", "Choose your music app", onChoosePlayer)
             Shown.Loading -> Finding(slow)
             Shown.NotFound -> EmptyState("No lyrics found", "LRCLIB doesn't have this one yet.", "Search by hand", onPick)
             Shown.Offline -> EmptyState(

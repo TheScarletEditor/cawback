@@ -4,9 +4,13 @@
     <!-- Network for one host only: lrclib.net (lyrics lookups). Scarlet Command itself stays offline. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- To launch Spotify alongside. -->
+    <!-- To list your music apps (Settings, Your music app) and open the one you chose alongside. Not a permission:
+         it only lets Lyrics see which installed apps offer music. -->
     <queries>
         <package android:name="com.spotify.music" />
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
     </queries>
 
     <application
