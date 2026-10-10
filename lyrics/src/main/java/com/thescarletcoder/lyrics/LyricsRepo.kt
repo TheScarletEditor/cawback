@@ -8,7 +8,6 @@ import java.io.IOException
 sealed interface Shown {
     data object NoAccess : Shown
     data object NothingPlaying : Shown
-    data object Loading : Shown
     data object NotFound : Shown
     data object Offline : Shown
     data class Found(val candidate: Candidate, val lines: List<LyricLine>, val synced: Boolean, val pinned: Boolean, val offsetMs: Long) : Shown

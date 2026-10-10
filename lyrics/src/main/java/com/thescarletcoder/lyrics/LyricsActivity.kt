@@ -182,19 +182,19 @@ class LyricsActivity : ComponentActivity() {
         runCatching { startActivity(launch) }
     }
 
-    private fun shortcutIntent() = Intent(this, LyricsActivity::class.java)
-        .setAction(ACTION_WITH_PLAYER).putExtra(EXTRA_OPEN_PLAYER, true)
+    /** "Lyrics + <your app>": opens Lyrics with [pkg] alongside. */
+    private fun playerShortcut(pkg: String) = android.content.pm.ShortcutInfo.Builder(this, SHORTCUT_ID)
+        .setShortLabel("Lyrics + " + MediaApps.label(this, pkg))
+        .setIcon(android.graphics.drawable.Icon.createWithResource(this, R.mipmap.ic_launcher))
+        .setIntent(Intent(this, LyricsActivity::class.java).setAction(ACTION_WITH_PLAYER).putExtra(EXTRA_OPEN_PLAYER, true))
+        .build()
 
-    /** The long-press shortcut "Lyrics + <your app>", kept in step with the chosen app. */
+    /** The long-press shortcut, kept in step with the chosen app. */
     private fun updateShortcuts() {
         val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
         val pkg = settings.effectivePlayer(this)
         if (pkg == null) { runCatching { sm.removeAllDynamicShortcuts() }; return }
-        val s = android.content.pm.ShortcutInfo.Builder(this, SHORTCUT_ID)
-            .setShortLabel("Lyrics + " + MediaApps.label(this, pkg))
-            .setIcon(android.graphics.drawable.Icon.createWithResource(this, R.mipmap.ic_launcher))
-            .setIntent(shortcutIntent()).build()
-        runCatching { sm.dynamicShortcuts = listOf(s) }
+        runCatching { sm.dynamicShortcuts = listOf(playerShortcut(pkg)) }
     }
 
     /** Settings: put "Lyrics + <your app>" on the home screen (Android asks first). */
@@ -202,11 +202,7 @@ class LyricsActivity : ComponentActivity() {
         val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
         val pkg = settings.effectivePlayer(this) ?: return
         if (!sm.isRequestPinShortcutSupported) return
-        val s = android.content.pm.ShortcutInfo.Builder(this, SHORTCUT_ID)
-            .setShortLabel("Lyrics + " + MediaApps.label(this, pkg))
-            .setIcon(android.graphics.drawable.Icon.createWithResource(this, R.mipmap.ic_launcher))
-            .setIntent(shortcutIntent()).build()
-        runCatching { sm.requestPinShortcut(s, null) }
+        runCatching { sm.requestPinShortcut(playerShortcut(pkg), null) }
     }
 
     /** Flex mode on the Flip: half-folded with the fold across the screen, lyrics above it and controls below. */
@@ -475,7 +471,6 @@ private fun Content(
             Shown.NothingPlaying ->
                 if (playerLabel != null) EmptyState("Nothing playing", "Start a song and the lyrics show up here.", "Open $playerLabel", onPlayer)
                 else EmptyState("Nothing playing", "Start a song in any music app and the lyrics show up here.", "Choose your music app", onChoosePlayer)
-            Shown.Loading -> Finding(slow)
             Shown.NotFound -> EmptyState("No lyrics found", "LRCLIB doesn't have this one yet.", "Search by hand", onPick)
             Shown.Offline -> EmptyState(
                 "Can't reach LRCLIB",

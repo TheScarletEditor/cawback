@@ -5,8 +5,8 @@
 # uninstalled again when the run ends. Sam's Scarlet Lyrics is never installed, changed or uninstalled by this.
 #
 # Run:
-#   powershell -ExecutionPolicy Bypass -File .\labtest.ps1                 (the tablet, every on-device test)
-#   powershell -ExecutionPolicy Bypass -File .\labtest.ps1 -Serial XYZ     (another device)
+#   powershell -ExecutionPolicy Bypass -File .\labtest.ps1                 (the one connected device, every on-device test)
+#   powershell -ExecutionPolicy Bypass -File .\labtest.ps1 -Serial XYZ     (pick one when several are plugged in)
 #   powershell -ExecutionPolicy Bypass -File .\labtest.ps1 -Class LibraryDbTest
 
 param([string]$Serial, [string]$Class)
@@ -22,8 +22,9 @@ $tests = 'com.thescarletcoder.lyrics.labtest.test'
 
 if (-not $Serial) {
     $serials = @(& $adb devices | Select-String '	device$' | ForEach-Object { ($_ -split '	')[0] })
-    foreach ($s in $serials) { if ((& $adb -s $s shell getprop ro.product.model | Out-String).Trim() -eq 'TB336FU') { $Serial = $s } }
-    if (-not $Serial) { Write-Host "Tablet not connected. Plug it in, unlock it, allow USB debugging (or pass -Serial)."; exit 1 }
+    if ($serials.Count -eq 0) { Write-Host "No device connected. Plug it in, unlock it, allow USB debugging."; exit 1 }
+    if ($serials.Count -gt 1) { Write-Host "More than one device connected. Run again with -Serial (one of: $($serials -join ', '))."; exit 1 }
+    $Serial = $serials[0]
 }
 
 Write-Host "Building Lyrics Lab and its tests..."
@@ -36,10 +37,10 @@ if ($LASTEXITCODE -ne 0) { Write-Host "Install failed."; exit 1 }
 & $adb -s $Serial install -r -t '.\lyrics\build\outputs\apk\androidTest\labtest\lyrics-labtest-androidTest.apk' | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Host "Install failed."; exit 1 }
 
-$args = @('-s', $Serial, 'shell', 'am', 'instrument', '-w')
-if ($Class) { $args += @('-e', 'class', "com.thescarletcoder.lyrics.$Class") }
-$args += "$tests/androidx.test.runner.AndroidJUnitRunner"
-$out = (& $adb @args | Out-String)
+$run = @('-s', $Serial, 'shell', 'am', 'instrument', '-w')
+if ($Class) { $run += @('-e', 'class', "com.thescarletcoder.lyrics.$Class") }
+$run += "$tests/androidx.test.runner.AndroidJUnitRunner"
+$out = (& $adb @run | Out-String)
 Write-Host $out.Trim()
 
 Write-Host "Removing Lyrics Lab..."

@@ -39,19 +39,16 @@ object LrcLib {
 
     fun byId(id: Long): Candidate = parse(JSONObject(fetch("/api/get/$id")))
 
-    fun search(query: String): List<Candidate> {
-        val arr = JSONArray(fetch("/api/search?q=${enc(query)}"))
-        return (0 until arr.length()).map { parse(arr.getJSONObject(it)) }
-    }
+    fun search(query: String): List<Candidate> = list("/api/search?q=${enc(query)}")
 
     /** Title only: for songs LRCLIB files under a different artist (a label, a composer) than the player shows. */
-    fun searchTitle(track: String): List<Candidate> {
-        val arr = JSONArray(fetch("/api/search?track_name=${enc(track)}"))
-        return (0 until arr.length()).map { parse(arr.getJSONObject(it)) }
-    }
+    fun searchTitle(track: String): List<Candidate> = list("/api/search?track_name=${enc(track)}")
 
-    fun search(track: String, artist: String): List<Candidate> {
-        val arr = JSONArray(fetch("/api/search?track_name=${enc(track)}&artist_name=${enc(artist)}"))
+    fun search(track: String, artist: String): List<Candidate> =
+        list("/api/search?track_name=${enc(track)}&artist_name=${enc(artist)}")
+
+    private fun list(pathAndQuery: String): List<Candidate> {
+        val arr = JSONArray(fetch(pathAndQuery))
         return (0 until arr.length()).map { parse(arr.getJSONObject(it)) }
     }
 

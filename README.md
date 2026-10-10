@@ -34,4 +34,4 @@ On first launch, allow notification access when asked. Android requires it for a
 
 Scarlet Lyrics is free software: you can use it, study it, change it and share it under the [GNU General Public License v3.0](LICENSE). If you share a changed version, it has to stay open under the same license.
 
-Copyright (C) 2026 The Scarlet Coder. Fonts and the word list keep their own licenses, listed under Credits.
+Copyright (C) 2026 The Scarlet Coder. The fonts keep their own license, listed under Credits.
