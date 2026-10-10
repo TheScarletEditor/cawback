@@ -40,6 +40,15 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+        // The test copy ("Lyrics Lab"): its own app id, so it installs next to Sam's Lyrics with its own database,
+        // settings and key, and can never see or change hers. Stripped to nothing but what tests need
+        // (src/labtest/AndroidManifest.xml). On-device tests run against it, on the tablet: labtest.ps1.
+        create("labtest") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".labtest"
+            versionNameSuffix = "-labtest+$gitRev"
+            matchingFallbacks += listOf("debug")
+        }
         // Sam's own devices: release-optimized (R8, not debuggable) but signed with this laptop's debug key,
         // so it installs over debug installs and keeps saved lyrics. Never install `release` on her devices.
         create("personal") {
@@ -59,6 +68,8 @@ android {
         compose = true
         buildConfig = true
     }
+    // On-device tests run against the test copy, never against an app id Sam uses.
+    testBuildType = "labtest"
     // Bouncy Castle and jspecify both carry an OSGi manifest no one reads on Android.
     packaging { resources { excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF" } }
 }

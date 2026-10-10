@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lyrics Lab, the test copy (com.thescarletcoder.lyrics.labtest): only what on-device tests need.
+     No network, no launcher icon, no notification-access entry. It can't see Sam's Lyrics (different app id). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <application>
+        <activity android:name=".LyricsActivity">
+            <intent-filter tools:node="removeAll" />
+        </activity>
+        <service android:name=".NowPlayingListener" tools:node="remove" />
+    </application>
+</manifest>
