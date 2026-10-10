@@ -12,6 +12,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -140,6 +142,8 @@ fun MoreSheet(
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(L.surface)
                     .clickable(remember { MutableInteractionSource() }, indication = null) { }
+                    // Scrolls when the window is short (split screen on the Flip): every row stays reachable.
+                    .verticalScroll(rememberScrollState())
                     .navigationBarsPadding().padding(horizontal = 24.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
