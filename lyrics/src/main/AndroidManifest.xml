@@ -37,6 +37,16 @@
             </intent-filter>
         </activity>
 
+        <!-- Library > Export: hands the export file you chose to share to the app you pick, for that one share only.
+             Not exported; it serves nothing but the exports folder in Lyrics' own cache. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.exports"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/export_paths" />
+        </provider>
+
         <!-- Only here so Android lets us see what's playing (MediaSessionManager). It ignores every notification. -->
         <service
             android:name=".NowPlayingListener"

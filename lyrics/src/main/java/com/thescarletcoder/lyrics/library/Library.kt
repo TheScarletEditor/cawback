@@ -161,6 +161,18 @@ interface LibraryDao {
     @Query("SELECT * FROM song") suspend fun allSongs(): List<Song>
     @Query("SELECT * FROM play") suspend fun allPlays(): List<Play>
     @Query("SELECT * FROM moment") suspend fun allMoments(): List<Moment>
+    @Query("SELECT * FROM note_history") suspend fun allNoteHistory(): List<NoteHistory>
+    @Query("SELECT * FROM tombstone") suspend fun allTombstones(): List<Tombstone>
+    @Query("SELECT * FROM song_track") suspend fun allTracks(): List<SongTrack>
+
+    // Restore (and later the Command link) rewrites the whole Library in one transaction.
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertSongs(l: List<Song>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertPlays(l: List<Play>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertMoments(l: List<Moment>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertNoteHistories(l: List<NoteHistory>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertTombstones(l: List<Tombstone>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertTracks(l: List<SongTrack>)
+    @Query("DELETE FROM tombstone") suspend fun deleteAllTombstones()
 }
 
 @Database(entities = [Song::class, Play::class, Moment::class, NoteHistory::class, Tombstone::class, SongTrack::class], version = 1)

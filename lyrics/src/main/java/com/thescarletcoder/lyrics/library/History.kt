@@ -175,6 +175,37 @@ class LibraryRepo(context: Context) {
         LyricsStore(app).forgetHashed(hashes)
     }
 
+    /** The whole Library, for a backup or an export. */
+    suspend fun snapshot(): LibrarySnapshot = db.withTransaction {
+        LibrarySnapshot(dao.allSongs(), dao.allPlays(), dao.allMoments(), dao.allNoteHistory(), dao.allTombstones(), dao.allTracks())
+    }
+
+    data class Restored(val songsBefore: Int, val songsAfter: Int, val playsBefore: Int, val playsAfter: Int)
+
+    /**
+     * Restore a backup by merging it into this Library (LibraryMerge: plays add up, newest note wins and the older
+     * one is kept, deletions stay deleted), so restoring never loses what's here. Then rewrites the Library.
+     */
+    suspend fun restore(incoming: LibrarySnapshot): Restored {
+        val (before, merged) = db.withTransaction {
+            val local = snapshot()
+            val merged = LibraryMerge.merge(local, incoming)
+            dao.deleteAllSongs()   // plays, moments, note history and track keys go with the songs
+            dao.deleteAllTombstones()
+            dao.insertSongs(merged.songs)
+            dao.insertPlays(merged.plays)
+            dao.insertMoments(merged.moments)
+            dao.insertNoteHistories(merged.noteHistory)
+            dao.insertTombstones(merged.tombstones)
+            dao.insertTracks(merged.tracks)
+            local to merged
+        }
+        // Songs the backup says were forgotten: their cached lyrics go too.
+        val keep = merged.tracks.map { it.trackKey }.toHashSet()
+        LyricsStore(app).forgetHashed(before.tracks.map { it.trackKey }.filter { it !in keep }.distinct())
+        return Restored(before.songs.size, merged.songs.size, before.plays.size, merged.plays.size)
+    }
+
     /** Drops plays older than the "keep plays for" setting. Run when Lyrics starts. */
     suspend fun prune(keepDays: Int, now: Long = System.currentTimeMillis()) {
         if (keepDays <= 0) return

@@ -4,6 +4,10 @@ import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.thescarletcoder.lyrics.library.History
+import com.thescarletcoder.lyrics.library.LibraryBackup
+import com.thescarletcoder.lyrics.library.LibraryExport
+import com.thescarletcoder.lyrics.library.LibraryMerge
+import com.thescarletcoder.lyrics.library.LibrarySnapshot
 import com.thescarletcoder.lyrics.library.LibraryDatabase
 import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.lyrics.library.PlayRecorder
@@ -92,6 +96,41 @@ class LibraryDbTest {
         repo.prune(90, now)
         assertEquals(1, dao.playsOf(uid).size)
         assertEquals("stays", dao.song(uid)!!.note)
+    }
+
+    /** Scope section 9: back up, clear storage, restore, identical library. */
+    @Test fun backupRestoreRoundTrip() = runBlocking {
+        repo.recordPlay(finished("Glass Harbor"))
+        repo.recordPlay(finished("Paper Saints", "Mara Vell"))
+        val uid = dao.songByKey(SongKey.of("Glass Harbor", "The Lanterns"))!!.uid
+        repo.setNote(uid, "first"); repo.setNote(uid, "Night drive song.")
+        repo.setFavorite(uid, true)
+        repo.addMoment(uid, 102_000, "the key change")
+        val before = repo.snapshot()
+
+        val file = java.io.ByteArrayOutputStream()
+        LibraryBackup.write(file, before, "correct horse".toCharArray(), params = LibraryBackup.Params(1024, 1, 1))
+        val sql = LibraryDatabase.get(ctx).openHelper.writableDatabase   // "clear storage": nothing left, not even tombstones
+        listOf("moment", "note_history", "play", "song_track", "tombstone", "song").forEach { sql.execSQL("DELETE FROM $it") }
+        assertEquals(0, dao.allSongs().size)
+
+        repo.restore(LibraryBackup.read(file.toByteArray().inputStream(), "correct horse".toCharArray()))
+        assertEquals(LibraryMerge.merge(LibrarySnapshot(), before), repo.snapshot().let { LibraryMerge.merge(LibrarySnapshot(), it) })
+    }
+
+    /** Scope section 2: lyric text in the cache never reaches an export or a backup. */
+    @Test fun lyricsNeverReachExportsOrBackups() = runBlocking {
+        val sentinel = "SENTINEL lyric line that must never leave"
+        val f = finished("Undertow")
+        File(File(ctx.filesDir, "lyrics").apply { mkdirs() }, LyricsStore.hash(f.trackKey) + ".json").writeText("{\"synced\":\"[00:01.00]$sentinel\"}")
+        repo.recordPlay(f)
+        val snap = repo.snapshot()
+        for (fmt in LibraryExport.Format.entries) {
+            val out = LibraryExport.build(snap, LibraryExport.Options(format = fmt), System.currentTimeMillis(), java.time.ZoneId.systemDefault())
+            assertTrue(out.contains("Undertow"))
+            assertFalse(out.contains("SENTINEL"))
+        }
+        assertFalse(snap.toJson().toString().contains("SENTINEL"))
     }
 
     @Test fun historyOffWritesNothing() = runBlocking {

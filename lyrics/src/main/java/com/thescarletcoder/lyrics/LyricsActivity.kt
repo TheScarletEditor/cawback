@@ -238,7 +238,7 @@ class LyricsActivity : ComponentActivity() {
     }
 }
 
-private enum class Panel { NONE, PICKER, SETTINGS, TUNING, LIBRARY, SONG }
+private enum class Panel { NONE, PICKER, SETTINGS, TUNING, LIBRARY, SONG, EXPORT }
 
 @Composable
 private fun LyricsScreen(
@@ -362,6 +362,7 @@ private fun LyricsScreen(
             momentAt != null -> momentAt = null
             panel == Panel.TUNING -> panel = Panel.SETTINGS
             panel == Panel.SONG && songFromLibrary -> panel = Panel.LIBRARY
+            panel == Panel.EXPORT -> panel = Panel.LIBRARY
             else -> panel = Panel.NONE
         }
     }
@@ -412,7 +413,9 @@ private fun LyricsScreen(
                             onClose = { panel = Panel.NONE })
                         panel == Panel.LIBRARY -> LibraryPanel(
                             onSong = { songUid = it; songFromLibrary = true; panel = Panel.SONG },
+                            onExport = { panel = Panel.EXPORT },
                             onSettings = { panel = Panel.SETTINGS }, onClose = { panel = Panel.NONE })
+                        panel == Panel.EXPORT -> ExportPanel(onClose = { panel = Panel.LIBRARY })
                         panel == Panel.SONG && songUid != null -> {
                             val here = songUid == playingUid && t != null
                             SongPage(songUid!!, position = if (here) np::positionMs else null, onSeek = if (here) np::seekTo else null,

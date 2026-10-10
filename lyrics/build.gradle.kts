@@ -59,6 +59,8 @@ android {
         compose = true
         buildConfig = true
     }
+    // Bouncy Castle and jspecify both carry an OSGi manifest no one reads on Android.
+    packaging { resources { excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF" } }
 }
 
 dependencies {
@@ -81,7 +83,11 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.sqlcipher.android)
     implementation(libs.androidx.sqlite)
+    // Library backups: Argon2id turns the backup passphrase into a key (the same as Scarlet Command's backups).
+    implementation(libs.bcprov)
     testImplementation("junit:junit:4.13.2")
+    // The real org.json for JVM tests (Android's copy is a stub there).
+    testImplementation("org.json:json:20240303")
     // The Library on a real Android (SQLCipher, Keystore): run on the emulator, never on Sam's devices.
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

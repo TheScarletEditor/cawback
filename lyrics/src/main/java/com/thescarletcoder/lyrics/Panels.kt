@@ -217,7 +217,8 @@ fun SettingsPanel(
     var resetNudges by remember { mutableStateOf(0) }   // 0 = not asked, 1 = confirming, 2 = done
     var deleting by remember { mutableStateOf<String?>(null) }   // "history" or "library" while confirming
     var deleted by remember { mutableStateOf<String?>(null) }
-    val hasLibrary = remember(deleted) { LibraryDatabase.exists(context) }
+    var restores by remember { mutableStateOf(0) }
+    val hasLibrary = remember(deleted, restores) { LibraryDatabase.exists(context) }
     val apps = remember { MediaApps.all(context) }
     LaunchedEffect(Unit) { saved = repo.savedCount() }
 
@@ -383,6 +384,9 @@ fun SettingsPanel(
                 Text(if (it == "history") "Listening history deleted." else "Library deleted.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
             }
         }
+
+        SettingsSection("Library backup")
+        LibraryBackupSection(onRestored = { deleted = null; restores++ })
 
         SettingsSection("Saved lyrics")
         Text(

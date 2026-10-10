@@ -75,13 +75,14 @@ private enum class LibTab(val label: String) { SONGS("Songs"), STATS("Stats") }
 private enum class Sort(val label: String) { RECENT("Last played"), MOST("Most played"), AZ("A to Z") }
 
 @Composable
-fun LibraryPanel(onSong: (String) -> Unit, onSettings: () -> Unit, onClose: () -> Unit) {
+fun LibraryPanel(onSong: (String) -> Unit, onExport: () -> Unit, onSettings: () -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     val settings = LocalSettings.current
     val exists = remember { LibraryDatabase.exists(context) }
     Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Library", fontFamily = Fraunces, fontSize = 28.sp, color = L.text, modifier = Modifier.weight(1f))
+            if (exists) { Washed("Export", onExport, small = true); Box(Modifier.width(10.dp)) }
             Washed("Close", onClose, small = true)
         }
         if (!exists) {
