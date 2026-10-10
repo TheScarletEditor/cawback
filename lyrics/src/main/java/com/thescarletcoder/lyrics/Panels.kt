@@ -87,7 +87,7 @@ fun Welcome(onGrant: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally) {
         RavenHalo()
-        Text("Lyrics for whatever's playing", fontFamily = Fraunces, fontSize = 30.sp, color = L.text, textAlign = TextAlign.Center,
+        Text("Lyrics for whatever's playing", fontFamily = Fraunces, fontSize = 30.sp, lineHeight = 38.sp, color = L.text, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 12.dp))
         Text(
             "It reads only the song title, artist and position. To find the words, it sends the song's title, artist, " +
@@ -268,7 +268,8 @@ fun SettingsPanel(
             Choice("Hidden", settings.hidePast) { settings.hidePastLines(true) }
         }
         Text("After you scroll, follow the song again after", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Wraps: on a small phone the three side by side squeezed "8 seconds" to one letter per line.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             LyricsSettings.FOLLOW_DELAYS.forEach { s -> Choice("$s seconds", settings.followDelaySec == s) { settings.chooseFollowDelay(s) } }
         }
         Text("Keep the screen on while synced lyrics play", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))

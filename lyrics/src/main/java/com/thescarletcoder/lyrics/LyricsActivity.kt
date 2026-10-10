@@ -363,7 +363,9 @@ private fun LyricsScreen(
         }
     }
 
-    BoxWithConstraints(
+    val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
+    // The sheets sit outside the safe-area padding, so their dimming covers the whole screen, status bar included.
+    Box(
         Modifier.fillMaxSize().background(bg)
             .pointerInput(Unit) {
                 // Every touch resets the hide timer. While the header is hidden, a tap only brings it back
@@ -381,74 +383,74 @@ private fun LyricsScreen(
                     }
                 }
             }
-            .safeDrawingPadding(),
     ) {
-        val compact = maxHeight < 560.dp
-        val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
-        val density = LocalDensity.current
-        // Flex mode: the fold's position inside this box (it's measured in window pixels).
-        var boxTop by remember { mutableIntStateOf(0) }
-        val flexTop = foldTop?.let { with(density) { (it - boxTop).toDp() } }?.takeIf { it > 120.dp && it < maxHeight - 120.dp }
-        CompositionLocalProvider(LocalCompact provides (compact || flexTop != null)) {
-            Column(Modifier.fillMaxSize().onGloballyPositioned { boxTop = it.positionInWindow().y.toInt() }) {
-                // The header keeps its space while hidden, so nothing moves when it fades. In Flex mode the controls
-                // sit below the fold instead.
-                if (flexTop == null) Box(Modifier.fillMaxWidth().offset(y = chromeLift).graphicsLayer { alpha = chromeAlpha }) {
-                    Header(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
-                }
-                Box(if (flexTop != null) Modifier.height(flexTop).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth()) {
-                    val t = track
-                    when {
-                        panel == Panel.TUNING -> TuningPage { panel = Panel.SETTINGS }
-                        panel == Panel.SETTINGS -> SettingsPanel(repo, hasAccess, theme, onTheme, onGrant, onCleared = { reload++ },
-                            output = output, onFollowChanged = onFollowChanged, onPinShortcut = onPinShortcut,
-                            onTuning = { panel = Panel.TUNING }, onClose = { panel = Panel.NONE })
-                        panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
-                            onPick = { c -> scope.launch { shown = repo.pin(t, c); panel = Panel.NONE } },
-                            onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } },
-                            onClose = { panel = Panel.NONE })
-                        panel == Panel.LIBRARY -> LibraryPanel(
-                            onSong = { songUid = it; songFromLibrary = true; panel = Panel.SONG },
-                            onExport = { panel = Panel.EXPORT },
-                            onSettings = { panel = Panel.SETTINGS }, onClose = { panel = Panel.NONE })
-                        panel == Panel.EXPORT -> ExportPanel(onClose = { panel = Panel.LIBRARY })
-                        panel == Panel.SONG && songUid != null -> {
-                            val here = songUid == playingUid && t != null
-                            SongPage(songUid!!, position = if (here) np::positionMs else null, onSeek = if (here) np::seekTo else null,
-                                onClose = { panel = if (songFromLibrary) Panel.LIBRARY else Panel.NONE })
+        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
+            val compact = maxHeight < 560.dp
+            val density = LocalDensity.current
+            // Flex mode: the fold's position inside this box (it's measured in window pixels).
+            var boxTop by remember { mutableIntStateOf(0) }
+            val flexTop = foldTop?.let { with(density) { (it - boxTop).toDp() } }?.takeIf { it > 120.dp && it < maxHeight - 120.dp }
+            CompositionLocalProvider(LocalCompact provides (compact || flexTop != null)) {
+                Column(Modifier.fillMaxSize().onGloballyPositioned { boxTop = it.positionInWindow().y.toInt() }) {
+                    // The header keeps its space while hidden, so nothing moves when it fades. In Flex mode the controls
+                    // sit below the fold instead.
+                    if (flexTop == null) Box(Modifier.fillMaxWidth().offset(y = chromeLift).graphicsLayer { alpha = chromeAlpha }) {
+                        Header(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
+                    }
+                    Box(if (flexTop != null) Modifier.height(flexTop).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth()) {
+                        val t = track
+                        when {
+                            panel == Panel.TUNING -> TuningPage { panel = Panel.SETTINGS }
+                            panel == Panel.SETTINGS -> SettingsPanel(repo, hasAccess, theme, onTheme, onGrant, onCleared = { reload++ },
+                                output = output, onFollowChanged = onFollowChanged, onPinShortcut = onPinShortcut,
+                                onTuning = { panel = Panel.TUNING }, onClose = { panel = Panel.NONE })
+                            panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
+                                onPick = { c -> scope.launch { shown = repo.pin(t, c); panel = Panel.NONE } },
+                                onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } },
+                                onClose = { panel = Panel.NONE })
+                            panel == Panel.LIBRARY -> LibraryPanel(
+                                onSong = { songUid = it; songFromLibrary = true; panel = Panel.SONG },
+                                onExport = { panel = Panel.EXPORT },
+                                onSettings = { panel = Panel.SETTINGS }, onClose = { panel = Panel.NONE })
+                            panel == Panel.EXPORT -> ExportPanel(onClose = { panel = Panel.LIBRARY })
+                            panel == Panel.SONG && songUid != null -> {
+                                val here = songUid == playingUid && t != null
+                                SongPage(songUid!!, position = if (here) np::positionMs else null, onSeek = if (here) np::seekTo else null,
+                                    onClose = { panel = if (songFromLibrary) Panel.LIBRARY else Panel.NONE })
+                            }
+                            youreSet -> YoureSet()
+                            else -> Content(shown, finding, slow, np, onGrant, playerLabel, onPlayer, onChoosePlayer = { panel = Panel.SETTINGS },
+                                onPick = { panel = Panel.PICKER }, onRetry = { reload++ }, onMoment = { momentAt = it })
                         }
-                        youreSet -> YoureSet()
-                        else -> Content(shown, finding, slow, np, onGrant, playerLabel, onPlayer, onChoosePlayer = { panel = Panel.SETTINGS },
-                            onPick = { panel = Panel.PICKER }, onRetry = { reload++ }, onMoment = { momentAt = it })
                     }
+                    if (flexTop != null) FlexControls(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
                 }
-                if (flexTop != null) FlexControls(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
             }
-            MoreSheet(
-                sheet, shown, hasTrack = track != null && hasAccess, playerLabel = playerLabel?.takeIf { !inSplit },
-                onClose = { sheet = false }, onWrong = { panel = Panel.PICKER },
-                onNudge = { d -> val t = track; val s = shown
-                    if (t != null && s is Shown.Found) scope.launch { shown = s.copy(offsetMs = repo.nudge(t, d)) } },
-                onPlayer = onPlayer, onSettings = { panel = Panel.SETTINGS },
-                onSongPage = {
-                    val t = track
-                    if (t != null) scope.launch {
-                        songUid = withContext(Dispatchers.IO) { LibraryRepo(context).songFor(t, create = true)?.uid }
-                        songFromLibrary = false
-                        if (songUid != null) panel = Panel.SONG
-                    }
-                },
-                onLibrary = { panel = Panel.LIBRARY },
-            )
-            MomentSheet(momentAt, onClose = { momentAt = null }, onSave = { at, label ->
+        }
+        MoreSheet(
+            sheet, shown, hasTrack = track != null && hasAccess, playerLabel = playerLabel?.takeIf { !inSplit },
+            onClose = { sheet = false }, onWrong = { panel = Panel.PICKER },
+            onNudge = { d -> val t = track; val s = shown
+                if (t != null && s is Shown.Found) scope.launch { shown = s.copy(offsetMs = repo.nudge(t, d)) } },
+            onPlayer = onPlayer, onSettings = { panel = Panel.SETTINGS },
+            onSongPage = {
                 val t = track
                 if (t != null) scope.launch {
-                    withContext(Dispatchers.IO) {
-                        runCatching { LibraryRepo(context).run { songFor(t, create = true)?.let { addMoment(it.uid, at, label) } } }
-                    }
+                    songUid = withContext(Dispatchers.IO) { LibraryRepo(context).songFor(t, create = true)?.uid }
+                    songFromLibrary = false
+                    if (songUid != null) panel = Panel.SONG
                 }
-            })
-        }
+            },
+            onLibrary = { panel = Panel.LIBRARY },
+        )
+        MomentSheet(momentAt, onClose = { momentAt = null }, onSave = { at, label ->
+            val t = track
+            if (t != null) scope.launch {
+                withContext(Dispatchers.IO) {
+                    runCatching { LibraryRepo(context).run { songFor(t, create = true)?.let { addMoment(it.uid, at, label) } } }
+                }
+            }
+        })
     }
 }
 
