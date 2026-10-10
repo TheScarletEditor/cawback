@@ -5,7 +5,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -83,7 +83,8 @@ fun Modifier.edgeFade(top: () -> Float = { 1f }): Modifier = this
     }
 
 @Composable
-fun SyncedLyrics(s: Shown.Found, np: NowPlaying) {
+/** [onMoment]: a line was long-pressed; bookmark that time in the song (the Library; never the line's text). */
+fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}) {
     val list = rememberLazyListState()
     val dragged by list.interactionSource.collectIsDraggedAsState()
     var pos by remember { mutableLongStateOf(0L) }
@@ -121,7 +122,8 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying) {
         ) {
             itemsIndexed(s.lines) { i, line ->
                 val gapEnd = if (line.text.isBlank()) s.lines.getOrNull(i + 1)?.timeMs else null
-                LyricRow(i, line, current, compact, gapEnd, offset, np, settings) {
+                LyricRow(i, line, current, compact, gapEnd, offset, np, settings,
+                    onLongPress = { line.timeMs?.let { onMoment((it - offset).coerceAtLeast(0)) } }) {
                     line.timeMs?.let { np.seekTo((it - offset).coerceAtLeast(0)); lastTouch = 0 }
                 }
             }
@@ -142,7 +144,7 @@ private suspend fun glideTo(list: LazyListState, i: Int, anchor: Float, ms: Int)
 @Composable
 private fun LyricRow(
     i: Int, line: LyricLine, current: Int, compact: Boolean, gapEnd: Long?, offsetMs: Long, np: NowPlaying, settings: LyricsSettings,
-    onSeek: () -> Unit,
+    onLongPress: () -> Unit, onSeek: () -> Unit,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -172,7 +174,12 @@ private fun LyricRow(
     Row(
         Modifier.fillMaxWidth()
             .background(text.copy(alpha = 0.10f * wash.value))
-            .clickable {
+            .combinedClickable(
+                onLongClick = {
+                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    onLongPress()
+                },
+            ) {
                 view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
                 scope.launch { wash.snapTo(1f); wash.animateTo(0f, tween(Motion.duration(context, 300))) }
                 onSeek()

@@ -4,6 +4,7 @@ import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -49,6 +52,7 @@ import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.lyrics.library.LibraryStats
 import com.thescarletcoder.lyrics.library.SongRow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.ZoneId
@@ -283,8 +287,8 @@ fun SongPage(uid: String, position: (() -> Long)?, onSeek: ((Long) -> Unit)?, on
         SettingsSection("Moments")
         if (moments.isEmpty()) {
             Text(
-                if (position != null) "Bookmark a time in this song with your own label."
-                else "Bookmark a time while this song plays: open its page from the lyrics screen.",
+                if (position != null) "Long-press a line in the lyrics, or add one at the current time below."
+                else "While this song plays, long-press a line in the lyrics to bookmark it.",
                 fontFamily = Inter, fontSize = 15.sp, color = L.soft,
             )
         }
@@ -338,6 +342,40 @@ private fun NoteField(value: TextFieldValue, singleLine: Boolean = false, hint: 
             }
         },
     )
+}
+
+/**
+ * Long-press a lyric line: bookmark that time with an optional label. Stores the time and the label, never the line.
+ * [at] null = closed.
+ */
+@Composable
+fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: (Long, String) -> Unit) {
+    var label by remember(at) { mutableStateOf(TextFieldValue("")) }
+    var saved by remember(at) { mutableStateOf(false) }
+    LaunchedEffect(saved) { if (saved) { delay(1_200); onClose() } }
+    if (at == null) return
+    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.35f))
+        .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onClose))
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(L.surface)
+                .clickable(remember { MutableInteractionSource() }, indication = null) { }
+                .navigationBarsPadding().imePadding().padding(horizontal = 24.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Bookmark ${clock(at)}", fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = L.text)
+            if (saved) {
+                Text("Saved. It's in this song's Note and moments.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+            } else {
+                Text("Saves the time and your label, not the words.", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
+                NoteField(label, singleLine = true, hint = "Label (optional)") { label = it }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Washed("Save", { onSave(at, label.text.trim().take(80)); saved = true })
+                    Washed("Cancel", onClose)
+                }
+            }
+        }
+    }
 }
 
 private fun plays(n: Int) = if (n == 1) "1 play" else "$n plays"

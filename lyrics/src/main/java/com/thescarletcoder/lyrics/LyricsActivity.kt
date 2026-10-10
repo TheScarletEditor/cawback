@@ -266,6 +266,8 @@ private fun LyricsScreen(
     var songUid by remember { mutableStateOf<String?>(null) }
     var songFromLibrary by remember { mutableStateOf(false) }
     var playingUid by remember { mutableStateOf<String?>(null) }
+    // A lyric line was long-pressed: the time to bookmark (the sheet is open while this is set).
+    var momentAt by remember { mutableStateOf<Long?>(null) }
 
     // "You're set": access was just granted while Lyrics was showing the welcome screen.
     var sawWelcome by remember { mutableStateOf(!hasAccess) }
@@ -337,7 +339,7 @@ private fun LyricsScreen(
     // Header auto-hide (Sam's ruling): while a song plays with no sheet or panel open, fade 3 s after the last touch.
     var chrome by remember { mutableStateOf(true) }
     var touches by remember { mutableIntStateOf(0) }
-    val canHide = playing && songShowing && !sheet && panel == Panel.NONE && shown is Shown.Found
+    val canHide = playing && songShowing && !sheet && momentAt == null && panel == Panel.NONE && shown is Shown.Found
     LaunchedEffect(canHide, touches) {
         chrome = true
         if (canHide) { delay(Tunables.int(LyricsTuning.CHROME_HIDE_MS).toLong()); chrome = false }
@@ -354,9 +356,10 @@ private fun LyricsScreen(
         else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
-    BackHandler(enabled = sheet || panel != Panel.NONE) {
+    BackHandler(enabled = sheet || momentAt != null || panel != Panel.NONE) {
         when {
             sheet -> sheet = false
+            momentAt != null -> momentAt = null
             panel == Panel.TUNING -> panel = Panel.SETTINGS
             panel == Panel.SONG && songFromLibrary -> panel = Panel.LIBRARY
             else -> panel = Panel.NONE
@@ -417,7 +420,7 @@ private fun LyricsScreen(
                         }
                         youreSet -> YoureSet()
                         else -> Content(shown, finding, slow, np, onGrant, playerLabel, onPlayer, onChoosePlayer = { panel = Panel.SETTINGS },
-                            onPick = { panel = Panel.PICKER }, onRetry = { reload++ })
+                            onPick = { panel = Panel.PICKER }, onRetry = { reload++ }, onMoment = { momentAt = it })
                     }
                 }
                 if (flexTop != null) FlexControls(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
@@ -438,6 +441,14 @@ private fun LyricsScreen(
                 },
                 onLibrary = { panel = Panel.LIBRARY },
             )
+            MomentSheet(momentAt, onClose = { momentAt = null }, onSave = { at, label ->
+                val t = track
+                if (t != null) scope.launch {
+                    withContext(Dispatchers.IO) {
+                        runCatching { LibraryRepo(context).run { songFor(t, create = true)?.let { addMoment(it.uid, at, label) } } }
+                    }
+                }
+            })
         }
     }
 }
@@ -447,6 +458,7 @@ private fun LyricsScreen(
 private fun Content(
     shown: Shown?, finding: Boolean, slow: Boolean, np: NowPlaying,
     onGrant: () -> Unit, playerLabel: String?, onPlayer: () -> Unit, onChoosePlayer: () -> Unit, onPick: () -> Unit, onRetry: () -> Unit,
+    onMoment: (Long) -> Unit,
 ) {
     val swap = Motion.duration(LocalContext.current, Tunables.int(LyricsTuning.SWAP_MS))
     AnimatedContent(
@@ -469,7 +481,7 @@ private fun Content(
             )
             is Shown.Found -> when {
                 s.lines.isEmpty() -> EmptyState(if (s.candidate.instrumental) "Instrumental" else "No words for this one", null, null, null, raven = false)
-                s.synced -> SyncedLyrics(s, np)
+                s.synced -> SyncedLyrics(s, np, onMoment)
                 else -> PlainLyrics(s)
             }
         }
