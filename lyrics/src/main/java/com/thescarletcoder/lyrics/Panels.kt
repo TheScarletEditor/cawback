@@ -428,6 +428,9 @@ fun SettingsPanel(
         )
         Box(Modifier.padding(top = 12.dp)) { Washed("Open the setting", onGrant) }
 
+        SettingsSection("What's on this device")
+        OnThisDevice(repo, refresh = saved to (deleted to restores))
+
         SettingsSection("About")
         Text("Scarlet Lyrics ${BuildConfig.VERSION_NAME}", fontFamily = Inter, fontSize = 17.sp, color = L.text)
         Text("Lyrics from LRCLIB (lrclib.net), the only place this app connects to.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))

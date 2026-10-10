@@ -338,3 +338,70 @@ private fun Secret(value: TextFieldValue, hint: String, onChange: (TextFieldValu
         },
     )
 }
+
+/**
+ * Settings > What's on this device (scope section 8): everything Scarlet Lyrics keeps, with real counts, and where
+ * each one goes. [refresh] changes when something in Settings cleared or restored data, so the counts follow.
+ */
+@Composable
+fun OnThisDevice(repo: LyricsRepo, refresh: Any?) {
+    val context = LocalContext.current
+    val settings = LocalSettings.current
+    data class Facts(val cached: Int, val library: com.thescarletcoder.lyrics.library.LibraryCounts?, val exports: Int)
+    val facts by produceState<Facts?>(null, refresh) {
+        value = withContext(Dispatchers.IO) {
+            Facts(
+                repo.savedCount(),
+                if (LibraryDatabase.exists(context)) runCatching { LibraryRepo(context).counts() }.getOrNull() else null,
+                File(context.cacheDir, "exports").listFiles()?.size ?: 0,
+            )
+        }
+    }
+    val f = facts ?: return
+    fun n(count: Int, one: String, many: String = one + "s") = "$count " + if (count == 1) one else many
+
+    Item(
+        "Saved lyrics: " + n(f.cached, "song"),
+        "Lyrics already fetched, so a song you've played before shows up at once and works offline, with your " +
+            "\"Wrong lyrics?\" picks and timing nudges. Each one includes the song's title and artist. Not encrypted; " +
+            "goes nowhere, and Android's backups are switched off for Lyrics.",
+    )
+    val lib = f.library
+    Item(
+        if (lib == null) "Library: empty" else "Library: " + listOf(
+            n(lib.songs, "song"), n(lib.plays, "play"), n(lib.notes, "note"), n(lib.moments, "moment"), n(lib.favorites, "favorite"),
+        ).joinToString(", ") + if (lib.earlierNotes > 0) " (and " + n(lib.earlierNotes, "earlier note") + ")" else "",
+        "Encrypted, with a key kept by Android's secure key store that never leaves this device. Listening history is " +
+            (when (settings.historyMode) {
+                com.thescarletcoder.lyrics.library.History.Mode.OFF -> "off"
+                com.thescarletcoder.lyrics.library.History.Mode.WHILE_OPEN -> "on while Lyrics is open"
+                com.thescarletcoder.lyrics.library.History.Mode.ALWAYS -> "on, always"
+            }) + (if (settings.historyPaused()) " (paused)" else "") +
+            ". It leaves only when you export it or back it up, and only to where you send it.",
+    )
+    if (f.exports > 0) Item(
+        "Last shared export: " + n(f.exports, "file"),
+        "Kept in Lyrics' own temporary storage so the app you shared it with could open it. Replaced at the next export, and Android can clear it any time.",
+    )
+    Item(
+        "Your settings",
+        "Your music app, ignored apps, display and timing choices, and history settings. Not a record of anything you played.",
+    )
+    Item(
+        "Sent to lrclib.net",
+        "Only to look up words: the title, artist, album and length of the song playing, and what you type into a " +
+            "\"Wrong lyrics?\" search. Nothing else, and to no one else.",
+    )
+    Item(
+        "Never kept",
+        "Which app played a song, where you were, your notifications, and album art (the background tint is worked out on the spot and never saved).",
+    )
+}
+
+@Composable
+private fun Item(title: String, body: String) {
+    Column(Modifier.padding(top = 10.dp)) {
+        Text(title, fontFamily = Inter, fontSize = 16.sp, color = L.text)
+        Text(body, fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 2.dp))
+    }
+}

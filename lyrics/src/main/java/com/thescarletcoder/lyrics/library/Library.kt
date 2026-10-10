@@ -100,6 +100,9 @@ data class Tombstone(
 )
 data class SongTrack(val songUid: String, val trackKey: String)
 
+/** Settings > What's on this device: real counts of everything in the Library. */
+data class LibraryCounts(val songs: Int, val plays: Int, val moments: Int, val notes: Int, val earlierNotes: Int, val favorites: Int)
+
 /** A song with its numbers, for the Songs list. */
 data class SongRow(
     val uid: String, val title: String, val artist: String, val album: String?, val favorite: Boolean, val note: String,
@@ -161,6 +164,12 @@ interface LibraryDao {
     @Query("SELECT * FROM song") suspend fun allSongs(): List<Song>
     @Query("SELECT * FROM play") suspend fun allPlays(): List<Play>
     @Query("SELECT * FROM moment") suspend fun allMoments(): List<Moment>
+    @Query("""
+        SELECT (SELECT COUNT(*) FROM song) AS songs, (SELECT COUNT(*) FROM play) AS plays, (SELECT COUNT(*) FROM moment) AS moments,
+               (SELECT COUNT(*) FROM song WHERE note != '') AS notes, (SELECT COUNT(*) FROM note_history) AS earlierNotes,
+               (SELECT COUNT(*) FROM song WHERE favorite) AS favorites
+    """)
+    suspend fun counts(): LibraryCounts
     @Query("SELECT * FROM note_history") suspend fun allNoteHistory(): List<NoteHistory>
     @Query("SELECT * FROM tombstone") suspend fun allTombstones(): List<Tombstone>
     @Query("SELECT * FROM song_track") suspend fun allTracks(): List<SongTrack>

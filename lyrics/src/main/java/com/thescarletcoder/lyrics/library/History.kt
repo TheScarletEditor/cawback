@@ -175,6 +175,8 @@ class LibraryRepo(context: Context) {
         LyricsStore(app).forgetHashed(hashes)
     }
 
+    suspend fun counts() = dao.counts()
+
     /** The whole Library, for a backup or an export. */
     suspend fun snapshot(): LibrarySnapshot = db.withTransaction {
         LibrarySnapshot(dao.allSongs(), dao.allPlays(), dao.allMoments(), dao.allNoteHistory(), dao.allTombstones(), dao.allTracks())
