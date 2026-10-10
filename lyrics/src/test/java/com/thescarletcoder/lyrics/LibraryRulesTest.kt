@@ -16,6 +16,11 @@ import org.junit.Test
 class LibraryRulesTest {
     // --- PlayRule ---
 
+    @Test fun twentySecondsOfThreeMinutesIsNotAPlayButNinetyFiveIs() {   // scope section 9
+        assertFalse(PlayRule.counts(180_000, 20_000))
+        assertTrue(PlayRule.counts(180_000, 95_000))
+    }
+
     @Test fun shortTracksNeverCount() {
         assertFalse(PlayRule.counts(30_000, 30_000))
         assertFalse(PlayRule.counts(20_000, 20_000))

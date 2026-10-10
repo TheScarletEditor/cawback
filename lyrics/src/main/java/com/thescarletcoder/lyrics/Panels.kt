@@ -1,5 +1,6 @@
 package com.thescarletcoder.lyrics
 
+import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
@@ -51,6 +52,12 @@ import androidx.compose.ui.unit.sp
 import com.thescarletcoder.scarlet.Motion
 import com.thescarletcoder.scarlet.ThemeChoice
 import com.thescarletcoder.scarlet.TuningPanel
+import com.thescarletcoder.lyrics.library.History
+import com.thescarletcoder.lyrics.library.LibraryDatabase
+import com.thescarletcoder.lyrics.library.LibraryRepo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.Date
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -175,7 +182,7 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
 }
 
 @Composable
-private fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, onSearch: () -> Unit) {
+internal fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, onSearch: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     BasicTextField(
         value = value, onValueChange = onChange, singleLine = true,
@@ -205,6 +212,9 @@ fun SettingsPanel(
     var confirming by remember { mutableStateOf(false) }
     var cleared by remember { mutableStateOf(false) }
     var resetNudges by remember { mutableStateOf(0) }   // 0 = not asked, 1 = confirming, 2 = done
+    var deleting by remember { mutableStateOf<String?>(null) }   // "history" or "library" while confirming
+    var deleted by remember { mutableStateOf<String?>(null) }
+    val hasLibrary = remember(deleted) { LibraryDatabase.exists(context) }
     val apps = remember { MediaApps.all(context) }
     LaunchedEffect(Unit) { saved = repo.savedCount() }
 
@@ -300,6 +310,77 @@ fun SettingsPanel(
             }
         }
 
+        // ---- listening history (the Library) ----
+        SettingsSection("Listening history")
+        Text(
+            "Counts the songs you listen to, for your Library. Kept encrypted on this device and never sent anywhere. " +
+                "Apps you've ignored are never counted, and no lyrics are kept.",
+            fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            History.Mode.entries.forEach { m -> Choice(m.label, settings.historyMode == m) { settings.chooseHistory(m) } }
+        }
+        if (settings.historyMode == History.Mode.ALWAYS) {
+            Text("Counts what you play even while Lyrics is closed.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+        }
+        if (settings.historyMode != History.Mode.OFF) {
+            val until = settings.historyPausedUntil
+            if (settings.historyPaused()) {
+                Text(
+                    if (until == History.PAUSED_UNTIL_ON) "Paused until you turn it back on."
+                    else "Paused until " + DateFormat.getTimeFormat(context).format(Date(until)) + ".",
+                    fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp),
+                )
+                Washed("Resume", { settings.pauseHistory(0) })
+            } else {
+                Text("Pause", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Washed("For 1 hour", { settings.pauseHistory(System.currentTimeMillis() + 3_600_000L) }, small = true)
+                    Washed("Until I turn it back on", { settings.pauseHistory(History.PAUSED_UNTIL_ON) }, small = true)
+                }
+            }
+            Text("Keep plays for", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                History.KEEP_DAYS.forEach { d -> Choice(History.keepLabel(d), settings.keepPlaysDays == d) { settings.chooseKeepPlays(d) } }
+            }
+            if (settings.keepPlaysDays > 0) {
+                Text("Older plays are removed when Lyrics opens. Songs, notes and moments stay.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+            }
+        }
+        if (hasLibrary) {
+            Box(Modifier.padding(top = 14.dp)) {
+                when (val d = deleting) {
+                    null -> FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Washed("Delete listening history", { deleting = "history"; deleted = null })
+                        Washed("Delete the Library", { deleting = "library"; deleted = null })
+                    }
+                    else -> Column {
+                        Text(
+                            if (d == "history") "Delete every play? Your songs, notes, moments and favorites stay. This can't be undone."
+                            else "Delete the whole Library: every song, play, note and moment, and their saved lyrics? This can't be undone.",
+                            fontFamily = Inter, fontSize = 16.sp, color = L.text,
+                        )
+                        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Washed("Delete", {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        val lib = LibraryRepo(context)
+                                        if (d == "history") lib.deleteHistory() else lib.deleteAll()
+                                    }
+                                    deleting = null; deleted = d
+                                    if (d == "library") { saved = repo.savedCount(); onCleared() }
+                                }
+                            })
+                            Washed("Cancel", { deleting = null })
+                        }
+                    }
+                }
+            }
+            deleted?.let {
+                Text(if (it == "history") "Listening history deleted." else "Library deleted.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+            }
+        }
+
         SettingsSection("Saved lyrics")
         Text(
             when (val n = saved) {
@@ -368,7 +449,7 @@ fun TuningPage(onClose: () -> Unit) {
 }
 
 @Composable
-private fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(24.dp)
     Box(
         Modifier.clip(shape).background(if (selected) L.text.copy(alpha = 0.14f) else L.wash)
@@ -378,6 +459,6 @@ private fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SettingsSection(title: String) {
+internal fun SettingsSection(title: String) {
     Text(title, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 28.dp, bottom = 8.dp))
 }

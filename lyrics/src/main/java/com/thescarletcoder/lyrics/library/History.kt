@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -92,7 +93,7 @@ class LibraryRepo(context: Context) {
         val now = System.currentTimeMillis()
         val key = SongKey.of(f.title, f.artist)
         val song = dao.songByKey(key)
-            ?: Song(uid(), key, SongKey.cleanTitle(f.title), f.artist, f.album, createdAt = now, updatedAt = now).also { dao.insertSong(it) }
+            ?: Song(uid(), key, f.title, f.artist, f.album, createdAt = now, updatedAt = now).also { dao.insertSong(it) }
         dao.insertTrack(SongTrack(song.uid, LyricsStore.hash(f.trackKey)))
         dao.insertPlay(Play(uid(), song.uid, f.startedAt, f.listenedMs))
     }
@@ -127,6 +128,48 @@ class LibraryRepo(context: Context) {
             val h = dao.trackKeys(songUid)
             dao.deleteSong(songUid)   // plays, moments, note history and track keys go with it
             dao.insertTombstone(Tombstone(songUid, "song", System.currentTimeMillis()))
+            h
+        }
+        LyricsStore(app).forgetHashed(hashes)
+    }
+
+    val songs get() = dao.observeSongs()
+    fun songRow(uid: String) = dao.observeSongRow(uid)
+    fun moments(uid: String) = dao.observeMoments(uid)
+    fun noteHistory(uid: String) = dao.observeNoteHistory(uid)
+
+    /** The Library row for what's playing; made when Sam first writes a note or a moment for it. */
+    suspend fun songFor(t: Track, create: Boolean): Song? = db.withTransaction {
+        val key = SongKey.of(t.title, t.artist)
+        dao.songByKey(key) ?: if (!create) null else {
+            val now = System.currentTimeMillis()
+            Song(uid(), key, t.title, t.artist, t.album, createdAt = now, updatedAt = now).also {
+                dao.insertSong(it)
+                dao.insertTrack(SongTrack(it.uid, LyricsStore.hash(t.key)))
+            }
+        }
+    }
+
+    suspend fun stats(period: LibraryStats.Period, zone: ZoneId, now: Long = System.currentTimeMillis()): LibraryStats.Result {
+        val from = LibraryStats.start(period, now, zone)
+        val songs = dao.allSongs().associateBy { it.uid }
+        return LibraryStats.compute(dao.playsSince(from), songs, from, zone)
+    }
+
+    /** Settings > "Delete listening history": every play. Songs, notes, moments and favorites stay. */
+    suspend fun deleteHistory() = db.withTransaction {
+        val now = System.currentTimeMillis()
+        dao.allPlayUids().forEach { dao.insertTombstone(Tombstone(it, "play", now)) }
+        dao.deleteAllPlays()
+    }
+
+    /** Settings > "Delete the Library": everything in it, and the cached lyrics of every song in it. */
+    suspend fun deleteAll() {
+        val hashes = db.withTransaction {
+            val now = System.currentTimeMillis()
+            val h = dao.allTrackKeys()
+            dao.allSongUids().forEach { dao.insertTombstone(Tombstone(it, "song", now)) }
+            dao.deleteAllSongs()
             h
         }
         LyricsStore(app).forgetHashed(hashes)

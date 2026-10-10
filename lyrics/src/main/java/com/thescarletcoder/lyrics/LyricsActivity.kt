@@ -70,6 +70,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LyricsActivity : ComponentActivity() {
     private lateinit var nowPlaying: NowPlaying
@@ -237,7 +238,7 @@ class LyricsActivity : ComponentActivity() {
     }
 }
 
-private enum class Panel { NONE, PICKER, SETTINGS, TUNING }
+private enum class Panel { NONE, PICKER, SETTINGS, TUNING, LIBRARY, SONG }
 
 @Composable
 private fun LyricsScreen(
@@ -261,6 +262,10 @@ private fun LyricsScreen(
     var panel by remember { mutableStateOf(Panel.NONE) }
     var sheet by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
+    // The Library: which song's page is open, where Back goes from it, and the playing song's uid (moments, seeking).
+    var songUid by remember { mutableStateOf<String?>(null) }
+    var songFromLibrary by remember { mutableStateOf(false) }
+    var playingUid by remember { mutableStateOf<String?>(null) }
 
     // "You're set": access was just granted while Lyrics was showing the welcome screen.
     var sawWelcome by remember { mutableStateOf(!hasAccess) }
@@ -322,6 +327,13 @@ private fun LyricsScreen(
         tween(Motion.duration(context, Tunables.int(LyricsTuning.TINT_FADE_MS)), easing = Motion.NAV_EASE), label = "tint",
     )
 
+    // Which Library song is playing, for its page (only looked up while a song page is open, and never creates one).
+    LaunchedEffect(song, panel) {
+        val t = track
+        playingUid = if (panel != Panel.SONG || t == null || !LibraryDatabase.exists(context)) null
+            else withContext(Dispatchers.IO) { runCatching { LibraryRepo(context).songFor(t, create = false)?.uid }.getOrNull() }
+    }
+
     // Header auto-hide (Sam's ruling): while a song plays with no sheet or panel open, fade 3 s after the last touch.
     var chrome by remember { mutableStateOf(true) }
     var touches by remember { mutableIntStateOf(0) }
@@ -346,6 +358,7 @@ private fun LyricsScreen(
         when {
             sheet -> sheet = false
             panel == Panel.TUNING -> panel = Panel.SETTINGS
+            panel == Panel.SONG && songFromLibrary -> panel = Panel.LIBRARY
             else -> panel = Panel.NONE
         }
     }
@@ -394,6 +407,14 @@ private fun LyricsScreen(
                             onPick = { c -> scope.launch { shown = repo.pin(t, c); panel = Panel.NONE } },
                             onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } },
                             onClose = { panel = Panel.NONE })
+                        panel == Panel.LIBRARY -> LibraryPanel(
+                            onSong = { songUid = it; songFromLibrary = true; panel = Panel.SONG },
+                            onSettings = { panel = Panel.SETTINGS }, onClose = { panel = Panel.NONE })
+                        panel == Panel.SONG && songUid != null -> {
+                            val here = songUid == playingUid && t != null
+                            SongPage(songUid!!, position = if (here) np::positionMs else null, onSeek = if (here) np::seekTo else null,
+                                onClose = { panel = if (songFromLibrary) Panel.LIBRARY else Panel.NONE })
+                        }
                         youreSet -> YoureSet()
                         else -> Content(shown, finding, slow, np, onGrant, playerLabel, onPlayer, onChoosePlayer = { panel = Panel.SETTINGS },
                             onPick = { panel = Panel.PICKER }, onRetry = { reload++ })
@@ -407,6 +428,15 @@ private fun LyricsScreen(
                 onNudge = { d -> val t = track; val s = shown
                     if (t != null && s is Shown.Found) scope.launch { shown = s.copy(offsetMs = repo.nudge(t, d)) } },
                 onPlayer = onPlayer, onSettings = { panel = Panel.SETTINGS },
+                onSongPage = {
+                    val t = track
+                    if (t != null) scope.launch {
+                        songUid = withContext(Dispatchers.IO) { LibraryRepo(context).songFor(t, create = true)?.uid }
+                        songFromLibrary = false
+                        if (songUid != null) panel = Panel.SONG
+                    }
+                },
+                onLibrary = { panel = Panel.LIBRARY },
             )
         }
     }

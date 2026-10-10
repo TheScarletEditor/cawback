@@ -5,7 +5,8 @@ Lyrics for whatever you're playing, scrolling along with the song. By [The Scarl
 - Follows the song playing on your device (Spotify first, otherwise whatever is playing) and highlights the line being sung.
 - Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library. That is the only place the app connects to.
 - Reads only the song title, artist and position. It never reads your notifications. To find the words, it sends the song's title, artist, album and length to lrclib.net.
-- Keeps no listening history. A small on-device cache stores fetched lyrics under hashed file names, excluded from backups. Settings shows how many songs are saved and has "Clear saved lyrics".
+- Listening history is off until you turn it on (Settings > Listening history: only while Lyrics is open, or always). When it's on, your Library counts the songs you play and keeps your notes, favorites and bookmarked moments, in an encrypted database on your device. It stores the song, when you played it and for how long; never which app, your location or any lyrics. Pause it, prune it, forget one song or delete it all, any time. Nothing in it leaves your device.
+- A small on-device cache keeps fetched lyrics, excluded from backups. Each saved song includes its title and artist. Settings shows how many songs are saved and has "Clear saved lyrics".
 - "Wrong lyrics" lets you pick a different match, and it sticks to that track.
 - Works in split screen next to your music app. Open it while Spotify is playing and Spotify comes up beside it (unless the screen is already split).
 - If the connection drops, it tries again quietly and the lyrics appear once you're back online.

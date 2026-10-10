@@ -1,5 +1,6 @@
 package com.thescarletcoder.lyrics
 
+import com.thescarletcoder.lyrics.library.History
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -122,7 +123,9 @@ fun timingLabel(offsetMs: Long): String = when {
 fun MoreSheet(
     open: Boolean, shown: Shown?, hasTrack: Boolean, playerLabel: String?,
     onClose: () -> Unit, onWrong: () -> Unit, onNudge: (Long) -> Unit, onPlayer: () -> Unit, onSettings: () -> Unit,
+    onSongPage: () -> Unit, onLibrary: () -> Unit,
 ) {
+    val settings = LocalSettings.current
     val ms = Motion.duration(LocalContext.current, Motion.NAV_MS)
     AnimatedVisibility(open, enter = fadeIn(tween(ms, easing = Motion.NAV_EASE)), exit = fadeOut(tween(ms, easing = Motion.NAV_EASE))) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f))
@@ -148,6 +151,24 @@ fun MoreSheet(
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Washed("Earlier", { onNudge(250) })
                             Washed("Later", { onNudge(-250) })
+                        }
+                    }
+                }
+                if (hasTrack && shown !is Shown.NoAccess) SheetRow("Note and moments", "Your note on this song, and bookmarked times.") { onClose(); onSongPage() }
+                SheetRow("Library", null) { onClose(); onLibrary() }
+                // Pausing is on the lyrics screen, not buried in Settings (scope section 6).
+                if (settings.historyMode != History.Mode.OFF) {
+                    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                        Text("Listening history", fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = L.text)
+                        if (settings.historyPaused()) {
+                            Text("Paused.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+                            Washed("Resume", { settings.pauseHistory(0) })
+                        } else {
+                            Text("On. Pause it for a while:", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Washed("1 hour", { settings.pauseHistory(System.currentTimeMillis() + 3_600_000L) })
+                                Washed("Until I turn it back on", { settings.pauseHistory(History.PAUSED_UNTIL_ON) })
+                            }
                         }
                     }
                 }

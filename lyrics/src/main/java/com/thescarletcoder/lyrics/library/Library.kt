@@ -14,6 +14,7 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import com.thescarletcoder.lyrics.Matching
 import kotlinx.coroutines.flow.Flow
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
@@ -30,6 +31,7 @@ data class Song(
     @PrimaryKey val uid: String,
     /** SongKey.of(title, artist): cleaned title + primary artist, lowercase. */
     val matchKey: String,
+    /** As the music app first gave it (the original names are what's shown). */
     val title: String,
     val artist: String,
     val album: String?,
@@ -131,13 +133,30 @@ interface LibraryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertTombstone(t: Tombstone)
     @Query("DELETE FROM song WHERE uid = :uid") suspend fun deleteSong(uid: String)
 
+    // First heard is when the song entered the Library, so it survives plays being pruned.
     @Query("""
         SELECT s.uid, s.title, s.artist, s.album, s.favorite, s.note,
-               COUNT(p.uid) AS plays, MIN(p.startedAt) AS firstHeard, MAX(p.startedAt) AS lastHeard, SUM(p.listenedMs) AS listenedMs
+               COUNT(p.uid) AS plays, s.createdAt AS firstHeard, MAX(p.startedAt) AS lastHeard, SUM(p.listenedMs) AS listenedMs
         FROM song s LEFT JOIN play p ON p.songUid = s.uid
         GROUP BY s.uid
     """)
     fun observeSongs(): Flow<List<SongRow>>
+
+    @Query("""
+        SELECT s.uid, s.title, s.artist, s.album, s.favorite, s.note,
+               COUNT(p.uid) AS plays, s.createdAt AS firstHeard, MAX(p.startedAt) AS lastHeard, SUM(p.listenedMs) AS listenedMs
+        FROM song s LEFT JOIN play p ON p.songUid = s.uid
+        WHERE s.uid = :uid GROUP BY s.uid
+    """)
+    fun observeSongRow(uid: String): Flow<SongRow?>
+
+    @Query("SELECT * FROM note_history WHERE songUid = :uid ORDER BY replacedAt DESC") fun observeNoteHistory(uid: String): Flow<List<NoteHistory>>
+    @Query("SELECT * FROM play WHERE startedAt >= :from") suspend fun playsSince(from: Long): List<Play>
+    @Query("SELECT uid FROM play") suspend fun allPlayUids(): List<String>
+    @Query("DELETE FROM play") suspend fun deleteAllPlays()
+    @Query("SELECT uid FROM song") suspend fun allSongUids(): List<String>
+    @Query("SELECT trackKey FROM song_track") suspend fun allTrackKeys(): List<String>
+    @Query("DELETE FROM song") suspend fun deleteAllSongs()
 
     @Query("SELECT * FROM song") suspend fun allSongs(): List<Song>
     @Query("SELECT * FROM play") suspend fun allPlays(): List<Play>
@@ -169,12 +188,9 @@ abstract class LibraryDatabase : RoomDatabase() {
 
 /** How a song is recognised across versions of its title and across music apps. Pure, so it is unit tested. */
 object SongKey {
-    private val dashSuffix = Regex("""\s+-\s+.*(remaster|remastered|version|edit|mix|mono|stereo|deluxe|single|bonus).*$""", RegexOption.IGNORE_CASE)
-    private val feat = Regex("""\s*[(\[](feat\.?|ft\.?|with)\s[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
-
     fun primaryArtist(artist: String) = artist.split(",", " & ", " feat", " ft.", " x ").first().trim()
-    fun cleanTitle(title: String) = title.replace(dashSuffix, "").replace(feat, "").trim()
-    fun of(title: String, artist: String) = cleanTitle(title).lowercase() + "\u0001" + primaryArtist(artist).lowercase()
+    /** The same cleaning the lyrics lookup uses, so a song matches the way its lyrics do. */
+    fun of(title: String, artist: String) = Matching.cleanTitle(title).lowercase() + "\u0001" + primaryArtist(artist).lowercase()
 }
 
 /**
