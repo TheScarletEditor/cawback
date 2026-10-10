@@ -26,6 +26,7 @@ android {
         versionCode = 2
         versionName = "0.2.0"
         buildConfigField("boolean", "TUNING", "false")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -81,4 +82,7 @@ dependencies {
     implementation(libs.sqlcipher.android)
     implementation(libs.androidx.sqlite)
     testImplementation("junit:junit:4.13.2")
+    // The Library on a real Android (SQLCipher, Keystore): run on the emulator, never on Sam's devices.
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

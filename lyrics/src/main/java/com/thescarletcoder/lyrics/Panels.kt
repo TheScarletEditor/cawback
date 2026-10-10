@@ -182,7 +182,7 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
 }
 
 @Composable
-internal fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, onSearch: () -> Unit) {
+internal fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, onSearch: () -> Unit, hint: String? = null) {
     val shape = RoundedCornerShape(12.dp)
     BasicTextField(
         value = value, onValueChange = onChange, singleLine = true,
@@ -190,7 +190,10 @@ internal fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Un
         textStyle = TextStyle(color = L.text, fontSize = 17.sp, fontFamily = Inter), cursorBrush = SolidColor(L.text),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
-            Box(Modifier.fillMaxWidth().background(L.wash, shape).border(1.dp, L.washEdge, shape).padding(14.dp)) { inner() }
+            Box(Modifier.fillMaxWidth().background(L.wash, shape).border(1.dp, L.washEdge, shape).padding(14.dp)) {
+                if (value.text.isEmpty() && hint != null) Text(hint, fontFamily = Inter, fontSize = 17.sp, color = L.faint)
+                inner()
+            }
         },
     )
 }

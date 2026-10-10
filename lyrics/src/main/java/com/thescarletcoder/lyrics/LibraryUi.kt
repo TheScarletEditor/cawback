@@ -133,7 +133,7 @@ private fun SongsList(repo: LibraryRepo, onSong: (String) -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
-        SearchField(query, { query = it }, {})
+        SearchField(query, { query = it }, {}, hint = "Search songs, artists, albums")
         FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Sort.entries.forEach { s -> Choice(s.label, sort == s) { sort = s } }
             Choice("Favorites", favorites) { favorites = !favorites }
