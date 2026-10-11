@@ -432,7 +432,7 @@ fun OnThisDevice(repo: LyricsRepo, refresh: Any?) {
     )
     Item(
         "Sent to lrclib.net",
-        "Only to look up words: the title, artist, album and length of the song playing, and what you type into a " +
+        "Only to look up words: the title, artist, album and length of the song playing, and what you type into an " +
             "\"Other versions\" search. Nothing else, and to no one else.",
     )
     Item(
