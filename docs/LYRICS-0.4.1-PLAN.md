@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.4.1 plan
 
-Status: **answers recorded 2026-10-11 (Q1 to Q8); the owner said go. Slice 1 done; slice 2 next.** Nothing here is built. Prepared 2026-10-11 with /prep (resume mode) from the owner's 0.4.0 device-test feedback (scarlet-hq D-042):
+Status: **answers recorded 2026-10-11 (Q1 to Q8); the owner said go. Slice 1 done; slice 2 next.** Prepared 2026-10-11 with /prep (resume mode) from the owner's 0.4.0 device-test feedback (scarlet-hq D-042):
 
 > "The settings page is getting log. We should group and tab it. Add a preview to lyric text size in the settings also. the current lyric should be centered, and stay in view when making the split smaller."
 
