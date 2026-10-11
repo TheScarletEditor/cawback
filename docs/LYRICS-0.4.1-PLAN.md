@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.4.1 plan
 
-Status: **answers recorded 2026-10-11 (Q1 to Q8); the owner said go. Slice 1 done; slice 2 next.** Prepared 2026-10-11 with /prep (resume mode) from the owner's 0.4.0 device-test feedback (scarlet-hq D-042):
+Status: **answers recorded 2026-10-11 (Q1 to Q12); the owner said go. Slices 1 and 2 done; slice 3 next.** Prepared 2026-10-11 with /prep (resume mode) from the owner's 0.4.0 device-test feedback (scarlet-hq D-042):
 
 > "The settings page is getting log. We should group and tab it. Add a preview to lyric text size in the settings also. the current lyric should be centered, and stay in view when making the split smaller."
 
@@ -43,7 +43,7 @@ Run 2026-10-11 at `bb9953b` (`:lyrics:assembleDebug :lyrics:testDebugUnitTest :l
 2. **A passphrase is typed, then the tab changes or the screen rotates.** **Decided (Q7):** the fields clear (as rotation already does today). Passphrases are never put in saved state.
 3. **A confirmation is open ("Delete the Library?") when the tab changes or the screen rotates.** **Decided (Q7):** it closes, nothing is deleted. The safe default.
 4. **Rotation, fold, font size, Flex mode.** **Decided:** the open tab survives. Coming back from Tuning lands on the tab it was opened from.
-5. **A narrow split or large font.** **Decided (Q7):** the four labels fit at 280dp wide with font scale 1.3; where they don't, the tab row scrolls sideways with a swipe (no scrollbar).
+5. **A narrow split or large font.** **Decided (Q12, replacing Q7's swipe):** the tabs sit on one row when they fit and wrap into two rows of two when they don't, so no tab is hidden. (At 16sp the four labels can't fit 280dp at font 1.3.)
 6. **A quick second tap** on a tab does nothing extra (choosing the open tab is a no-op).
 7. **TalkBack.** **Decided (Q7):** each tab says its name, "tab", and whether it's selected; tabs are at least 48dp tall.
 8. **Where Settings opens.** **Decided (Q5):** on the tab that fits the way in: "Choose your music app" opens Player, the Library's "Open Settings" opens Library, the More sheet opens Lyrics.
@@ -91,6 +91,21 @@ Not run on a screen: an emulator can't feed Lyrics a playing synced song (as in 
 - Split `SettingsPanel` into four tab pages; a tab row under the "Settings" heading; the open tab in saved state; Settings opens on the tab for the way in.
 - Long work (backup, restore, delete history, delete the Library, clear saved lyrics, reset nudges) runs on a scope that outlives the screen.
 - Checks: JVM tests: every section is in exactly one tab; the entry tab for each way in; delete-the-Library finishes deleting the saved lyrics when the screen goes away mid-run (fake repo). Emulator: phone, small phone (font 1.3) and tablet, light and dark, each tab, rotation keeps the tab, TalkBack reads each tab and its state, Tuning back returns to Privacy.
+
+**Done 2026-10-11** (start `3dc291f`; one commit). `/finalize --slice`: checklist pass; one review agent over four rounds (5 findings, then 2 from the fixes, then clean twice); 4 owner questions (Q9 to Q12). Build passes, 67/67 unit tests (SettingsTabsTest 6 new), lint 0 errors, 49 older warnings. Emulator (smoke copy, removed after): small phone at font 1.0 and 1.3, light and dark, every tab, rotation and a font-size recreate keep the tab, "Choose your music app" opens Player, the More sheet opens Lyrics, reset nudges shows its result through a tab switch and a recreate and clears after leaving Settings, tab semantics (clickable, selected, 58dp). Tablet in dark. Not run on screen: backup, restore and the deletes (no Library on the emulator; covered by JVM tests and the owner's device tests), Tuning (not in the smoke build), TalkBack spoken output itself.
+
+| Id | Finding | Fix |
+| --- | --- | --- |
+| L2-1 | Emulator: on a 360dp phone "Privacy" was cut off at the edge. | Tighter tab padding; then Q12: one row when they fit, two rows of two when not. |
+| L2-2 | Emulator: after a font-size recreate the open tab could sit off screen in the swiping row. | Gone with Q12's two rows (nothing scrolls). |
+| L2-3 | "That didn't finish. Try again." replaced the button, so it couldn't be tried again (reset nudges, clear saved lyrics); a failed clear that already emptied the count showed nothing. | The message shows above the button, whatever the count; tapping clears it. |
+| L2-4 | The lyrics screen's reload after a clear, reset or Library delete went to a screen that a rotation or font change had replaced. | App-level `SettingsWork.lyricsChanges`, part of the lyrics screen's reload key. |
+| L2-5 | A restore left an earlier "Listening history deleted." showing; a delete left an earlier backup message. | Starting either clears the other's message. |
+| L2-6 | Finished results vanished on a recreate or a trip to Tuning; the first fix then wiped them on any move between other screens. | Forgotten only on the step out of Settings (not to Tuning; a recreate isn't a step). |
+| L2-7 | TalkBack didn't hear the tabs as one group. | `selectableGroup()` on the tab row. |
+| L2-8 | "Lyrics" tab, then "Lyrics" section heading. | Q11: the section is "Display". |
+
+Device-test lines for the owner: "Settings: the four tabs; each way in opens its tab (More sheet: Lyrics; Choose your music app: Player; the empty Library's Open Settings: Library). Start a Library backup, switch tabs while it runs, come back: the result shows. Tuning and back keeps the tab. With TalkBack on, the tabs read as tabs and say which is selected."
 
 ### Slice 3: the text-size preview
 

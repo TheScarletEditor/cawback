@@ -257,18 +257,27 @@ private fun copy(context: Context, body: String): String {
     return "Copied."
 }
 
-/** Settings > Library backup: back up to a file the user picks, or restore from one, locked with their passphrase. */
+/**
+ * Settings > Library backup: back up to a file the user picks, or restore from one, locked with their passphrase.
+ * The backup and the restore run on [SettingsWork], so leaving the tab or Settings never stops them halfway; the
+ * result shows on the way back. Passphrases live only in this screen's fields, never in saved state.
+ */
 @Composable
-fun LibraryBackupSection(onRestored: () -> Unit) {
+fun LibraryBackupSection() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val runner = SettingsWork.runner
+    @Suppress("UNUSED_VARIABLE") val work = SettingsWork.version.intValue   // redraw when work starts or ends
     var mode by remember { mutableStateOf<String?>(null) }   // "backup" or "restore" while the passphrase is asked
     var pass by remember { mutableStateOf(TextFieldValue("")) }
     var again by remember { mutableStateOf(TextFieldValue("")) }
     var restoreFrom by remember { mutableStateOf<Uri?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf<String?>(null) }   // a hint from this screen, not from the work
+    val backingUp = runner.busy(SettingsWork.BACKUP)
+    val restoring = runner.busy(SettingsWork.RESTORE)
+    val busy = backingUp || restoring
     fun forget() { pass = TextFieldValue(""); again = TextFieldValue("") }
+    // New work: older messages here, and a delete's, would be out of date.
+    fun fresh() { note = null; runner.clear(SettingsWork.BACKUP); runner.clear(SettingsWork.RESTORE); runner.clear(SettingsWork.DELETE) }
 
     val saveTo = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
         val p = pass.text.toCharArray()
@@ -276,32 +285,34 @@ fun LibraryBackupSection(onRestored: () -> Unit) {
         if (uri == null) { p.fill(' '); return@rememberLauncherForActivityResult }
         if (p.size < LibraryBackup.MIN_PASSPHRASE) {   // Android stopped Lyrics while the picker was open: never back up without it
             runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
-            status = "Enter your passphrase again, then choose where to save."
+            note = "Enter your passphrase again, then choose where to save."
             return@rememberLauncherForActivityResult
         }
-        busy = true; status = "Backing up..."
-        scope.launch {
-            status = runCatching {
-                withContext(Dispatchers.IO) {
-                    // Encrypt fully first, then write, so a failure never leaves a broken backup file behind.
-                    val snap = LibraryRepo(context).snapshot()
-                    val bytes = ByteArrayOutputStream().also { LibraryBackup.write(it, snap, p) }.toByteArray()
-                    try {
-                        context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
-                    } catch (e: Exception) {
-                        runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
-                        throw e
+        fresh()
+        val app = context.applicationContext
+        val started = runner.run(SettingsWork.BACKUP) {
+            try {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        // Encrypt fully first, then write, so a failure never leaves a broken backup file behind.
+                        val snap = LibraryRepo(app).snapshot()
+                        val bytes = ByteArrayOutputStream().also { LibraryBackup.write(it, snap, p) }.toByteArray()
+                        try {
+                            app.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
+                        } catch (e: Exception) {
+                            runCatching { DocumentsContract.deleteDocument(app.contentResolver, uri) }
+                            throw e
+                        }
+                        snap
                     }
-                    snap
-                }
-            }.fold({ "Backed up ${count(it.songs.size, "song")} and ${count(it.plays.size, "play")}. Keep the passphrase somewhere safe: without it this backup can't be opened." },
-                { e -> if (e is LibraryKey.Gone) KEY_GONE else "The backup didn't finish. Nothing was changed." })
-            p.fill(' ')
-            busy = false
+                }.fold({ "Backed up ${count(it.songs.size, "song")} and ${count(it.plays.size, "play")}. Keep the passphrase somewhere safe: without it this backup can't be opened." },
+                    { e -> if (e is LibraryKey.Gone) KEY_GONE else "The backup didn't finish. Nothing was changed." })
+            } finally { p.fill(' ') }
         }
+        if (!started) p.fill(' ')
     }
     val openFrom = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) { restoreFrom = uri; mode = "restore"; status = null }
+        if (uri != null) { restoreFrom = uri; mode = "restore"; fresh() }
     }
 
     Text(
@@ -311,8 +322,8 @@ fun LibraryBackupSection(onRestored: () -> Unit) {
     )
     when (mode) {
         null -> if (!busy) FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (LibraryDatabase.exists(context)) Washed("Back up the Library", { mode = "backup"; status = null })
-            Washed("Restore from a backup", { status = null; openFrom.launch(arrayOf("*/*")) })
+            if (LibraryDatabase.exists(context)) Washed("Back up the Library", { mode = "backup"; fresh() })
+            Washed("Restore from a backup", { fresh(); openFrom.launch(arrayOf("*/*")) })
         }
         "backup" -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Secret(pass, "Passphrase (at least ${LibraryBackup.MIN_PASSPHRASE} characters)") { pass = it }
@@ -320,7 +331,7 @@ fun LibraryBackupSection(onRestored: () -> Unit) {
             val ok = pass.text.length >= LibraryBackup.MIN_PASSPHRASE && pass.text == again.text
             if (again.text.isNotEmpty() && pass.text != again.text) Text("The two don't match.", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (ok) Washed("Choose where to save", { saveTo.launch(LibraryBackup.fileName(LocalDate.now())) })
+                if (ok && !busy) Washed("Choose where to save", { saveTo.launch(LibraryBackup.fileName(LocalDate.now())) })
                 Washed("Cancel", { forget(); mode = null })
             }
         }
@@ -330,33 +341,41 @@ fun LibraryBackupSection(onRestored: () -> Unit) {
                 if (pass.text.isNotEmpty() && !busy) Washed("Restore", {
                     val uri = restoreFrom ?: return@Washed
                     val p = pass.text.toCharArray()
-                    busy = true; status = "Restoring..."
-                    scope.launch {
-                        status = runCatching {
-                            withContext(Dispatchers.IO) {
-                                val snap = context.contentResolver.openInputStream(uri)!!.use { LibraryBackup.read(it, p) }
-                                LibraryRepo(context).restore(snap)
-                            }
-                        }.fold(
-                            { r -> forget(); mode = null; onRestored(); "Restored. Your Library now has ${count(r.songsAfter, "song")} (was ${r.songsBefore}) and ${count(r.playsAfter, "play")} (was ${r.playsBefore})." },
-                            { e ->
-                                when (e) {
-                                    is LibraryKey.Gone -> KEY_GONE
-                                    is LibraryBackup.WrongPassphrase -> "That passphrase doesn't open this backup, or the file is damaged or incomplete."
-                                    is LibraryBackup.NotABackup -> { forget(); mode = null; "That file isn't a Scarlet Lyrics Library backup." }
-                                    is LibraryBackup.Unreadable -> e.message ?: "This backup can't be read."
-                                    is IllegalArgumentException -> "This backup can't be read."
-                                    else -> "The restore didn't finish. Your Library wasn't changed."
+                    fresh()
+                    val app = context.applicationContext
+                    // The fields and the form are this screen's; if it's gone by the end, these writes go nowhere.
+                    val started = runner.run(SettingsWork.RESTORE) {
+                        try {
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    val snap = app.contentResolver.openInputStream(uri)!!.use { LibraryBackup.read(it, p) }
+                                    LibraryRepo(app).restore(snap)
                                 }
-                            },
-                        )
-                        p.fill(' ')
-                        busy = false
+                            }.fold(
+                                { r -> forget(); mode = null; restoreFrom = null; "Restored. Your Library now has ${count(r.songsAfter, "song")} (was ${r.songsBefore}) and ${count(r.playsAfter, "play")} (was ${r.playsBefore})." },
+                                { e ->
+                                    when (e) {
+                                        is LibraryKey.Gone -> KEY_GONE
+                                        is LibraryBackup.WrongPassphrase -> "That passphrase doesn't open this backup, or the file is damaged or incomplete."
+                                        is LibraryBackup.NotABackup -> { forget(); mode = null; restoreFrom = null; "That file isn't a Scarlet Lyrics Library backup." }
+                                        is LibraryBackup.Unreadable -> e.message ?: "This backup can't be read."
+                                        is IllegalArgumentException -> "This backup can't be read."
+                                        else -> "The restore didn't finish. Your Library wasn't changed."
+                                    }
+                                },
+                            )
+                        } finally { p.fill(' ') }
                     }
+                    if (!started) p.fill(' ')
                 })
                 if (!busy) Washed("Cancel", { forget(); mode = null; restoreFrom = null })
             }
         }
+    }
+    val status = when {
+        backingUp -> "Backing up..."
+        restoring -> "Restoring..."
+        else -> runner.result(SettingsWork.BACKUP) ?: runner.result(SettingsWork.RESTORE) ?: note
     }
     status?.let { Text(it, fontFamily = Inter, fontSize = 15.sp, color = L.text, modifier = Modifier.padding(top = 10.dp)) }
 }

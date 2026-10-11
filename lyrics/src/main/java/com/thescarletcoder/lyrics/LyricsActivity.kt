@@ -282,6 +282,17 @@ private fun LyricsScreen(
     var slow by remember { mutableStateOf(false) }
     // Saveable: a font size or keyboard change recreates the activity, and the open page should survive it.
     var panel by rememberSaveable { mutableStateOf(Panel.NONE) }
+    // The Settings tab: kept through Tuning and a recreate; set from the way in when Settings opens (0.4.1, Q5).
+    var settingsTab by rememberSaveable { mutableStateOf(SettingsTab.LYRICS) }
+    fun openSettings(way: SettingsWayIn) { settingsTab = way.tab; panel = Panel.SETTINGS }
+    // The step out of Settings (not to Tuning; a recreate isn't a step): results of finished work have been seen.
+    // Running work keeps going, and its result waits for the next visit.
+    var lastPanel by remember { mutableStateOf(panel) }
+    LaunchedEffect(panel) {
+        fun inSettings(p: Panel) = p == Panel.SETTINGS || p == Panel.TUNING
+        if (inSettings(lastPanel) && !inSettings(panel)) SettingsWork.runner.forgetFinished()
+        lastPanel = panel
+    }
     var sheet by rememberSaveable { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
     // The Library: which song's page is open, where Back goes from it, and the playing song's uid (moments, seeking).
@@ -306,7 +317,9 @@ private fun LyricsScreen(
     // lyrics and fetch them again, so a shaky connection showed "Can't reach LRCLIB" mid-song (2026-10-09).
     val song = track?.let { it.title + "\u0001" + it.artist }
     var shownFor by remember { mutableStateOf<Pair<String, Int>?>(null) }   // the song and reload the lyrics belong to
-    LaunchedEffect(hasAccess, song, reload) {
+    // A clear, reset or delete in Settings counts as a reload too (SettingsWork.lyricsChanges).
+    val reloads = reload + SettingsWork.lyricsChanges.intValue
+    LaunchedEffect(hasAccess, song, reloads) {
         if (!hasAccess) { shown = Shown.NoAccess; shownFor = null; return@LaunchedEffect }
         if (song == null) {
             delay(2_000)   // a blank moment between updates isn't "nothing playing": the lyrics stay meanwhile
@@ -314,7 +327,7 @@ private fun LyricsScreen(
             finding = false; slow = false
             return@LaunchedEffect
         }
-        if (shownFor == song to reload && shown is Shown.Found) return@LaunchedEffect   // the same song came back
+        if (shownFor == song to reloads && shown is Shown.Found) return@LaunchedEffect   // the same song came back
         if (panel == Panel.PICKER) panel = Panel.NONE
         finding = false; slow = false
         shown = null
@@ -330,7 +343,7 @@ private fun LyricsScreen(
         done = true; timer.cancel()
         finding = false; slow = false
         shown = result
-        shownFor = song to reload
+        shownFor = song to reloads
         // Still offline after the retries: keep trying quietly, so the lyrics appear once the connection is back.
         while (result is Shown.Offline) {
             delay(15_000)
@@ -436,16 +449,16 @@ private fun LyricsScreen(
                         val t = track
                         when {
                             panel == Panel.TUNING -> TuningPage()
-                            panel == Panel.SETTINGS -> SettingsPanel(repo, hasAccess, theme, onTheme, onGrant, onCleared = { reload++ },
+                            panel == Panel.SETTINGS -> SettingsPanel(repo, hasAccess, theme, onTheme, onGrant,
                                 output = output, onFollowChanged = onFollowChanged, onPinShortcut = onPinShortcut,
-                                onTuning = { panel = Panel.TUNING })
+                                onTuning = { panel = Panel.TUNING }, tab = settingsTab, onTab = { settingsTab = it })
                             panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
                                 onPick = { c -> scope.launch { shown = repo.pin(t, c); panel = Panel.NONE } },
                                 onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } })
                             panel == Panel.LIBRARY -> LibraryPanel(
                                 onSong = { songUid = it; songPending = null; songFromLibrary = true; panel = Panel.SONG },
                                 onExport = { panel = Panel.EXPORT },
-                                onSettings = { panel = Panel.SETTINGS })
+                                onSettings = { openSettings(SettingsWayIn.LIBRARY) })
                             panel == Panel.EXPORT -> ExportPanel()
                             panel == Panel.SONG && (songUid != null || songPending != null) -> {
                                 val here = t != null && if (songUid != null) songUid == playingUid else songPending?.let { it.title == t.title && it.artist == t.artist } == true
@@ -453,7 +466,7 @@ private fun LyricsScreen(
                                     onClose = { panel = if (songFromLibrary) Panel.LIBRARY else Panel.NONE })
                             }
                             youreSet -> YoureSet()
-                            else -> Content(shown, finding, slow, np, onGrant, playerLabel, onPlayer, onChoosePlayer = { panel = Panel.SETTINGS },
+                            else -> Content(shown, finding, slow, np, onGrant, playerLabel, onPlayer, onChoosePlayer = { openSettings(SettingsWayIn.CHOOSE_MUSIC_APP) },
                                 onPick = { panel = Panel.PICKER }, onRetry = { reload++ }, onMoment = { momentAt = it; momentTrack = track })
                         }
                     }
@@ -466,7 +479,7 @@ private fun LyricsScreen(
             onClose = { sheet = false }, onWrong = { panel = Panel.PICKER },
             onNudge = { d -> val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch { shown = s.copy(offsetMs = repo.nudge(t, d)) } },
-            onPlayer = onPlayer, onSettings = { panel = Panel.SETTINGS },
+            onPlayer = onPlayer, onSettings = { openSettings(SettingsWayIn.MORE_SHEET) },
             onSongPage = {
                 val t = track
                 if (t != null) scope.launch {

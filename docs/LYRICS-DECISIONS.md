@@ -2,6 +2,15 @@
 
 Against `docs/LYRICS-0.4.1-PLAN.md`. Newest first. scarlet-hq mirrors these (hq-log). Decisions before 0.4.1 live in scarlet-hq (D-001 to D-043) and `docs/FINALIZE-0.4.0.md`.
 
+## 2026-10-11 (the owner, slice 2 mini-audit)
+
+| # | Question | Answer (word for word) | Effect | Check |
+| --- | --- | --- | --- | --- |
+| Q9 | New failure text for reset nudges and clear saved lyrics: "That didn't finish. Try again." (the button stays) | "Yes, as written (Recommended)" | `WorkRunner.FAILED`; before, a failure there crashed the app. | JVM test: a failing job ends with exactly this text, never a success message. |
+| Q10 | README Settings paths for the tabs | "Yes, as written (Recommended)" | README line "Settings has four tabs: Lyrics, Player, Library and Privacy. Lyrics and Player set it up the way you listen:"; paths "Settings > Library > Listening history", "Settings > Library > Library backup", "Settings > Privacy shows how many songs are saved", "Settings > Privacy > What's on this device". | grep README for each path. |
+| Q11 | "Lyrics" twice in a row (tab and first section) | "Rename it \"Display\" (Recommended)" | The Lyrics tab reads Display, Timing, Theme. README's bullet follows ("**Display.** Text size, ..."). | JVM test: the Lyrics tab's sections are Display, Timing, Theme. |
+| Q12 | The plan's "four tabs fit at 280dp with font 1.3" can't hold at 16sp | "Two rows when narrow" | Tabs sit on one row when they fit; otherwise two rows of two, so no tab is hidden. Replaces Q7's sideways swipe. | JVM test `TabFit.perRow`; emulator: one row at font 1.0 on a 360dp phone, two rows at 1.3. |
+
 ## 2026-10-11 (the owner, on the 0.4.1 plan, second round)
 
 | # | Question | Answer (word for word) | Effect | Check |
