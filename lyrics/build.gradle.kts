@@ -40,23 +40,33 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
-        // The test copy ("Lyrics Lab"): its own app id, so it installs next to Sam's Lyrics with its own database,
-        // settings and key, and can never see or change hers. Stripped to nothing but what tests need
-        // (src/labtest/AndroidManifest.xml). On-device tests run against it, on the tablet: labtest.ps1.
+        // The test copy ("Lyrics Lab"): its own app id, so it installs next to the regular Lyrics with its own database,
+        // settings and key, and can never see or change its data. Stripped to nothing but what tests need
+        // (src/labtest/AndroidManifest.xml). On-device tests run against it, on a real device: labtest.ps1.
         create("labtest") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".labtest"
             versionNameSuffix = "-labtest+$gitRev"
             matchingFallbacks += listOf("debug")
         }
-        // Sam's own devices: release-optimized (R8, not debuggable) but signed with this laptop's debug key,
-        // so it installs over debug installs and keeps saved lyrics. Never install `release` on her devices.
+        // The owner's own devices: release-optimized (R8, not debuggable) but signed with this laptop's debug key,
+        // so it installs over debug installs and keeps saved lyrics. Never install `release` on those devices.
         create("personal") {
             initWith(getByName("release"))
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
             versionNameSuffix = "+$gitRev"
             buildConfigField("boolean", "TUNING", "true")
+        }
+        // The smoke copy ("Lyrics Smoke"): release-optimized exactly like the public build, but with its own app id
+        // and the debug key, so it installs next to the installed Lyrics without touching it. Driven over adb by smoke.ps1
+        // during /finalize, then uninstalled.
+        create("smoke") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            applicationIdSuffix = ".smoke"
+            versionNameSuffix = "-smoke+$gitRev"
         }
     }
     compileOptions {
@@ -68,7 +78,7 @@ android {
         compose = true
         buildConfig = true
     }
-    // On-device tests run against the test copy, never against an app id Sam uses.
+    // On-device tests run against the test copy, never against the real app's id.
     testBuildType = "labtest"
     // Bouncy Castle and jspecify both carry an OSGi manifest no one reads on Android.
     packaging { resources { excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF" } }
@@ -86,7 +96,7 @@ dependencies {
     implementation("androidx.palette:palette-ktx:1.0.0")
     // Installs Compose's bundled baseline profiles for sideloaded builds (no Play cloud profiles).
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
-    // Flex mode on the Flip: where the fold is when it's half-open (no permission, no network).
+    // Flex mode on flip phones: where the fold is when it's half-open (no permission, no network).
     implementation("androidx.window:window:1.3.0")
     // The Library (0.4): Room on SQLCipher, key wrapped by Android Keystore, same as Scarlet Command.
     implementation(libs.room.runtime)
@@ -99,7 +109,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // The real org.json for JVM tests (Android's copy is a stub there).
     testImplementation("org.json:json:20240303")
-    // The Library on a real Android (SQLCipher, Keystore): run on the emulator, never on Sam's devices.
+    // The Library on a real Android (SQLCipher, Keystore): run on the emulator, never on personal devices.
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
