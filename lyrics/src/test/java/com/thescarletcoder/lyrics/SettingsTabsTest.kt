@@ -46,6 +46,8 @@ class SettingsTabsTest {
         assertEquals(SettingsTab.LIBRARY, SettingsWayIn.LIBRARY.tab)
     }
 
+    private fun ok(text: String) = WorkRunner.Result(true, text)
+
     @Test fun workFinishesWhenTheScreenGoesAway() = runBlocking {
         val app = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val runner = WorkRunner(app)
@@ -54,13 +56,13 @@ class SettingsTabsTest {
         val steps = mutableListOf<String>()
         // Like "Delete the Library": the database part, then (after a pause) the saved lyrics.
         screen.launch {
-            runner.run("delete") { steps += "database"; gate.await(); steps += "saved lyrics"; "Library deleted." }
+            runner.run("delete") { steps += "database"; gate.await(); steps += "saved lyrics"; ok("Library deleted.") }
         }.join()
         screen.cancel()   // the user switched tabs or left Settings mid-run
         gate.complete(Unit)
         withTimeout(5_000) { while (runner.busy("delete")) kotlinx.coroutines.delay(5) }
         assertEquals(listOf("database", "saved lyrics"), steps)
-        assertEquals("Library deleted.", runner.result("delete"))
+        assertEquals(ok("Library deleted."), runner.result("delete"))
         app.cancel()
     }
 
@@ -69,34 +71,40 @@ class SettingsTabsTest {
         val runner = WorkRunner(app)
         val gate = CompletableDeferred<Unit>()
         val library = listOf("delete", "backup", "restore")
-        assertTrue(runner.run("restore", exclusive = library) { gate.await(); "Restored." })
-        assertFalse(runner.run("delete", exclusive = library) { "Library deleted." })   // refused while the restore runs
+        assertTrue(runner.run("delete", group = library) { ok("Listening history deleted.") })
+        withTimeout(5_000) { while (runner.anyBusy(library)) kotlinx.coroutines.delay(5) }
+        assertTrue(runner.run("restore", group = library) { gate.await(); ok("Restored.") })
+        assertNull(runner.result("delete"))   // starting a Library job clears the group's older messages
+        assertFalse(runner.run("delete", group = library) { ok("Library deleted.") })   // refused while the restore runs
         assertTrue(runner.anyBusy(library))
         gate.complete(Unit)
         withTimeout(5_000) { while (runner.anyBusy(library)) kotlinx.coroutines.delay(5) }
         assertNull(runner.result("delete"))
-        assertTrue(runner.run("delete", exclusive = library) { "Library deleted." })   // free again afterwards
+        assertTrue(runner.run("delete", group = library) { ok("Library deleted.") })   // free again afterwards
         app.cancel()
     }
 
     @Test fun oneRunAtATimeAndAFailureIsNeverSuccess() = runBlocking {
         val app = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        var changes = 0
-        val runner = WorkRunner(app) { changes++ }
+        var changes = 0; var finishes = 0
+        val runner = WorkRunner(app) { done -> changes++; if (done) finishes++ }
         val gate = CompletableDeferred<Unit>()
-        assertTrue(runner.run("saved") { gate.await(); "Cleared." })
-        assertFalse(runner.run("saved") { "Cleared." })   // a quick second tap
+        assertTrue(runner.run("saved") { gate.await(); ok("Cleared.") })
+        assertFalse(runner.run("saved") { ok("Cleared.") })   // a quick second tap
         gate.complete(Unit)
         withTimeout(5_000) { while (runner.busy("saved")) kotlinx.coroutines.delay(5) }
-        assertEquals("Cleared.", runner.result("saved"))
-        assertTrue(changes >= 2)
+        assertEquals(ok("Cleared."), runner.result("saved"))
+        assertEquals(2, changes); assertEquals(1, finishes)   // started, then finished
 
         assertTrue(runner.run("nudges") { throw IllegalStateException("disk full") })
         withTimeout(5_000) { while (runner.busy("nudges")) kotlinx.coroutines.delay(5) }
-        assertEquals(WorkRunner.FAILED, runner.result("nudges"))
+        assertEquals(WorkRunner.Result(false, WorkRunner.FAILED), runner.result("nudges"))
 
         runner.forgetFinished()   // Settings closed
         assertNull(runner.result("saved")); assertNull(runner.result("nudges"))
+        val before = changes
+        runner.forgetFinished()   // nothing left to forget: no redraw
+        assertEquals(before, changes)
         app.cancel()
     }
 }

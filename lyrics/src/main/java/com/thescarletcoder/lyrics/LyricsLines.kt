@@ -324,7 +324,7 @@ private fun EndNote(isCurrent: Boolean, compact: Boolean, onPick: () -> Unit) {
 fun PlainLyrics(s: Shown.Found) {
     val compact = LocalCompact.current
     val context = LocalContext.current
-    val k = LyricsSettings.TEXT_SCALE[LocalSettings.current.textSize.coerceIn(LyricsSettings.TEXT_SCALE.indices)]
+    val k = LyricsSettings.scale(LocalSettings.current.textSize)
     val list = rememberLazyListState()
     // Same as synced: start right under the header; the top fade only once something has scrolled away.
     val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0 } }

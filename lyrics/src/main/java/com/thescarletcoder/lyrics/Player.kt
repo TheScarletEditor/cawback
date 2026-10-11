@@ -37,7 +37,7 @@ class LyricsSettings(context: Context) {
     var ignored by mutableStateOf(p.getStringSet("ignored", emptySet())!!.toSet())
         private set
     /** 0..3: Small, Medium, Large, Largest. */
-    var textSize by mutableIntStateOf(p.getInt("text_size", 1))
+    var textSize by mutableIntStateOf(p.getInt("text_size", 1).coerceIn(TEXT_SCALE.indices))   // a damaged or newer value can't break drawing
         private set
     /** Keep the screen on while a synced song plays (a tablet as a bedside display). */
     var keepScreenOn by mutableStateOf(p.getBoolean("keep_screen_on", true))
@@ -103,8 +103,11 @@ class LyricsSettings(context: Context) {
          * A synced lyric line's font size and line height, in sp, for the layout ([compact]: a short window or Flex
          * mode) and a text size step. The lyrics and the Settings preview both use it, so they can't drift apart.
          */
+        /** The font scale for a text size step (out-of-range steps take the nearest). */
+        fun scale(textSize: Int): Float = TEXT_SCALE[textSize.coerceIn(TEXT_SCALE.indices)]
+
         fun lineSp(compact: Boolean, textSize: Int): Pair<Float, Float> {
-            val k = TEXT_SCALE[textSize.coerceIn(TEXT_SCALE.indices)]
+            val k = scale(textSize)
             return (if (compact) 18f else 26f) * k to (if (compact) 24f else 34f) * k
         }
         val FOLLOW_DELAYS = listOf(2, 4, 8)

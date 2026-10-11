@@ -85,7 +85,7 @@ class LyricsStore(context: Context) {
 
     /** "Forget this song" in the Library: its cached lyrics, by the hashed keys the Library kept. */
     fun forgetHashed(hashes: List<String>) {
-        hashes.filter { it.matches(Regex("[0-9a-f]{64}")) }.forEach { synchronized(LOCK) { File(dir, "$it.json").delete() } }
+        hashes.filter { it.matches(HASH) }.forEach { synchronized(LOCK) { File(dir, "$it.json").delete() } }
     }
 
     /**
@@ -149,6 +149,7 @@ class LyricsStore(context: Context) {
     companion object {
         /** Every read-modify-write of a cache file, across all instances (startup sealing runs beside lookups). */
         private val LOCK = Any()
+        private val HASH = Regex("[0-9a-f]{64}")   // a cache file's name: a SHA-256 in hex
 
         /** A track key as it's stored anywhere on disk: SHA-256, hex. */
         fun hash(key: String): String =

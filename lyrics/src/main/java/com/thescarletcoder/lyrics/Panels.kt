@@ -237,7 +237,7 @@ internal fun SettingsPanel(
                 SettingsSection.HISTORY -> HistorySettings()
                 SettingsSection.BACKUP -> LibraryBackupSection()
                 SettingsSection.SAVED -> SavedLyricsSettings(repo)
-                SettingsSection.ON_DEVICE -> OnThisDevice(repo, refresh = SettingsWork.version.intValue)
+                SettingsSection.ON_DEVICE -> OnThisDevice(repo, refresh = { SettingsWork.finished.intValue })
                 SettingsSection.ABOUT -> AboutSettings()
                 SettingsSection.TUNING -> {
                     Text("Feel values for this build. Not in public releases.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
@@ -290,9 +290,10 @@ private fun SettingsTabs(tab: SettingsTab, onTab: (SettingsTab) -> Unit) {
     ) { tabs, c ->
         val natural = tabs.map { it.maxIntrinsicWidth(Constraints.Infinity) }
         val perRow = TabFit.perRow(natural, c.maxWidth)   // all, two, or (when even half a row is too narrow) one
+        val oneRow = perRow == tabs.size
         val cell = c.maxWidth / perRow
         val placed = tabs.mapIndexed { i, m ->
-            m.measure(if (perRow == tabs.size) Constraints(maxWidth = natural[i]) else Constraints(maxWidth = cell))
+            m.measure(if (oneRow) Constraints(maxWidth = natural[i]) else Constraints(maxWidth = cell))
         }
         val rows = placed.chunked(perRow)
         val heights = rows.map { r -> r.maxOf { it.height } }
@@ -300,7 +301,7 @@ private fun SettingsTabs(tab: SettingsTab, onTab: (SettingsTab) -> Unit) {
             var y = 0
             rows.forEachIndexed { r, row ->
                 var x = 0
-                row.forEach { p -> p.placeRelative(x, y); x += if (perRow == tabs.size) p.width else cell }
+                row.forEach { p -> p.placeRelative(x, y); x += if (oneRow) p.width else cell }
                 y += heights[r]
             }
         }
@@ -335,9 +336,6 @@ private fun LyricsDisplaySettings() {
 @Composable
 private fun TimingSettings(repo: LyricsRepo, output: Output) {
     val settings = LocalSettings.current
-    val runner = SettingsWork.runner
-    @Suppress("UNUSED_VARIABLE") val work = SettingsWork.version.intValue   // redraw when work starts or ends
-    var confirming by remember { mutableStateOf(false) }
     Text(
         "Some headphones play a little late. Set each one once and Lyrics applies it whenever it's connected. Playing through: ${output.label}.",
         fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp),
@@ -353,28 +351,12 @@ private fun TimingSettings(repo: LyricsRepo, output: Output) {
         }
     }
     Box(Modifier.padding(top = 14.dp)) {
-        val done = runner.result(SettingsWork.NUDGES)
-        when {
-            done != null && done != WorkRunner.FAILED -> Text(done, fontFamily = Inter, fontSize = 16.sp, color = L.soft)
-            runner.busy(SettingsWork.NUDGES) -> Unit
-            confirming -> Column {
-                Text("Reset the timing nudges on every song? Lyrics you picked by hand stay.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
-                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Washed("Reset", {
-                        confirming = false
-                        runner.run(SettingsWork.NUDGES) {
-                            val ok = repo.resetNudges(); SettingsWork.lyricsChanged()
-                            if (ok) "Every song is back to its own timing." else WorkRunner.FAILED   // never "done" after a partial failure
-                        }
-                    })
-                    Washed("Cancel", { confirming = false })
-                }
-            }
-            // After a failure the message shows and the button stays, so it can be tried again.
-            else -> Column {
-                if (done != null) Text(done, fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(bottom = 10.dp))
-                Washed("Reset all timing nudges", { runner.clear(SettingsWork.NUDGES); confirming = true })
-            }
+        ConfirmedWork(
+            SettingsWork.NUDGES, start = "Reset all timing nudges", confirm = "Reset",
+            question = "Reset the timing nudges on every song? Lyrics you picked by hand stay.",
+        ) {
+            val ok = repo.resetNudges(); SettingsWork.lyricsChanged()
+            WorkRunner.Result(ok, if (ok) "Every song is back to its own timing." else WorkRunner.FAILED)   // never "done" after a partial failure
         }
     }
 }
@@ -439,9 +421,9 @@ private fun HistorySettings() {
     val context = LocalContext.current
     val settings = LocalSettings.current
     val runner = SettingsWork.runner
-    val work = SettingsWork.version.intValue
+    @Suppress("UNUSED_VARIABLE") val v = SettingsWork.version.intValue   // redraw when work starts or ends
     var deleting by remember { mutableStateOf<String?>(null) }   // "history" or "library" while confirming
-    val hasLibrary = remember(work) { LibraryDatabase.exists(context) }
+    val hasLibrary = remember(SettingsWork.finished.intValue) { LibraryDatabase.exists(context) }
     Text(
         "Counts the songs you listen to, for your Library. Kept encrypted on this device and never sent anywhere. " +
             "Apps you've ignored are never counted, and no lyrics are kept.",
@@ -493,9 +475,8 @@ private fun HistorySettings() {
                     Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Washed("Delete", {
                             deleting = null
-                            runner.clear(SettingsWork.BACKUP); runner.clear(SettingsWork.RESTORE)   // older messages would be out of date
                             val app = context.applicationContext
-                            runner.run(SettingsWork.DELETE, exclusive = SettingsWork.LIBRARY) {
+                            runner.run(SettingsWork.DELETE, group = SettingsWork.LIBRARY) {
                                 val failed = withContext(Dispatchers.IO) {
                                     runCatching {
                                         val lib = LibraryRepo(app)
@@ -504,9 +485,9 @@ private fun HistorySettings() {
                                 }
                                 if (d == "library" && failed == null) SettingsWork.lyricsChanged()
                                 when (failed) {
-                                    null -> if (d == "history") "Listening history deleted." else "Library deleted."
-                                    is LibraryKey.Gone -> KEY_GONE
-                                    else -> "That didn't finish. Nothing was deleted."
+                                    null -> WorkRunner.Result(true, if (d == "history") "Listening history deleted." else "Library deleted.")
+                                    is LibraryKey.Gone -> WorkRunner.Result(false, KEY_GONE)
+                                    else -> WorkRunner.Result(false, "That didn't finish. Nothing was deleted.")
                                 }
                             }
                         })
@@ -517,17 +498,15 @@ private fun HistorySettings() {
         }
     }
     runner.result(SettingsWork.DELETE)?.let {
-        Text(it, fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+        Text(it.text, fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
 @Composable
 private fun SavedLyricsSettings(repo: LyricsRepo) {
-    val runner = SettingsWork.runner
-    val work = SettingsWork.version.intValue
+    val finished = SettingsWork.finished.intValue
     var saved by remember { mutableStateOf<Int?>(null) }
-    var confirming by remember { mutableStateOf(false) }
-    LaunchedEffect(work) { saved = repo.savedCount() }   // again after a clear, restore or delete
+    LaunchedEffect(finished) { saved = repo.savedCount() }   // again after a clear, restore or delete
     Text(
         when (val n = saved) {
             null -> " "
@@ -539,28 +518,42 @@ private fun SavedLyricsSettings(repo: LyricsRepo) {
     )
     Text("Includes your \"Other versions\" picks and timing nudges.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
     Box(Modifier.padding(top = 12.dp)) {
-        val done = runner.result(SettingsWork.SAVED)
-        when {
-            done != null && done != WorkRunner.FAILED -> Text(done, fontFamily = Inter, fontSize = 16.sp, color = L.soft)
-            runner.busy(SettingsWork.SAVED) -> Unit
-            confirming -> Column {
-                Text("Clear everything saved? This can't be undone.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
-                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Washed("Clear", {
-                        confirming = false
-                        runner.run(SettingsWork.SAVED) {
-                            val ok = repo.clearSaved(); SettingsWork.lyricsChanged()
-                            if (ok) "Cleared." else WorkRunner.FAILED   // never "Cleared." with files left
-                        }
-                    })
-                    Washed("Cancel", { confirming = false })
-                }
+        ConfirmedWork(
+            SettingsWork.SAVED, start = "Clear saved lyrics", confirm = "Clear",
+            question = "Clear everything saved? This can't be undone.", canStart = saved != null && saved != 0,
+        ) {
+            val ok = repo.clearSaved(); SettingsWork.lyricsChanged()
+            WorkRunner.Result(ok, if (ok) "Cleared." else WorkRunner.FAILED)   // never "Cleared." with files left
+        }
+    }
+}
+
+/**
+ * A Settings action that asks first and then runs on [SettingsWork]: the button, the question, nothing while it runs,
+ * then its message. A failure shows its message above the button, so it can be tried again.
+ */
+@Composable
+private fun ConfirmedWork(
+    key: String, start: String, confirm: String, question: String, canStart: Boolean = true,
+    work: suspend () -> WorkRunner.Result,
+) {
+    val runner = SettingsWork.runner
+    @Suppress("UNUSED_VARIABLE") val v = SettingsWork.version.intValue   // redraw when work starts or ends
+    var confirming by remember { mutableStateOf(false) }
+    val done = runner.result(key)
+    when {
+        done != null && done.ok -> Text(done.text, fontFamily = Inter, fontSize = 16.sp, color = L.soft)
+        runner.busy(key) -> Unit
+        confirming -> Column {
+            Text(question, fontFamily = Inter, fontSize = 16.sp, color = L.text)
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Washed(confirm, { confirming = false; runner.run(key, block = work) })
+                Washed("Cancel", { confirming = false })
             }
-            // After a failure the message shows (whatever the count says now) and the button stays, so it can be tried again.
-            else -> Column {
-                if (done != null) Text(done, fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(bottom = 10.dp))
-                if (saved != null && saved != 0) Washed("Clear saved lyrics", { runner.clear(SettingsWork.SAVED); confirming = true })
-            }
+        }
+        else -> Column {
+            if (done != null) Text(done.text, fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(bottom = 10.dp))
+            if (canStart) Washed(start, { runner.clear(key); confirming = true })
         }
     }
 }

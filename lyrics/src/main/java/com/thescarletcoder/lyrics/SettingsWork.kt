@@ -9,32 +9,38 @@ import kotlinx.coroutines.launch
 /**
  * Settings work that must finish once started (backup, restore, deletes, clearing saved lyrics, resetting nudges).
  * It runs on a scope that outlives the screen, so switching tabs or leaving Settings never stops it halfway
- * (0.4.1, Q6). Each job has a key; while it runs, the same key can't start again (one action per tap). Its message
- * stays until Settings is closed after it finished, so leaving mid-run still shows the result on the way back.
+ * (0.4.1, Q6). Each job has a key and a group: while anything in its group runs, it can't start (one action per tap,
+ * and one Library job at a time), and starting it clears the group's older messages, which would be out of date.
+ * Its result stays until Settings is closed after it finished, so leaving mid-run still shows it on the way back.
  */
-internal class WorkRunner(private val scope: CoroutineScope, private val onChange: () -> Unit = {}) {
+internal class WorkRunner(
+    private val scope: CoroutineScope,
+    /** Called on every change; [finished] is true when a job has just ended (data may have changed). */
+    private val onChange: (finished: Boolean) -> Unit = {},
+) {
+    /** What a job ended with. [ok] false keeps the button there, so it can be tried again. */
+    data class Result(val ok: Boolean, val text: String)
+
     private val busy = HashSet<String>()
-    private val results = HashMap<String, String>()
+    private val results = HashMap<String, Result>()
 
     @Synchronized fun busy(key: String) = key in busy
     @Synchronized fun anyBusy(keys: Collection<String>) = keys.any { it in busy }
-    @Synchronized fun result(key: String): String? = results[key]
+    @Synchronized fun result(key: String): Result? = results[key]
 
-    /**
-     * Start [block] under [key] unless it, or anything in [exclusive], is already running. Its returned text becomes
-     * the result. False if refused.
-     */
-    fun run(key: String, exclusive: Collection<String> = emptyList(), block: suspend () -> String): Boolean {
+    /** Start [block] under [key] unless anything in its [group] is running. False if refused. */
+    fun run(key: String, group: Collection<String> = listOf(key), block: suspend () -> Result): Boolean {
         synchronized(this) {
-            if (key in busy || exclusive.any { it in busy }) return false
-            busy += key; results -= key
+            if (key in busy || group.any { it in busy }) return false
+            busy += key
+            results -= key; group.forEach { results -= it }
         }
-        onChange()
+        onChange(false)
         scope.launch {
-            var message = FAILED
-            try { message = block() } catch (e: CancellationException) { throw e } catch (_: Exception) { } finally {
-                synchronized(this@WorkRunner) { busy -= key; results[key] = message }
-                onChange()
+            var result = Result(false, FAILED)
+            try { result = block() } catch (e: CancellationException) { throw e } catch (_: Exception) { } finally {
+                synchronized(this@WorkRunner) { busy -= key; results[key] = result }
+                onChange(true)
             }
         }
         return true
@@ -44,8 +50,8 @@ internal class WorkRunner(private val scope: CoroutineScope, private val onChang
 
     /** Settings closed: forget the results of finished work. Work still running keeps going, and its result shows next time. */
     fun forgetFinished() {
-        synchronized(this) { results.clear() }
-        onChange()
+        val had = synchronized(this) { results.isNotEmpty().also { results.clear() } }
+        if (had) onChange(false)
     }
 
     companion object {
@@ -53,9 +59,13 @@ internal class WorkRunner(private val scope: CoroutineScope, private val onChang
     }
 }
 
-/** The app's one runner. [version] changes whenever a job starts or ends, so Settings redraws. */
+/** The app's one runner. */
 internal object SettingsWork {
+    /** Changes whenever a job starts or ends or results are forgotten, so Settings redraws. */
     val version = mutableIntStateOf(0)
+
+    /** Changes only when a job ends: what counts or checks what's stored (saved lyrics, the Library) reads it again. */
+    val finished = mutableIntStateOf(0)
 
     /**
      * Bumped when saved lyrics or nudges change under the lyrics screen, which then loads the song again. App-level, so
@@ -63,7 +73,7 @@ internal object SettingsWork {
      */
     val lyricsChanges = mutableIntStateOf(0)
     fun lyricsChanged() { lyricsChanges.intValue++ }
-    val runner by lazy { WorkRunner(MainScope()) { version.intValue++ } }
+    val runner by lazy { WorkRunner(MainScope()) { done -> version.intValue++; if (done) finished.intValue++ } }
 
     const val NUDGES = "nudges"
     const val DELETE = "delete"
@@ -74,4 +84,5 @@ internal object SettingsWork {
     /** Work on the Library itself: one at a time, so a delete and a restore never race (owner: "One at a time"). */
     val LIBRARY = listOf(DELETE, BACKUP, RESTORE)
     fun libraryBusy() = runner.anyBusy(LIBRARY)
+    fun clearLibraryResults() = LIBRARY.forEach(runner::clear)
 }

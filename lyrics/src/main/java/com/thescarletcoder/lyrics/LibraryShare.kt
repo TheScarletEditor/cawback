@@ -277,7 +277,7 @@ fun LibraryBackupSection() {
     val busy = SettingsWork.libraryBusy()   // a delete running hides these too: one Library job at a time
     fun forget() { pass = TextFieldValue(""); again = TextFieldValue("") }
     // New work: older messages here, and a delete's, would be out of date.
-    fun fresh() { note = null; runner.clear(SettingsWork.BACKUP); runner.clear(SettingsWork.RESTORE); runner.clear(SettingsWork.DELETE) }
+    fun fresh() { note = null; SettingsWork.clearLibraryResults() }
 
     val saveTo = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
         val p = pass.text.toCharArray()
@@ -291,7 +291,7 @@ fun LibraryBackupSection() {
         }
         fresh()
         val app = context.applicationContext
-        val started = runner.run(SettingsWork.BACKUP, exclusive = SettingsWork.LIBRARY) {
+        val started = runner.run(SettingsWork.BACKUP, group = SettingsWork.LIBRARY) {
             try {
                 runCatching {
                     withContext(Dispatchers.IO) {
@@ -306,8 +306,8 @@ fun LibraryBackupSection() {
                         }
                         snap
                     }
-                }.fold({ "Backed up ${count(it.songs.size, "song")} and ${count(it.plays.size, "play")}. Keep the passphrase somewhere safe: without it this backup can't be opened." },
-                    { e -> if (e is LibraryKey.Gone) KEY_GONE else "The backup didn't finish. Nothing was changed." })
+                }.fold({ WorkRunner.Result(true, "Backed up ${count(it.songs.size, "song")} and ${count(it.plays.size, "play")}. Keep the passphrase somewhere safe: without it this backup can't be opened.") },
+                    { e -> WorkRunner.Result(false, if (e is LibraryKey.Gone) KEY_GONE else "The backup didn't finish. Nothing was changed.") })
             } finally { p.fill(' ') }
         }
         if (!started) {   // another Library job is running: don't leave an empty file behind
@@ -327,7 +327,7 @@ fun LibraryBackupSection() {
     )
     when (mode) {
         null -> if (!busy) FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (LibraryDatabase.exists(context)) Washed("Back up the Library", { mode = "backup"; fresh() })
+            if (remember(SettingsWork.finished.intValue) { LibraryDatabase.exists(context) }) Washed("Back up the Library", { mode = "backup"; fresh() })
             Washed("Restore from a backup", { fresh(); openFrom.launch(arrayOf("*/*")) })
         }
         "backup" -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -349,7 +349,7 @@ fun LibraryBackupSection() {
                     fresh()
                     val app = context.applicationContext
                     // The fields and the form are this screen's; if it's gone by the end, these writes go nowhere.
-                    val started = runner.run(SettingsWork.RESTORE, exclusive = SettingsWork.LIBRARY) {
+                    val started = runner.run(SettingsWork.RESTORE, group = SettingsWork.LIBRARY) {
                         try {
                             runCatching {
                                 withContext(Dispatchers.IO) {
@@ -357,16 +357,16 @@ fun LibraryBackupSection() {
                                     LibraryRepo(app).restore(snap)
                                 }
                             }.fold(
-                                { r -> forget(); mode = null; restoreFrom = null; "Restored. Your Library now has ${count(r.songsAfter, "song")} (was ${r.songsBefore}) and ${count(r.playsAfter, "play")} (was ${r.playsBefore})." },
+                                { r -> forget(); mode = null; restoreFrom = null; WorkRunner.Result(true, "Restored. Your Library now has ${count(r.songsAfter, "song")} (was ${r.songsBefore}) and ${count(r.playsAfter, "play")} (was ${r.playsBefore}).") },
                                 { e ->
-                                    when (e) {
+                                    WorkRunner.Result(false, when (e) {
                                         is LibraryKey.Gone -> KEY_GONE
                                         is LibraryBackup.WrongPassphrase -> "That passphrase doesn't open this backup, or the file is damaged or incomplete."
                                         is LibraryBackup.NotABackup -> { forget(); mode = null; restoreFrom = null; "That file isn't a Scarlet Lyrics Library backup." }
                                         is LibraryBackup.Unreadable -> e.message ?: "This backup can't be read."
                                         is IllegalArgumentException -> "This backup can't be read."
                                         else -> "The restore didn't finish. Your Library wasn't changed."
-                                    }
+                                    })
                                 },
                             )
                         } finally { p.fill(' ') }
@@ -380,7 +380,7 @@ fun LibraryBackupSection() {
     val status = when {
         backingUp -> "Backing up..."
         restoring -> "Restoring..."
-        else -> runner.result(SettingsWork.BACKUP) ?: runner.result(SettingsWork.RESTORE) ?: note
+        else -> runner.result(SettingsWork.BACKUP)?.text ?: runner.result(SettingsWork.RESTORE)?.text ?: note
     }
     status?.let { Text(it, fontFamily = Inter, fontSize = 15.sp, color = L.text, modifier = Modifier.padding(top = 10.dp)) }
 }
@@ -406,14 +406,15 @@ private fun Secret(value: TextFieldValue, hint: String, onChange: (TextFieldValu
 
 /**
  * Settings > What's on this device (scope section 8): everything Scarlet Lyrics keeps, with real counts, and where
- * each one goes. [refresh] changes when something in Settings cleared or restored data, so the counts follow.
+ * each one goes. [refresh] gives a value that changes when Settings work finished (cleared, deleted or restored data), so
+ * the counts follow.
  */
 @Composable
-fun OnThisDevice(repo: LyricsRepo, refresh: Any?) {
+fun OnThisDevice(repo: LyricsRepo, refresh: () -> Any?) {
     val context = LocalContext.current
     val settings = LocalSettings.current
     data class Facts(val cached: Int, val library: com.thescarletcoder.lyrics.library.LibraryCounts?, val exports: Int, val hasLibrary: Boolean)
-    val facts by produceState<Facts?>(null, refresh) {
+    val facts by produceState<Facts?>(null, refresh()) {   // read here, so only this section redraws
         value = withContext(Dispatchers.IO) {
             val has = LibraryDatabase.exists(context)
             Facts(
