@@ -10,10 +10,13 @@ sealed interface Shown {
     data object NothingPlaying : Shown
     data object NotFound : Shown
     data object Offline : Shown
-    /** [unsure]: Lyrics isn't sure of the timing (the records disagreed, or none fits the song). */
+    /**
+     * [unsure]: Lyrics isn't sure of the timing (the records disagreed, or none fits the song). [offsetMs] and
+     * [anchors]: the user's timing (0.5.0), applied to [lines] on screen with YourTiming.apply.
+     */
     data class Found(
         val candidate: Candidate, val lines: List<LyricLine>, val synced: Boolean, val pinned: Boolean, val offsetMs: Long,
-        val unsure: Boolean = false,
+        val unsure: Boolean = false, val anchors: List<Anchor> = emptyList(),
     ) : Shown
 }
 
@@ -34,8 +37,9 @@ class LyricsRepo(private val store: LyricsStore) {
         /** A cached automatic match is used as it is only when it was made with today's rules. */
         fun isCurrent(e: LyricsStore.Entry) = e.pinned || e.matchVersion >= MATCHING
 
-        /** A new match keeps the song's nudge only when it is the same record (owner Q17: a new version starts at 0). */
-        fun keptOffset(old: LyricsStore.Entry?, newId: Long?) = if (old?.candidate != null && old.candidate.id == newId) old.offsetMs else 0L
+        /** A new match keeps the user's timing only when it is the same record (owner Q17: a new version starts at 0). */
+        fun keptTiming(old: LyricsStore.Entry?, newId: Long?): Pair<Long, List<Anchor>> =
+            if (old?.candidate != null && old.candidate.id == newId) old.offsetMs to old.anchors else 0L to emptyList()
 
         /** Waits before the second and third tries. */
         val RETRY_DELAYS_MS = listOf(1_500L, 4_000L)
@@ -61,24 +65,24 @@ class LyricsRepo(private val store: LyricsStore) {
     suspend fun load(t: Track): Shown = withContext(Dispatchers.IO) {
         val cached = store.load(t.key)
         if (cached != null) {
-            if (cached.candidate != null && isCurrent(cached)) return@withContext found(cached.candidate, cached.pinned, cached.offsetMs, cached.unsure)
+            if (cached.candidate != null && isCurrent(cached)) return@withContext found(cached.candidate, cached.pinned, cached.offsetMs, cached.unsure, cached.anchors)
             // A remembered miss counts only if it was found with today's matching rules (title-only fallback added).
             if (cached.candidate == null && System.currentTimeMillis() - cached.fetchedAt < retryMissAfterMs && cached.fetchedAt > MATCHING_CHANGED_AT) return@withContext Shown.NotFound
         }
         val old = cached?.candidate
-        fun stale() = if (cached != null && old != null) found(old, false, cached.offsetMs, cached.unsure) else Shown.Offline
+        fun stale() = if (cached != null && old != null) found(old, false, cached.offsetMs, cached.unsure, cached.anchors) else Shown.Offline
         try {
             // A dropped connection gets two more tries before Lyrics says it can't reach LRCLIB (2026-10-09:
             // on a phone the connection dropped often, sometimes mid-song).
             // Looking up an older saved match again gets one try: offline, the saved lyrics show at once, not after the retries.
             val m = withRetries(if (old != null) emptyList() else RETRY_DELAYS_MS) { lookup(t) }
             val c = m.choice?.candidate
-            val offset = keptOffset(cached, c?.id)
+            val (offset, anchors) = keptTiming(cached, c?.id)
             store.save(t.key, LyricsStore.Entry(
                 c, pinned = false, offsetMs = offset, fetchedAt = System.currentTimeMillis(),
-                matchVersion = if (m.complete) MATCHING else 0, unsure = m.choice?.unsure ?: false,
+                matchVersion = if (m.complete) MATCHING else 0, unsure = m.choice?.unsure ?: false, anchors = anchors,
             ))
-            if (c == null) Shown.NotFound else found(c, false, offset, m.choice!!.unsure)
+            if (c == null) Shown.NotFound else found(c, false, offset, m.choice!!.unsure, anchors)
         } catch (_: IOException) {
             stale()   // an older match still shows while LRCLIB can't be reached; it's looked up again next time
         } catch (_: org.json.JSONException) {
@@ -112,11 +116,11 @@ class LyricsRepo(private val store: LyricsStore) {
     private inline fun exact(block: () -> Candidate): Candidate? =
         try { block().takeIf { it.synced != null || it.plain != null || it.instrumental } } catch (_: LrcLib.NotFound) { null }
 
-    /** "Other versions": the user's pick sticks to this track. */
+    /** "Other versions": the user's pick sticks to this track; a new version starts with its own timing (owner Q17). */
     suspend fun pin(t: Track, c: Candidate): Shown = withContext(Dispatchers.IO) {
-        val offset = store.load(t.key)?.offsetMs ?: 0
-        store.save(t.key, LyricsStore.Entry(c, pinned = true, offsetMs = offset, fetchedAt = System.currentTimeMillis()))
-        found(c, true, offset)
+        val (offset, anchors) = keptTiming(store.load(t.key), c.id)   // picking the same version again keeps it
+        store.save(t.key, LyricsStore.Entry(c, pinned = true, offsetMs = offset, fetchedAt = System.currentTimeMillis(), anchors = anchors))
+        found(c, true, offset, anchors = anchors)
     }
 
     /** Forget the pick (and the cache) and match again; the nudge belonged to the pick (owner Q17). */
@@ -127,9 +131,22 @@ class LyricsRepo(private val store: LyricsStore) {
 
     suspend fun nudge(t: Track, deltaMs: Long): Long = withContext(Dispatchers.IO) {
         val e = store.load(t.key) ?: LyricsStore.Entry(null, false, 0, 0)
-        val next = (e.offsetMs + deltaMs).coerceIn(-10_000, 10_000)
-        store.save(t.key, e.copy(offsetMs = next))
+        val next = (e.offsetMs + deltaMs).coerceIn(-YourTiming.LIMIT_MS, YourTiming.LIMIT_MS)
+        store.save(t.key, e.copy(offsetMs = next))   // anchors move with it: they're relative to the base
         next
+    }
+
+    /** A tapped line (owner Q22): the line at [lineMs] moves [offsetMs] in all. Returns the anchors now saved. */
+    suspend fun setAnchor(t: Track, lineMs: Long, offsetMs: Long): List<Anchor> = withContext(Dispatchers.IO) {
+        val e = store.load(t.key) ?: LyricsStore.Entry(null, false, 0, 0)
+        val anchors = YourTiming.withAnchor(e.anchors, e.offsetMs, lineMs, offsetMs)
+        store.save(t.key, e.copy(anchors = anchors))
+        anchors
+    }
+
+    /** "Clear my timing": no nudge and no anchors for this song; the version stays. */
+    suspend fun clearTiming(t: Track) = withContext(Dispatchers.IO) {
+        store.load(t.key)?.let { store.save(t.key, it.copy(offsetMs = 0, anchors = emptyList())) }
     }
 
     /** Settings: how many tracks have something saved (lyrics, a pick or a timing nudge). */
@@ -144,9 +161,9 @@ class LyricsRepo(private val store: LyricsStore) {
     suspend fun search(q: String): List<Candidate> = withContext(Dispatchers.IO) { LrcLib.search(q) }
     suspend fun searchTitle(title: String): List<Candidate> = withContext(Dispatchers.IO) { LrcLib.searchTitle(title) }
 
-    private fun found(c: Candidate, pinned: Boolean, offset: Long, unsure: Boolean = false): Shown {
+    private fun found(c: Candidate, pinned: Boolean, offset: Long, unsure: Boolean = false, anchors: List<Anchor> = emptyList()): Shown {
         val synced = c.synced?.let { Lrc.parseSynced(it) }?.takeIf { it.isNotEmpty() }
         val lines = synced ?: c.plain?.let { Lrc.parsePlain(it) } ?: emptyList()
-        return Shown.Found(c, lines, synced != null, pinned, offset, unsure = unsure && !pinned)
+        return Shown.Found(c, lines, synced != null, pinned, offset, unsure = unsure && !pinned, anchors = anchors)
     }
 }

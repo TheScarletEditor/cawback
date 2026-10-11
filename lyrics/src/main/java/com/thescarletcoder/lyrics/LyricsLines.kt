@@ -103,8 +103,9 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, 
     val compact = LocalCompact.current
     val anchor = Tunables[if (compact) LyricsTuning.ANCHOR_COMPACT else LyricsTuning.ANCHOR]
     val settings = LocalSettings.current
-    // This song's nudge plus the delay for the output in use (Bluetooth buds lag; Settings, Timing).
-    val offset by rememberUpdatedState(s.offsetMs + LocalOutputDelay.current)
+    // The user's timing (nudge and tapped lines) is applied to the lines themselves; what's left is the delay for the
+    // output in use (Bluetooth buds lag; Settings, Timing).
+    val offset by rememberUpdatedState(LocalOutputDelay.current.toLong())
 
     var known by remember { mutableStateOf(false) }   // the first real position has been read
     LaunchedEffect(s) {
@@ -113,8 +114,9 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, 
         }
     }
     // The last row is the end note when the lyrics run out (Lrc.withEnd).
-    val lines = remember(s) { Lrc.withEnd(s.lines) ?: s.lines }
-    val endRow = if (lines !== s.lines) lines.lastIndex else -1
+    val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
+    val lines = remember(timed) { Lrc.withEnd(timed) ?: timed }
+    val endRow = if (lines !== timed) lines.lastIndex else -1
     // Only the line index drives the list, so it recomposes when the line changes, not 16 times a second.
     val current by remember(lines) { derivedStateOf { Lrc.indexAt(lines, pos) } }
     // The follow delay counts from letting go of a drag, so a long scroll by hand isn't thrown away when it ends.

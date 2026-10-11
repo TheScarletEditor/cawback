@@ -90,11 +90,12 @@ class MatchingTest {
         assertTrue(LyricsRepo.isCurrent(LyricsStore.Entry(c, pinned = false, offsetMs = 0, fetchedAt = 1, matchVersion = LyricsRepo.MATCHING)))
     }
 
-    @Test fun aNudgeStaysOnlyWithTheSameRecord() {
-        val old = LyricsStore.Entry(rec(1, 248.0, good), pinned = false, offsetMs = 750, fetchedAt = 1)
-        assertEquals(750L, LyricsRepo.keptOffset(old, 1))
-        assertEquals(0L, LyricsRepo.keptOffset(old, 2))
-        assertEquals(0L, LyricsRepo.keptOffset(null, 1))
+    @Test fun yourTimingStaysOnlyWithTheSameRecord() {
+        val anchors = listOf(Anchor(60_000, 300))
+        val old = LyricsStore.Entry(rec(1, 248.0, good), pinned = false, offsetMs = 750, fetchedAt = 1, anchors = anchors)
+        assertEquals(750L to anchors, LyricsRepo.keptTiming(old, 1))
+        assertEquals(0L to emptyList<Anchor>(), LyricsRepo.keptTiming(old, 2))   // a new version starts at 0 (owner Q17)
+        assertEquals(0L to emptyList<Anchor>(), LyricsRepo.keptTiming(null, 1))
     }
 
 }

@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.thescarletcoder.lyrics.library.SongKey
 import org.json.JSONException
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.security.KeyStore
@@ -29,10 +30,11 @@ class LyricsStore(context: Context) {
     /**
      * [matchVersion]: the matching rules this automatic match was made with (LyricsRepo.MATCHING; 0 before 0.5.0 or
      * when the search failed), so older matches are looked up again. [unsure]: the records disagreed or none fitted.
+     * [anchors]: the user's tapped lines (0.5.0); with [offsetMs] they are the user's timing, which wins.
      */
     data class Entry(
         val candidate: Candidate?, val pinned: Boolean, val offsetMs: Long, val fetchedAt: Long,
-        val matchVersion: Int = 0, val unsure: Boolean = false,
+        val matchVersion: Int = 0, val unsure: Boolean = false, val anchors: List<Anchor> = emptyList(),
     )
 
     private fun file(key: String) = File(dir, "${hash(key)}.json")
@@ -44,36 +46,13 @@ class LyricsStore(context: Context) {
             // A passing error: try again next time. Never readable: deleted.
             runCatching { read(f) }.getOrElse { return null } ?: run { f.delete(); return null }
         }
-        return runCatching {
-            Entry(
-                candidate = o.optJSONObject("c")?.let {
-                    Candidate(
-                        it.getLong("id"), it.optString("track"), it.optString("artist"), it.optString("album"),
-                        it.optDouble("duration", 0.0), it.optBoolean("instrumental"),
-                        it.optString("plain").ifBlank { null }, it.optString("synced").ifBlank { null },
-                    )
-                },
-                pinned = o.optBoolean("pinned"),
-                offsetMs = o.optLong("offset"),
-                fetchedAt = o.optLong("at"),
-                matchVersion = o.optInt("mv"),
-                unsure = o.optBoolean("u"),
-            )
-        }.getOrNull()
+        return runCatching { decode(o) }.getOrNull()
     }
 
     fun save(key: String, e: Entry) {
-        val o = JSONObject()
-            .put("pinned", e.pinned).put("offset", e.offsetMs).put("at", e.fetchedAt)
-            .put("mv", e.matchVersion).put("u", e.unsure)
         // The song this belongs to, so "Forget this song" finds every cached version of it (Track.key: title, artist, ...).
-        key.split('\u0001').takeIf { it.size >= 2 }?.let { o.put("s", SongKey.of(it[0], it[1])) }
-        e.candidate?.let {
-            o.put("c", JSONObject()
-                .put("id", it.id).put("track", it.track).put("artist", it.artist).put("album", it.album)
-                .put("duration", it.durationSec).put("instrumental", it.instrumental)
-                .put("plain", it.plain ?: "").put("synced", it.synced ?: ""))
-        }
+        val song = key.split('\u0001').takeIf { it.size >= 2 }?.let { SongKey.of(it[0], it[1]) }
+        val o = encode(e, song)
         runCatching { synchronized(LOCK) { write(file(key), o) } }   // only a cache: a failed write means a fresh fetch next time
     }
 
@@ -87,7 +66,9 @@ class LyricsStore(context: Context) {
             synchronized(LOCK) {
                 if (!f.exists()) return@forEach   // forgotten or cleared meanwhile: nothing to reset, not a failure
                 val o = try { read(f) } catch (_: Exception) { ok = false; null } ?: return@forEach
-                if (o.optLong("offset") != 0L && runCatching { write(f, o.put("offset", 0L)) }.isFailure) ok = false
+                if (o.optLong("offset") == 0L && o.optJSONArray("anchors").let { it == null || it.length() == 0 }) return@forEach
+                o.put("offset", 0L).remove("anchors")
+                if (runCatching { write(f, o) }.isFailure) ok = false
             }
         }
         return ok
@@ -159,6 +140,41 @@ class LyricsStore(context: Context) {
     companion object {
         /** Every read-modify-write of a cache file, across all instances (startup sealing runs beside lookups). */
         private val LOCK = Any()
+
+        /** An entry as saved (pure, so the format is unit tested). [song]: the song key, for "Forget this song". */
+        fun encode(e: Entry, song: String? = null): JSONObject {
+            val o = JSONObject()
+                .put("pinned", e.pinned).put("offset", e.offsetMs).put("at", e.fetchedAt)
+                .put("mv", e.matchVersion).put("u", e.unsure)
+            if (e.anchors.isNotEmpty()) o.put("anchors", JSONArray().apply { e.anchors.forEach { put(JSONArray().put(it.lineMs).put(it.deltaMs)) } })
+            song?.let { o.put("s", it) }
+            e.candidate?.let {
+                o.put("c", JSONObject()
+                    .put("id", it.id).put("track", it.track).put("artist", it.artist).put("album", it.album)
+                    .put("duration", it.durationSec).put("instrumental", it.instrumental)
+                    .put("plain", it.plain ?: "").put("synced", it.synced ?: ""))
+            }
+            return o
+        }
+
+        /** An entry as read; entries from before 0.5.0 have no matching version and no anchors. */
+        fun decode(o: JSONObject): Entry = Entry(
+            candidate = o.optJSONObject("c")?.let {
+                Candidate(
+                    it.getLong("id"), it.optString("track"), it.optString("artist"), it.optString("album"),
+                    it.optDouble("duration", 0.0), it.optBoolean("instrumental"),
+                    it.optString("plain").ifBlank { null }, it.optString("synced").ifBlank { null },
+                )
+            },
+            pinned = o.optBoolean("pinned"),
+            offsetMs = o.optLong("offset"),
+            fetchedAt = o.optLong("at"),
+            matchVersion = o.optInt("mv"),
+            unsure = o.optBoolean("u"),
+            anchors = o.optJSONArray("anchors")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i -> arr.optJSONArray(i)?.takeIf { it.length() == 2 }?.let { Anchor(it.getLong(0), it.getLong(1)) } }
+            }.orEmpty(),
+        )
         private val HASH = Regex("[0-9a-f]{64}")   // a cache file's name: a SHA-256 in hex
 
         /** A track key as it's stored anywhere on disk: SHA-256, hex. */
