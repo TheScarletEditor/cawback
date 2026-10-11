@@ -12,7 +12,7 @@ Built in three slices with /prep (`docs/LYRICS-0.4.1-PLAN.md`, answers Q1 to Q14
 | 0 | Preflight | done | Tree clean, in sync. Version: owner picked "0.4.1 (Recommended)"; versionCode 3 to 4. gh signed in; both devices connected; emulators scarlet_phone, scarlet_small, scarlet_tablet. |
 | 1 | Audit | done | Release manifest: same permissions as 0.4.0 (INTERNET and the dynamic-receiver permission), no new components, backups still excluded. 4 agents (decisions, hard rules, manifest and dependencies, data safety): A and C clean; B 3 doc wordings; D 4 findings. 6 fixed, 1 question (Q2). Re-check: build, 71/71 unit tests, lint 0 errors (49 older warnings), greps clean. |
 | 2 | Code review | done | 3 agents (lyrics and storage, Settings and work, security). Security clean (one note, no change). 6 findings fixed (R1 to R5, R7), 1 regression from a fix caught by re-review and fixed (R6), re-reviews clean. Emulator (small phone): landscape short window scrolls heading and tabs away; an open confirmation survives a rotation that flips the compact layout; font 2.0 tabs and choice rows wrap without breaking words. Build, 71/71 unit tests, lint 0 errors (49 older). |
-| 3 | Cleanup | pending | |
+| 3 | Cleanup | done | simplify (4 agents: reuse, simplification, efficiency, altitude) and own checks: no TODOs, no commented-out code, TUNING off in release, no em dashes, licenses unchanged (no new dependencies). 6 applied (C1 to C6), 2 skipped (C7, C8), release notes drafted (C9), 2 questions (Q3, Q4). Build, 71/71 unit tests, lint 0 errors (49 older). |
 | 4 | QA | pending | |
 | 5 | Smoke test | pending | |
 | 6 | Ship | pending | |
@@ -38,6 +38,15 @@ Built in three slices with /prep (`docs/LYRICS-0.4.1-PLAN.md`, answers Q1 to Q14
 | R6 | Review | mechanical | Panels.kt (from the R3 fix) | Two different trees for the two layouts: a rotation with a file picker open lost the picker's result | One tree; only the scrolling modifiers change; a new tab starts at the top | stage 2 |
 | R7 | Review | mechanical | Panels.kt choice rows (older than this release) | At font 2.0 "Light" (Theme) was squeezed to one letter per line; the same risk for other two- and three-choice rows | All choice rows wrap (FlowRow) | stage 2 |
 | R8 | Review | dropped | LibraryShare.kt restore | Security note: the restore job keeps a reference to the screen's passphrase field for its few seconds | Informational: already in memory as the field's text, not reachable from outside; no change | |
+| C1 | Cleanup | mechanical | SettingsWork.kt, Panels.kt, LibraryShare.kt | "One Library job at a time" was an exclusive list plus hand-written message clears in two places | Jobs have a group: busy per group, and starting one clears the group's older messages | 5bb1e56 |
+| C2 | Cleanup | mechanical | SettingsWork.kt, Panels.kt | Success or failure was told apart by comparing the text with the failure message; TimingSettings and SavedLyricsSettings repeated the same confirm-and-run block | Results carry an ok flag; one ConfirmedWork | 5bb1e56 |
+| C3 | Cleanup | mechanical | Panels.kt, LibraryShare.kt | Counts, the Library check and What's on this device reloaded when a job started too, and the whole tab redrew | Refresh only when a job finishes (SettingsWork.finished), read inside the section; no redraw when there's nothing to forget | 5bb1e56 |
+| C4 | Cleanup | mechanical | Player.kt, LyricsLines.kt | The text size clamp was repeated where it's read | Clamped once at load; LyricsSettings.scale for both readers | 5bb1e56 |
+| C5 | Cleanup | mechanical | LyricsStore.kt | The hash pattern was built for every file | One constant | 5bb1e56 |
+| C6 | Cleanup | mechanical | Panels.kt tab layout | The one-row check written twice | One name | 5bb1e56 |
+| C7 | Cleanup | skipped | LyricsStore.kt | Moving the lyrics-reload signal into the store | Would also reload the lyrics after "Forget this song" (a behaviour change) | |
+| C8 | Cleanup | skipped | LyricsLines.kt | Folding the three placement flags into one effect | Works, reviewed twice and device-tested; a rewrite here is risk without a gain | |
+| C9 | Cleanup | doc | docs/release-0.4.1/RELEASE-NOTES.md | No release notes for 0.4.1 | Drafted; owner OK'd (Q3) | 5bb1e56 |
 
 ## Questions
 
@@ -49,7 +58,17 @@ Version: 0.4.1 (D-042) or 0.5.0 (the minor-bump rule).
 ### Q2 (audit)
 A5: on the Library tab a delete could run during a restore (and the reverse); no corruption, but the result depended on timing and the messages could contradict each other. Options: one at a time (recommended), or leave it.
 **Answer (2026-10-11):** "One at a time (Recommended)"
-**Follow-up:** `SettingsWork.LIBRARY` (delete, backup, restore): while one runs the others' buttons are hidden and `WorkRunner.run(..., exclusive)` refuses them. JVM test `libraryJobsRunOneAtATime`. No new text.
+**Follow-up:** `SettingsWork.LIBRARY` (delete, backup, restore): while one runs the others' buttons are hidden and `WorkRunner.run(..., exclusive)` refuses them (since C1: the Library jobs share a group). JVM test `libraryJobsRunOneAtATime`. No new text.
+
+### Q3 (cleanup)
+Release notes draft for 0.4.1, shown word for word.
+**Answer (2026-10-11):** "Yes, as written (Recommended)"
+**Follow-up:** docs/release-0.4.1/RELEASE-NOTES.md as drafted.
+
+### Q4 (cleanup)
+Two tab styles: Settings (text with an underline) and the Library's Songs and Stats (pill buttons). Leave both, or change one in 0.4.1.
+**Answer (2026-10-11):** "Leave both for now (Recommended)"
+**Follow-up:** none in 0.4.1; "one tab style" filed for later.
 
 ## Ship
 
