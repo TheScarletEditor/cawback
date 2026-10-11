@@ -310,7 +310,11 @@ fun LibraryBackupSection() {
                     { e -> if (e is LibraryKey.Gone) KEY_GONE else "The backup didn't finish. Nothing was changed." })
             } finally { p.fill(' ') }
         }
-        if (!started) p.fill(' ')
+        if (!started) {   // another Library job is running: don't leave an empty file behind
+            p.fill(' ')
+            runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            note = WorkRunner.FAILED
+        }
     }
     val openFrom = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) { restoreFrom = uri; mode = "restore"; fresh() }

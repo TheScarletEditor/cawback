@@ -1,5 +1,6 @@
 package com.thescarletcoder.lyrics
 
+import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -117,8 +118,9 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, 
     // Only the line index drives the list, so it recomposes when the line changes, not 16 times a second.
     val current by remember(lines) { derivedStateOf { Lrc.indexAt(lines, pos) } }
     // The follow delay counts from letting go of a drag, so a long scroll by hand isn't thrown away when it ends.
-    LaunchedEffect(dragged) { lastTouch = Follow.touched(dragged, lastTouch, System.currentTimeMillis()) }
-    fun following() = Follow.now(dragged, System.currentTimeMillis(), lastTouch, settings.followDelaySec)
+    // Uptime, not the wall clock: a clock set back would otherwise stop the lyrics following for as long as it moved.
+    LaunchedEffect(dragged) { lastTouch = Follow.touched(dragged, lastTouch, SystemClock.elapsedRealtime()) }
+    fun following() = Follow.now(dragged, SystemClock.elapsedRealtime(), lastTouch, settings.followDelaySec)
     var placed by remember { mutableStateOf(false) }
     LaunchedEffect(current, known) {
         if (!known) return@LaunchedEffect

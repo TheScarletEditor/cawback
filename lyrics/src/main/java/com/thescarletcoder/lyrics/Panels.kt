@@ -213,7 +213,8 @@ internal fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Un
 /**
  * Settings in four tabs (0.4.1): Lyrics (display, timing, theme), Player (your music app, notification access),
  * Library (listening history, backup) and Privacy (saved lyrics, what's on this device, about, and Tuning in personal
- * builds). The heading and the tabs stay put; each tab scrolls on its own. Work that must finish (backup, restore,
+ * builds). The heading and the tabs stay put and each tab scrolls on its own; in a short window (the compact layout)
+ * they scroll away with it, so the settings are never squeezed out. Work that must finish (backup, restore,
  * deletes, clearing, resetting) runs on [SettingsWork], so a tab change or leaving Settings never stops it halfway.
  */
 @Composable
@@ -222,39 +223,51 @@ internal fun SettingsPanel(
     onGrant: () -> Unit, output: Output, onFollowChanged: () -> Unit, onPinShortcut: () -> Unit,
     onTuning: () -> Unit, tab: SettingsTab, onTab: (SettingsTab) -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 8.dp)) {
+    val short = LocalCompact.current
+    @Composable
+    fun Sections() {
+        tab.sections.filter { !it.personal || BuildConfig.TUNING }.forEach { s ->
+            SettingsSection(s.title)
+            when (s) {
+                SettingsSection.DISPLAY -> LyricsDisplaySettings()
+                SettingsSection.TIMING -> TimingSettings(repo, output)
+                SettingsSection.THEME -> ThemeSettings(theme, onTheme)
+                SettingsSection.MUSIC_APP -> MusicAppSettings(onFollowChanged, onPinShortcut)
+                SettingsSection.ACCESS -> AccessSettings(hasAccess, onGrant)
+                SettingsSection.HISTORY -> HistorySettings()
+                SettingsSection.BACKUP -> LibraryBackupSection()
+                SettingsSection.SAVED -> SavedLyricsSettings(repo)
+                SettingsSection.ON_DEVICE -> OnThisDevice(repo, refresh = SettingsWork.version.intValue)
+                SettingsSection.ABOUT -> AboutSettings()
+                SettingsSection.TUNING -> {
+                    Text("Feel values for this build. Not in public releases.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+                    Box(Modifier.padding(top = 12.dp)) { Washed("Open tuning", onTuning) }
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+    // One tree for both layouts, so a resize or rotation that flips the compact layout keeps every field and the file
+    // pickers' launchers (only the scrolling moves): in a short window the heading and tabs scroll away with the page.
+    val outer = rememberScrollState()
+    LaunchedEffect(tab) { outer.scrollTo(0) }   // short window: a new tab starts at the top, like the inner scroll does
+    Column(
+        Modifier.fillMaxSize().then(if (short) Modifier.verticalScroll(outer) else Modifier)
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+    ) {
         Text("Settings", fontFamily = Fraunces, fontSize = 28.sp, color = L.text)
         SettingsTabs(tab, onTab)
         key(tab) {
-            Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
-                tab.sections.filter { !it.personal || BuildConfig.TUNING }.forEach { s ->
-                    SettingsSection(s.title)
-                    when (s) {
-                        SettingsSection.DISPLAY -> LyricsDisplaySettings()
-                        SettingsSection.TIMING -> TimingSettings(repo, output)
-                        SettingsSection.THEME -> ThemeSettings(theme, onTheme)
-                        SettingsSection.MUSIC_APP -> MusicAppSettings(onFollowChanged, onPinShortcut)
-                        SettingsSection.ACCESS -> AccessSettings(hasAccess, onGrant)
-                        SettingsSection.HISTORY -> HistorySettings()
-                        SettingsSection.BACKUP -> LibraryBackupSection()
-                        SettingsSection.SAVED -> SavedLyricsSettings(repo)
-                        SettingsSection.ON_DEVICE -> OnThisDevice(repo, refresh = SettingsWork.version.intValue)
-                        SettingsSection.ABOUT -> AboutSettings()
-                        SettingsSection.TUNING -> {
-                            Text("Feel values for this build. Not in public releases.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
-                            Box(Modifier.padding(top = 12.dp)) { Washed("Open tuning", onTuning) }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(24.dp))
-            }
+            val inner = rememberScrollState()
+            Column(Modifier.fillMaxWidth().then(if (short) Modifier else Modifier.weight(1f).verticalScroll(inner))) { Sections() }
         }
     }
 }
 
 /**
  * The tab row: 48dp tall tabs that say which one is on. One row when all four fit; in a narrow split or with a large
- * font they wrap into two rows of two, so no tab is ever hidden (0.4.1, owner: "Two rows when narrow").
+ * font they wrap into two rows of two, so no tab is ever hidden (0.4.1, owner: "Two rows when narrow"); one per row
+ * when even half a row can't hold a label, so no word is ever broken.
  */
 @Composable
 private fun SettingsTabs(tab: SettingsTab, onTab: (SettingsTab) -> Unit) {
@@ -276,7 +289,7 @@ private fun SettingsTabs(tab: SettingsTab, onTab: (SettingsTab) -> Unit) {
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp).selectableGroup(),
     ) { tabs, c ->
         val natural = tabs.map { it.maxIntrinsicWidth(Constraints.Infinity) }
-        val perRow = TabFit.perRow(natural, c.maxWidth)
+        val perRow = TabFit.perRow(natural, c.maxWidth)   // all, two, or (when even half a row is too narrow) one
         val cell = c.maxWidth / perRow
         val placed = tabs.mapIndexed { i, m ->
             m.measure(if (perRow == tabs.size) Constraints(maxWidth = natural[i]) else Constraints(maxWidth = cell))
@@ -303,7 +316,7 @@ private fun LyricsDisplaySettings() {
         LyricsSettings.TEXT_SIZES.forEachIndexed { i, n -> Choice(n, settings.textSize == i) { settings.chooseTextSize(i) } }
     }
     Text("Lines already sung", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Choice("Dimmed", !settings.hidePast) { settings.hidePastLines(false) }
         Choice("Hidden", settings.hidePast) { settings.hidePastLines(true) }
     }
@@ -313,7 +326,7 @@ private fun LyricsDisplaySettings() {
         LyricsSettings.FOLLOW_DELAYS.forEach { s -> Choice("$s seconds", settings.followDelaySec == s) { settings.chooseFollowDelay(s) } }
     }
     Text("Keep the screen on while synced lyrics play", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Choice("On", settings.keepScreenOn) { settings.keepOn(true) }
         Choice("Off", !settings.keepScreenOn) { settings.keepOn(false) }
     }
@@ -368,7 +381,8 @@ private fun TimingSettings(repo: LyricsRepo, output: Output) {
 
 @Composable
 private fun ThemeSettings(theme: ThemeChoice, onTheme: (ThemeChoice) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    // Wraps, like the other choices: at a large font size "Light" was squeezed to one letter per line.
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         listOf(ThemeChoice.SYSTEM to "System", ThemeChoice.DARK to "Dark", ThemeChoice.LIGHT to "Light").forEach { (c, name) ->
             Choice(name, theme == c) { onTheme(c) }
         }
@@ -392,7 +406,7 @@ private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> U
             else "Lyrics prefers $name, and follows other apps when they play.",
             fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 10.dp),
         )
-        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Choice("Only $name", settings.onlyPlayer) { settings.followOnlyPlayer(true); onFollowChanged() }
             Choice("Other apps too", !settings.onlyPlayer) { settings.followOnlyPlayer(false); onFollowChanged() }
         }
@@ -456,7 +470,7 @@ private fun HistorySettings() {
             }
         }
         Text("Keep plays for", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             History.KEEP_DAYS.forEach { d -> Choice(History.keepLabel(d), settings.keepPlaysDays == d) { settings.chooseKeepPlays(d) } }
         }
         if (settings.keepPlaysDays > 0) {

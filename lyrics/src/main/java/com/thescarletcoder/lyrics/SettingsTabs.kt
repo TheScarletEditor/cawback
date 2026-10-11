@@ -23,9 +23,16 @@ internal enum class SettingsSection(val title: String, val tab: SettingsTab, val
     TUNING("Tuning", SettingsTab.PRIVACY, personal = true),
 }
 
-/** How many tabs go on a row: all of them when their natural widths fit, else two (0.4.1, "Two rows when narrow"). */
+/**
+ * How many tabs go on a row: all of them when their natural widths fit, else two (0.4.1, "Two rows when narrow"),
+ * else one when a label is wider than half the row (a very large font), so no word is broken.
+ */
 internal object TabFit {
-    fun perRow(widths: List<Int>, available: Int): Int = if (widths.sum() <= available) widths.size else 2
+    fun perRow(widths: List<Int>, available: Int): Int = when {
+        widths.sum() <= available -> widths.size
+        widths.all { it <= available / 2 } -> 2
+        else -> 1
+    }
 }
 
 /** Where Settings was opened from, and the tab that fits it (0.4.1, Q5). */

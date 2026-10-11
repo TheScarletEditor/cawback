@@ -75,6 +75,7 @@ class LyricsStore(context: Context) {
         var ok = true
         files().forEach { f ->
             synchronized(LOCK) {
+                if (!f.exists()) return@forEach   // forgotten or cleared meanwhile: nothing to reset, not a failure
                 val o = try { read(f) } catch (_: Exception) { ok = false; null } ?: return@forEach
                 if (o.optLong("offset") != 0L && runCatching { write(f, o.put("offset", 0L)) }.isFailure) ok = false
             }

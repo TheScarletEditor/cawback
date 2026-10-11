@@ -36,6 +36,8 @@ class SettingsTabsTest {
         assertEquals(4, TabFit.perRow(widths, 624))   // a phone: one row
         assertEquals(4, TabFit.perRow(widths, 580))   // exactly fits
         assertEquals(2, TabFit.perRow(widths, 579))   // a narrow split or a large font: two rows of two
+        assertEquals(2, TabFit.perRow(widths, 320))   // still two: every label fits half a row (160)
+        assertEquals(1, TabFit.perRow(widths, 319))   // "Privacy" (160) wouldn't fit half: one per row, never "Privac / y"
     }
 
     @Test fun settingsOpensOnTheTabForTheWayIn() {
