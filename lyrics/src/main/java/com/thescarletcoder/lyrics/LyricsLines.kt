@@ -36,11 +36,13 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -112,9 +114,10 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, 
     // Only the line index drives the list, so it recomposes when the line changes, not 16 times a second.
     val current by remember(lines) { derivedStateOf { Lrc.indexAt(lines, pos) } }
     LaunchedEffect(dragged) { if (dragged) lastTouch = System.currentTimeMillis() }
+    fun following() = Follow.now(dragged, System.currentTimeMillis(), lastTouch, settings.followDelaySec)
     LaunchedEffect(current) {
         // Follow the song unless the user scrolled in the last few seconds (Settings: 2, 4 or 8).
-        if (!dragged && System.currentTimeMillis() - lastTouch > settings.followDelaySec * 1000L) glideTo(list, current.coerceAtLeast(0), anchor, Motion.duration(context, Tunables.int(LyricsTuning.GLIDE_MS)))
+        if (following()) glideTo(list, current.coerceAtLeast(0), anchor, Motion.duration(context, Tunables.int(LyricsTuning.GLIDE_MS)))
     }
 
     // At the top of a song the lyrics start right under the header; the current line glides down to the anchor
@@ -123,6 +126,14 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, 
     val topFade by animateFloatAsState(if (scrolled) 1f else 0f, tween(Motion.duration(context, Motion.NAV_MS), easing = Motion.NAV_EASE), label = "topFade")
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val top = maxHeight * anchor
+        // A resize (split divider, fold, rotation), the compact layout or a new text size moves the lines without a new
+        // current line: put it straight back in the middle, no glide, unless the user scrolled by hand just now.
+        var laidOut by remember { mutableStateOf(false) }
+        LaunchedEffect(maxWidth, maxHeight, compact, settings.textSize, anchor) {
+            if (!laidOut) { laidOut = true; return@LaunchedEffect }
+            withFrameNanos { }   // let the list measure at the new size first
+            if (following()) glideTo(list, current.coerceAtLeast(0), anchor, 0)
+        }
         LazyColumn(
             state = list, contentPadding = PaddingValues(top = 8.dp, bottom = maxHeight - top),
             modifier = Modifier.fillMaxSize().edgeFade { topFade },
@@ -144,9 +155,19 @@ private suspend fun glideTo(list: LazyListState, i: Int, anchor: Float, ms: Int)
     if (list.layoutInfo.visibleItemsInfo.none { it.index == i }) list.scrollToItem(i)
     val info = list.layoutInfo
     val item = info.visibleItemsInfo.firstOrNull { it.index == i } ?: return
-    val target = info.viewportStartOffset + (info.viewportEndOffset - info.viewportStartOffset) * anchor
-    val delta = item.offset + item.size / 2f - target
+    val delta = Follow.delta(item.offset, item.size, info.viewportStartOffset, info.viewportEndOffset, anchor)
+    // A jump (ms 0) takes the scroll over from a glide still running, so the two never fight.
     if (ms <= 0) list.scrollBy(delta) else list.animateScrollBy(delta, tween(ms, easing = Motion.LUX_EASE))
+}
+
+/** When and where the lyrics follow the song. Plain maths, tested on the JVM. */
+internal object Follow {
+    /** Follow unless the user is dragging or touched the list within the follow delay (Settings: 2, 4 or 8 seconds). */
+    fun now(dragged: Boolean, nowMs: Long, lastTouchMs: Long, delaySec: Int) = !dragged && nowMs - lastTouchMs > delaySec * 1000L
+
+    /** How far to scroll so an item's centre lands at [anchor] (0 top, 1 bottom) of the viewport. */
+    fun delta(itemOffset: Int, itemSize: Int, viewportStart: Int, viewportEnd: Int, anchor: Float): Float =
+        itemOffset + itemSize / 2f - (viewportStart + (viewportEnd - viewportStart) * anchor)
 }
 
 @Composable

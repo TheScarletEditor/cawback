@@ -38,8 +38,9 @@ object LyricsTuning {
         Tunable(TINT_FADE_MS, "Album tint", 800f, 0f, 2000f, 50f, isInt = true),
         Tunable(LINE_SCALE, "Lines", 1.06f, 1f, 1.2f, 0.01f),
         Tunable(GLIDE_MS, "Lines", 650f, 0f, 1500f, 25f, isInt = true),
-        Tunable(ANCHOR, "Lines", 0.38f, 0.2f, 0.6f, 0.01f),
-        Tunable(ANCHOR_COMPACT, "Lines", 0.30f, 0.15f, 0.6f, 0.01f),
+        // 0.4.1 (owner, 2026-10-11): the current line sits in the true middle on every screen size (was 0.38 and 0.30).
+        Tunable(ANCHOR, "Lines", 0.50f, 0.2f, 0.6f, 0.01f),
+        Tunable(ANCHOR_COMPACT, "Lines", 0.50f, 0.15f, 0.6f, 0.01f),
     ) + alphas(true, listOf(0.60f, 0.48f, 0.42f, 0.38f)) + alphas(false, listOf(0.72f, 0.62f, 0.56f, 0.52f)) + listOf(
         Tunable(FADE_TOP_START, "Edge fades", 0.14f, 0f, 0.5f, 0.01f),
         Tunable(FADE_TOP_END, "Edge fades", 0.30f, 0f, 0.5f, 0.01f),
@@ -51,11 +52,16 @@ object LyricsTuning {
         Tunable(LOADING_DELAY_MS, "Song changes", 250f, 0f, 1500f, 25f, isInt = true),
     )
 
+    /** A value's starting point, before any tuning on the device. */
+    internal fun defaultOf(name: String): Float = list.first { it.name == name }.default
+
     fun init(context: Context) {
         val store = context.getSharedPreferences("tuning", Context.MODE_PRIVATE)
         // Once: the tint was set to 0.9 as the new starting point (2026-10-09). A value saved under the old 0..0.3 slider
         // would otherwise hide it.
         if (!store.getBoolean("tint_default_09", false)) store.edit().remove(TINT_STRENGTH).putBoolean("tint_default_09", true).apply()
+        // Once, the same way: the line moved to the middle in 0.4.1, so a value saved at the old height doesn't hide it.
+        if (!store.getBoolean("anchor_default_50", false)) store.edit().remove(ANCHOR).remove(ANCHOR_COMPACT).putBoolean("anchor_default_50", true).apply()
         Tunables.init(store, list)
     }
 }
