@@ -2,9 +2,24 @@
 
 Against `docs/LYRICS-0.4.1-PLAN.md`. Newest first. scarlet-hq mirrors these (hq-log). Decisions before 0.4.1 live in scarlet-hq (D-001 to D-043) and `docs/FINALIZE-0.4.0.md`.
 
-## 2026-10-11 (the owner, 0.4.2 timing plan)
+## 2026-10-11 (the owner, 0.5.0 "your timing")
 
-Against `docs/LYRICS-0.4.2-PLAN.md`.
+Against `docs/LYRICS-0.5.0-PLAN.md`. The owner: "yeah, build as planned, make your timing wins".
+
+| # | Question | Answer (word for word) | Effect | Check |
+| --- | --- | --- | --- | --- |
+| Q20 | Where the adjust control goes | "Header icon, \"This song\" sheet (Recommended)" | Slice 3: a drawn header icon opens one sheet with Other versions, Line up now, Earlier and Later, Fix lines, Share; More's Timing section moves there. | Emulator and device check. |
+| Q21 | The end note | "Keep the note, drop its button (Recommended)" | Slice 3. | Device check. |
+| Q22 | How far fixing goes | "Timing by tapping lines (Recommended)" | Slice 2 (model) and 4 (Fix lines mode): anchors per line, lines between follow the nearest anchors. | JVM tests on interpolation; device test. |
+| Q23 | Sharing fixes with LRCLIB | "Ask each time (Recommended)" | Slice 7: preview of exactly what's sent; nothing goes until Send. | Payload tests; one real publish with the owner's OK. |
+| Q24 | Unsure hint | "Yes (Recommended)" | Slice 3: a dot on the header icon; TalkBack says the timing may be off. | JVM test on the unsure flag; device check. |
+| Q25 | Fixes in the Library backup | "Yes, fixes in the backup (Recommended)" | Slice 6: new backup format version; older backups still restore. | Format tests. |
+| Q26 | Title-only matches by another artist | "Never automatically (Recommended)" | Slice 1: "No lyrics found"; listed in Other versions with their artist. | JVM test. |
+| Q27 | Version | "0.5.0 (Recommended)" | The 0.4.2 plan becomes the 0.5.0 plan. | build.gradle at /finalize. |
+
+## 2026-10-11 (the owner, 0.4.2 timing plan, now part of 0.5.0)
+
+Against the 0.4.2 plan, now `docs/LYRICS-0.5.0-PLAN.md`.
 
 | # | Question | Answer (word for word) | Effect | Check |
 | --- | --- | --- | --- | --- |
