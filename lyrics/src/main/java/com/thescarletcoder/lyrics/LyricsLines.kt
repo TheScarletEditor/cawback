@@ -103,9 +103,10 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, 
     // This song's nudge plus the delay for the output in use (Bluetooth buds lag; Settings, Timing).
     val offset by rememberUpdatedState(s.offsetMs + LocalOutputDelay.current)
 
+    var known by remember { mutableStateOf(false) }   // the first real position has been read
     LaunchedEffect(s) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (true) { pos = np.positionMs() + offset; delay(60) }
+            while (true) { pos = np.positionMs() + offset; known = true; delay(60) }
         }
     }
     // The last row is the end note when the lyrics run out (Lrc.withEnd).
@@ -113,11 +114,17 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, 
     val endRow = if (lines !== s.lines) lines.lastIndex else -1
     // Only the line index drives the list, so it recomposes when the line changes, not 16 times a second.
     val current by remember(lines) { derivedStateOf { Lrc.indexAt(lines, pos) } }
-    LaunchedEffect(dragged) { if (dragged) lastTouch = System.currentTimeMillis() }
+    // The follow delay counts from letting go of a drag, so a long scroll by hand isn't thrown away when it ends.
+    LaunchedEffect(dragged) { lastTouch = Follow.touched(dragged, lastTouch, System.currentTimeMillis()) }
     fun following() = Follow.now(dragged, System.currentTimeMillis(), lastTouch, settings.followDelaySec)
-    LaunchedEffect(current) {
-        // Follow the song unless the user scrolled in the last few seconds (Settings: 2, 4 or 8).
-        if (following()) glideTo(list, current.coerceAtLeast(0), anchor, Motion.duration(context, Tunables.int(LyricsTuning.GLIDE_MS)))
+    var placed by remember { mutableStateOf(false) }
+    LaunchedEffect(current, known) {
+        if (!known) return@LaunchedEffect
+        // Follow the song unless the user scrolled in the last few seconds (Settings: 2, 4 or 8). Coming back to the
+        // lyrics (from Settings after a text size change, say) jumps straight to the middle; after that each line glides.
+        val ms = if (placed) Motion.duration(context, Tunables.int(LyricsTuning.GLIDE_MS)) else 0
+        placed = true
+        if (following()) glideTo(list, current.coerceAtLeast(0), anchor, ms)
     }
 
     // At the top of a song the lyrics start right under the header; the current line glides down to the anchor
@@ -164,6 +171,9 @@ private suspend fun glideTo(list: LazyListState, i: Int, anchor: Float, ms: Int)
 internal object Follow {
     /** Follow unless the user is dragging or touched the list within the follow delay (Settings: 2, 4 or 8 seconds). */
     fun now(dragged: Boolean, nowMs: Long, lastTouchMs: Long, delaySec: Int) = !dragged && nowMs - lastTouchMs > delaySec * 1000L
+
+    /** The touch time after a drag starts or ends: stamped both times, so the delay runs from letting go. 0 = untouched. */
+    fun touched(dragged: Boolean, lastTouchMs: Long, nowMs: Long): Long = if (dragged || lastTouchMs != 0L) nowMs else lastTouchMs
 
     /** How far to scroll so an item's centre lands at [anchor] (0 top, 1 bottom) of the viewport. */
     fun delta(itemOffset: Int, itemSize: Int, viewportStart: Int, viewportEnd: Int, anchor: Float): Float =

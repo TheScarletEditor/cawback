@@ -36,4 +36,15 @@ class FollowTest {
         assertTrue(Follow.now(dragged = false, nowMs = touched + 4_001L, lastTouchMs = touched, delaySec = 4))
         assertTrue(Follow.now(dragged = false, nowMs = touched + 8_001L, lastTouchMs = touched, delaySec = 8))
     }
+
+    @Test fun theDelayCountsFromLettingGo() {
+        val start = 10_000L; val release = 15_000L
+        val atStart = Follow.touched(dragged = true, lastTouchMs = 0L, nowMs = start)
+        val atRelease = Follow.touched(dragged = false, lastTouchMs = atStart, nowMs = release)
+        assertEquals(release, atRelease)
+        // A resize one second after letting go of a 5 s drag leaves the list where the user put it.
+        assertFalse(Follow.now(dragged = false, nowMs = release + 1_000L, lastTouchMs = atRelease, delaySec = 4))
+        // Opening the lyrics (no drag yet) doesn't count as a touch, so following starts right away.
+        assertEquals(0L, Follow.touched(dragged = false, lastTouchMs = 0L, nowMs = start))
+    }
 }

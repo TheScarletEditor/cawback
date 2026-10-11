@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.4.1 plan
 
-Status: **all answers recorded 2026-10-11 (Q1 to Q8); ready to start with slice 1, waiting for the owner's go.** Nothing here is built. Prepared 2026-10-11 with /prep (resume mode) from the owner's 0.4.0 device-test feedback (scarlet-hq D-042):
+Status: **answers recorded 2026-10-11 (Q1 to Q8); the owner said go. Slice 1 done; slice 2 next.** Nothing here is built. Prepared 2026-10-11 with /prep (resume mode) from the owner's 0.4.0 device-test feedback (scarlet-hq D-042):
 
 > "The settings page is getting log. We should group and tab it. Add a preview to lyric text size in the settings also. the current lyric should be centered, and stay in view when making the split smaller."
 
@@ -76,6 +76,15 @@ Each slice is one commit (or a small series), passes the build, unit tests and l
 - Re-centre with no glide when the list's size, the compact layout or the text size changes, unless the user scrolled within the follow delay.
 - Pull the scroll-target maths out of `glideTo` into a plain function.
 - Checks: JVM test for the target (middle of the viewport, both layouts); JVM test that a resize within the follow delay doesn't move the list (the decision function); emulator: resize the split while a test LRC plays in the labtest build if it can be driven, otherwise a device-test line for the owner: "Play a synced song in split screen; drag the divider narrower and wider; the current line stays in view in the middle."
+
+**Done 2026-10-11** (start `ed6ef11`; `78b733b`, mini-audit fixes in the next commit). `/finalize --slice`: checklist pass clean; one review agent, two findings, both mechanical and fixed, re-review clean. Build passes, 61/61 unit tests (FollowTest 5 new), lint 0 errors, 49 older warnings.
+
+| Id | Finding | Fix |
+| --- | --- | --- |
+| L1-1 | A text size change happens in Settings, while the lyrics aren't on screen; coming back rebuilt the list and the line glided down from the top instead of jumping to the middle. | The first follow after the lyrics open (once the real position is known) jumps; later lines glide. At the start of a song line 0 can't scroll above the top, so the lines still start under the header. Also means opening the lyrics mid-song lands the line in the middle at once. |
+| L1-2 | The follow delay counted from the start of a hand drag, so a long drag followed by a resize could lose the user's place. | `Follow.touched`: the touch time is stamped when a drag starts and when it ends. JVM test. |
+
+Not run on a screen: an emulator can't feed Lyrics a playing synced song (as in 0.4.0). Device-test line for the owner, on the personal build: "Play a synced song in split screen; drag the divider narrower and wider, and rotate; the current line stays in view in the middle. Scroll by hand, let go, and drag the divider within the follow delay: the list stays where you left it. Change the text size in Settings and go back: the line is in the middle, not sliding down."
 
 ### Slice 2: Settings in four tabs
 
