@@ -71,6 +71,13 @@ class MatchingTest {
         assertTrue(c.unsure)
     }
 
+    @Test fun aSyncedFieldWithNoTimedLinesCountsAsWords() {
+        val tagsOnly = Candidate(1, "Song", "Artist", "Album", 248.0, false, null, "[ar:Artist]\n[length:04:08]")
+        assertEquals(1L, Matching.choose(null, listOf(tagsOnly), 248.0)!!.candidate.id)   // no crash
+        // Real words beat a closer record that has only tags.
+        assertEquals(2L, Matching.choose(null, listOf(tagsOnly, rec(2, 250.0, null)), 248.0)!!.candidate.id)
+    }
+
     @Test fun nothingCloseIsNoMatch() {
         assertNull(Matching.choose(null, listOf(rec(1, 300.0, good)), 248.0))
         assertNull(Matching.choose(null, emptyList(), 248.0))

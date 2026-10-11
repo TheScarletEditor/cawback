@@ -70,7 +70,8 @@ class LyricsRepo(private val store: LyricsStore) {
         try {
             // A dropped connection gets two more tries before Lyrics says it can't reach LRCLIB (2026-10-09:
             // on a phone the connection dropped often, sometimes mid-song).
-            val m = withRetries(RETRY_DELAYS_MS) { lookup(t) }
+            // Looking up an older saved match again gets one try: offline, the saved lyrics show at once, not after the retries.
+            val m = withRetries(if (old != null) emptyList() else RETRY_DELAYS_MS) { lookup(t) }
             val c = m.choice?.candidate
             val offset = keptOffset(cached, c?.id)
             store.save(t.key, LyricsStore.Entry(
@@ -100,8 +101,9 @@ class LyricsRepo(private val store: LyricsStore) {
         val hit = exact { LrcLib.get(t.title, t.artist, t.album, dur) } ?: exact { LrcLib.get(clean, artist, null, dur) }
         val results = try {
             LrcLib.search(clean, artist)
-        } catch (e: IOException) {
-            if (hit == null) throw e
+        } catch (e: Exception) {
+            // A failed or garbled search still lets an exact hit show; the song is looked up again next time.
+            if (hit == null || (e !is IOException && e !is org.json.JSONException)) throw e
             return Lookup(Matching.Choice(hit, unsure = false), complete = false)
         }
         return Lookup(Matching.choose(hit, results, dur), complete = true)
@@ -117,9 +119,9 @@ class LyricsRepo(private val store: LyricsStore) {
         found(c, true, offset)
     }
 
-    /** Forget the pick (and the cache) and match again. */
+    /** Forget the pick (and the cache) and match again; the nudge belonged to the pick (owner Q17). */
     suspend fun unpin(t: Track): Shown {
-        withContext(Dispatchers.IO) { store.save(t.key, LyricsStore.Entry(null, false, store.load(t.key)?.offsetMs ?: 0, 0)) }
+        withContext(Dispatchers.IO) { store.save(t.key, LyricsStore.Entry(null, false, 0, 0)) }
         return load(t)
     }
 

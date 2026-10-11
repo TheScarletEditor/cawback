@@ -150,7 +150,10 @@ object Matching {
             // No majority: another timing has as many records behind it.
             return Choice(pick, unsure = ranked.size > 1 && ranked[1].size >= best.size)
         }
-        near.filter { it.synced == null }.minByOrNull { gap(it) }?.let { return Choice(it, unsure = false) }   // words only: honest
-        return Choice(synced.minBy { gap(it) }, unsure = true)   // only records that run past the song's end
+        // Words only is honest: records without usable timed lines (no synced lyrics, or only tags) count as words.
+        near.filter { times(it).isEmpty() }
+            .minWithOrNull(compareBy<Candidate>({ it.plain == null && !it.instrumental }, { gap(it) }))   // real words first
+            ?.let { return Choice(it, unsure = false) }
+        return Choice(synced.minBy { gap(it) }, unsure = true)   // only records that run past the song's end are left
     }
 }

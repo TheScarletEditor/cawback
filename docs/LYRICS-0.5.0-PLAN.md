@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.5.0 plan: your timing
 
-Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slice 1 next.** Nothing here is built yet. Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
+Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slice 1 done, slice 2 next.** Nothing here is built yet. Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
 
 ## Why
 
@@ -64,6 +64,16 @@ Song-specific details of both checks are kept privately, not in this repo.
 Each is a commit or small series, tests in the same commit, `/finalize --slice` before the next.
 
 1. **Choose the record.** A pure step in `Matching`: cut check, agreement groups (same line count, line times within about 0.5 s), closest length, then more lines (D-038); title-only results never chosen (Q26). Cache entries get a matching version; unpinned entries from before it are looked up again on play (Q18). Unsure flag for the dot. JVM tests with synthetic records (made-up words, real-shaped timings): lone outlier versus a group, album timing on an edit's length, no agreement, title-only, offline extra search.
+   **Done 2026-10-11** (`32578e3` and the mini-audit fixes). `/finalize --slice`: one review agent, 1 crash and 3 small bugs, all fixed (M1 to M4 below), 1 more from the fixes (M5), re-check clean. 82/82 unit tests (MatchingTest 11 new), lint 0 errors, 49 older warnings. Checked against the real LRCLIB data of both 2026-10-11 cases (replicated off the device): the mistimed song now gets the timing the owner heard (a group of 10 agreeing records over the lone exact hit), the new release gets "No lyrics found". Not yet on a device (the next personal build).
+
+   | Id | Finding | Fix |
+   | --- | --- | --- |
+   | M1 | A record with a synced field but no timed lines could crash the matcher | Counts as words only; the last fallback can't see an empty list |
+   | M2 | A garbled search reply threw away an exact hit | Falls back to the exact hit, looked up again next time |
+   | M3 | Re-looking up an older saved match waited through every retry offline | One try; the saved lyrics show at once |
+   | M4 | "Go back to the automatic match" kept a nudge that was then dropped anyway | Saves 0 (Q17) |
+   | M5 | A tags-only record could beat real words | Real words first |
+
 2. **Your timing model.** Offset plus anchors per song in the cache entry (format version), the interpolation, reset on a new version (Q17), clear. JVM tests.
 3. **The header icon and "This song" sheet.** Drawn icon (brand rule), unsure dot (Q24), the sheet with Other versions, Earlier and Later (moved from More), and the end note without its button (Q21). Emulator and device check.
 4. **Line up now and Fix lines.** "Now" for the next line (Q19); Fix lines mode (Q22). Device test with a real song.
