@@ -70,6 +70,15 @@ Two tab styles: Settings (text with an underline) and the Library's Songs and St
 **Answer (2026-10-11):** "Leave both for now (Recommended)"
 **Follow-up:** none in 0.4.1; "one tab style" filed for later.
 
+### Q5 (ship)
+Push main to GitHub before signing.
+**Answer (2026-10-11):** "Push now (Recommended)"
+
+### Q6 (ship)
+Backups: none verified yet; the 0.4.0 skip doesn't cover 0.4.1.
+**Answer (2026-10-11):** "Skip for 0.4.1 (Recommended)"
+**Follow-up:** recorded skip: Lyrics 0.4.1 may be released without the two-drive backup (also in Command STATUS-AUDIT at wrap-up).
+
 ## Ship
 
 | Step | Offered | Choice | Result |
