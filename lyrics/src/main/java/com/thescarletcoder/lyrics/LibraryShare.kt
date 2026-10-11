@@ -274,7 +274,7 @@ fun LibraryBackupSection() {
     var note by remember { mutableStateOf<String?>(null) }   // a hint from this screen, not from the work
     val backingUp = runner.busy(SettingsWork.BACKUP)
     val restoring = runner.busy(SettingsWork.RESTORE)
-    val busy = backingUp || restoring
+    val busy = SettingsWork.libraryBusy()   // a delete running hides these too: one Library job at a time
     fun forget() { pass = TextFieldValue(""); again = TextFieldValue("") }
     // New work: older messages here, and a delete's, would be out of date.
     fun fresh() { note = null; runner.clear(SettingsWork.BACKUP); runner.clear(SettingsWork.RESTORE); runner.clear(SettingsWork.DELETE) }
@@ -286,11 +286,12 @@ fun LibraryBackupSection() {
         if (p.size < LibraryBackup.MIN_PASSPHRASE) {   // Android stopped Lyrics while the picker was open: never back up without it
             runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
             note = "Enter your passphrase again, then choose where to save."
+            p.fill(' ')
             return@rememberLauncherForActivityResult
         }
         fresh()
         val app = context.applicationContext
-        val started = runner.run(SettingsWork.BACKUP) {
+        val started = runner.run(SettingsWork.BACKUP, exclusive = SettingsWork.LIBRARY) {
             try {
                 runCatching {
                     withContext(Dispatchers.IO) {
@@ -344,7 +345,7 @@ fun LibraryBackupSection() {
                     fresh()
                     val app = context.applicationContext
                     // The fields and the form are this screen's; if it's gone by the end, these writes go nowhere.
-                    val started = runner.run(SettingsWork.RESTORE) {
+                    val started = runner.run(SettingsWork.RESTORE, exclusive = SettingsWork.LIBRARY) {
                         try {
                             runCatching {
                                 withContext(Dispatchers.IO) {

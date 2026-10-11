@@ -349,7 +349,10 @@ private fun TimingSettings(repo: LyricsRepo, output: Output) {
                 Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Washed("Reset", {
                         confirming = false
-                        runner.run(SettingsWork.NUDGES) { repo.resetNudges(); SettingsWork.lyricsChanged(); "Every song is back to its own timing." }
+                        runner.run(SettingsWork.NUDGES) {
+                            val ok = repo.resetNudges(); SettingsWork.lyricsChanged()
+                            if (ok) "Every song is back to its own timing." else WorkRunner.FAILED   // never "done" after a partial failure
+                        }
                     })
                     Washed("Cancel", { confirming = false })
                 }
@@ -460,7 +463,7 @@ private fun HistorySettings() {
             Text("Older plays are removed when Lyrics opens. Songs, notes and moments stay.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
         }
     }
-    if (hasLibrary && !runner.busy(SettingsWork.DELETE)) {
+    if (hasLibrary && !SettingsWork.libraryBusy()) {   // one Library job at a time
         Box(Modifier.padding(top = 14.dp)) {
             when (val d = deleting) {
                 null -> FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -478,7 +481,7 @@ private fun HistorySettings() {
                             deleting = null
                             runner.clear(SettingsWork.BACKUP); runner.clear(SettingsWork.RESTORE)   // older messages would be out of date
                             val app = context.applicationContext
-                            runner.run(SettingsWork.DELETE) {
+                            runner.run(SettingsWork.DELETE, exclusive = SettingsWork.LIBRARY) {
                                 val failed = withContext(Dispatchers.IO) {
                                     runCatching {
                                         val lib = LibraryRepo(app)
@@ -531,7 +534,10 @@ private fun SavedLyricsSettings(repo: LyricsRepo) {
                 Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Washed("Clear", {
                         confirming = false
-                        runner.run(SettingsWork.SAVED) { repo.clearSaved(); SettingsWork.lyricsChanged(); "Cleared." }
+                        runner.run(SettingsWork.SAVED) {
+                            val ok = repo.clearSaved(); SettingsWork.lyricsChanged()
+                            if (ok) "Cleared." else WorkRunner.FAILED   // never "Cleared." with files left
+                        }
                     })
                     Washed("Cancel", { confirming = false })
                 }

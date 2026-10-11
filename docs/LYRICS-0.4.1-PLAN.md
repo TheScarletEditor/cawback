@@ -14,7 +14,7 @@ Everything below was proposed by Claude and confirmed by the owner on 2026-10-11
 - No repo `*-DECISIONS.md` before this plan (decisions lived in scarlet-hq, last D-043). This plan starts `docs/LYRICS-DECISIONS.md`.
 - Owner devices (both): personal build 0.4.0+b4753ed, "up to date" in `versions.ps1` (later commits changed docs only).
 - Repo guard: installed, matches the skill's copy. Repo visibility: public.
-- Backups: no verified two-drive backup yet (neither drive has passed verification; the drives aren't bought). The 0.4.0 skip doesn't cover 0.4.1: releasing 0.4.1 needs verified backups or a new recorded skip.
+- Backups: not yet verified. The 0.4.0 skip doesn't cover 0.4.1: releasing 0.4.1 needs verified backups or a new recorded skip.
 - Spot-check of recent decisions: D-037 (end note, `LyricsLines.kt:247`), D-039 (ABI filter and compressed native libraries, `lyrics/build.gradle.kts:31,90`), D-040 (now-playing bar, "Other versions", `Chrome.kt:169`) and D-043 (/finalize stage 6 publishes) all hold. D-038's idea is filed in scarlet-hq IDEAS as proposed. No TODO or FIXME in the source.
 - Drift outside this repo: the Lyrics row in Command `docs/STATUS-AUDIT.md` still says 0.4.0 is waiting to be published; it was published (D-043). Corrected in the Next section at the end of this session.
 

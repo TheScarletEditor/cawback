@@ -62,6 +62,21 @@ class SettingsTabsTest {
         app.cancel()
     }
 
+    @Test fun libraryJobsRunOneAtATime() = runBlocking {
+        val app = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val runner = WorkRunner(app)
+        val gate = CompletableDeferred<Unit>()
+        val library = listOf("delete", "backup", "restore")
+        assertTrue(runner.run("restore", exclusive = library) { gate.await(); "Restored." })
+        assertFalse(runner.run("delete", exclusive = library) { "Library deleted." })   // refused while the restore runs
+        assertTrue(runner.anyBusy(library))
+        gate.complete(Unit)
+        withTimeout(5_000) { while (runner.anyBusy(library)) kotlinx.coroutines.delay(5) }
+        assertNull(runner.result("delete"))
+        assertTrue(runner.run("delete", exclusive = library) { "Library deleted." })   // free again afterwards
+        app.cancel()
+    }
+
     @Test fun oneRunAtATimeAndAFailureIsNeverSuccess() = runBlocking {
         val app = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         var changes = 0

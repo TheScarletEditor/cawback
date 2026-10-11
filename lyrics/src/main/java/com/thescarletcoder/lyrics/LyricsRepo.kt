@@ -101,10 +101,10 @@ class LyricsRepo(private val store: LyricsStore) {
     suspend fun savedCount(): Int = withContext(Dispatchers.IO) { store.count() }
 
     /** Settings: "Reset all timing nudges". */
-    suspend fun resetNudges() = withContext(Dispatchers.IO) { store.resetOffsets() }
+    suspend fun resetNudges(): Boolean = withContext(Dispatchers.IO) { store.resetOffsets() }
 
     /** Settings: "Clear saved lyrics". Wipes the cache, picks and nudges. */
-    suspend fun clearSaved() = withContext(Dispatchers.IO) { store.clear() }
+    suspend fun clearSaved(): Boolean = withContext(Dispatchers.IO) { store.clear() }
 
     suspend fun search(q: String): List<Candidate> = withContext(Dispatchers.IO) { LrcLib.search(q) }
     suspend fun searchTitle(title: String): List<Candidate> = withContext(Dispatchers.IO) { LrcLib.searchTitle(title) }

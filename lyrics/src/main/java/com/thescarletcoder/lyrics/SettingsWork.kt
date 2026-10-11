@@ -17,12 +17,16 @@ internal class WorkRunner(private val scope: CoroutineScope, private val onChang
     private val results = HashMap<String, String>()
 
     @Synchronized fun busy(key: String) = key in busy
+    @Synchronized fun anyBusy(keys: Collection<String>) = keys.any { it in busy }
     @Synchronized fun result(key: String): String? = results[key]
 
-    /** Start [block] under [key] unless it's already running. Its returned text becomes the result. False if refused. */
-    fun run(key: String, block: suspend () -> String): Boolean {
+    /**
+     * Start [block] under [key] unless it, or anything in [exclusive], is already running. Its returned text becomes
+     * the result. False if refused.
+     */
+    fun run(key: String, exclusive: Collection<String> = emptyList(), block: suspend () -> String): Boolean {
         synchronized(this) {
-            if (key in busy) return false
+            if (key in busy || exclusive.any { it in busy }) return false
             busy += key; results -= key
         }
         onChange()
@@ -66,4 +70,8 @@ internal object SettingsWork {
     const val SAVED = "saved"
     const val BACKUP = "backup"
     const val RESTORE = "restore"
+
+    /** Work on the Library itself: one at a time, so a delete and a restore never race (owner: "One at a time"). */
+    val LIBRARY = listOf(DELETE, BACKUP, RESTORE)
+    fun libraryBusy() = runner.anyBusy(LIBRARY)
 }

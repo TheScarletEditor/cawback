@@ -67,19 +67,24 @@ class LyricsStore(context: Context) {
         runCatching { synchronized(LOCK) { write(file(key), o) } }   // only a cache: a failed write means a fresh fetch next time
     }
 
-    /** Settings: "Reset all timing nudges". Every song's offset back to 0; lyrics and picks stay. */
-    fun resetOffsets() {
+    /**
+     * Settings: "Reset all timing nudges". Every song's offset back to 0; lyrics and picks stay. False if any file
+     * couldn't be read or written this time (a file that can never be read has no nudge to reset and doesn't count).
+     */
+    fun resetOffsets(): Boolean {
+        var ok = true
         files().forEach { f ->
             synchronized(LOCK) {
-                val o = runCatching { read(f) }.getOrNull() ?: return@forEach
-                if (o.optLong("offset") != 0L) runCatching { write(f, o.put("offset", 0L)) }
+                val o = try { read(f) } catch (_: Exception) { ok = false; null } ?: return@forEach
+                if (o.optLong("offset") != 0L && runCatching { write(f, o.put("offset", 0L)) }.isFailure) ok = false
             }
         }
+        return ok
     }
 
     /** "Forget this song" in the Library: its cached lyrics, by the hashed keys the Library kept. */
     fun forgetHashed(hashes: List<String>) {
-        hashes.filter { it.matches(Regex("[0-9a-f]{64}")) }.forEach { File(dir, "$it.json").delete() }
+        hashes.filter { it.matches(Regex("[0-9a-f]{64}")) }.forEach { synchronized(LOCK) { File(dir, "$it.json").delete() } }
     }
 
     /**
@@ -109,8 +114,15 @@ class LyricsStore(context: Context) {
         }
     }
 
-    /** Wipes everything (Settings: "Clear saved lyrics"). */
-    fun clear() { dir.listFiles()?.forEach { it.delete() } }
+    /**
+     * Wipes everything (Settings: "Clear saved lyrics"). Each file under the lock, so a nudge or a reset can't write
+     * one back halfway. False if any file that was there couldn't be deleted (a song fetched meanwhile is new, not a failure).
+     */
+    fun clear(): Boolean {
+        var ok = true
+        dir.listFiles()?.forEach { f -> synchronized(LOCK) { if (!f.delete() && f.exists()) ok = false } }
+        return ok
+    }
     fun count() = files().size
 
     private fun files() = dir.listFiles()?.filter { it.name.endsWith(".json") }.orEmpty()
