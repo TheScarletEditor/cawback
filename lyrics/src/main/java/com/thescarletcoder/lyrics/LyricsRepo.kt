@@ -10,7 +10,11 @@ sealed interface Shown {
     data object NothingPlaying : Shown
     data object NotFound : Shown
     data object Offline : Shown
-    data class Found(val candidate: Candidate, val lines: List<LyricLine>, val synced: Boolean, val pinned: Boolean, val offsetMs: Long) : Shown
+    /** [unsure]: Lyrics isn't sure of the timing (the records disagreed, or none fits the song). */
+    data class Found(
+        val candidate: Candidate, val lines: List<LyricLine>, val synced: Boolean, val pinned: Boolean, val offsetMs: Long,
+        val unsure: Boolean = false,
+    ) : Shown
 }
 
 /** Cache first, then LRCLIB: exact lookup, then a cleaned-up title, then a search. */
@@ -20,6 +24,18 @@ class LyricsRepo(private val store: LyricsStore) {
     companion object {
         /** When matching last improved (2026-10-08 17:00 PDT): misses remembered before this are tried again. */
         private const val MATCHING_CHANGED_AT = 1_791_504_000_000L
+
+        /**
+         * The matching rules' version (1: 0.5.0, fit and agreement). Automatic matches made with older rules are looked
+         * up again the next time the song plays (owner Q18); picks by hand never are.
+         */
+        const val MATCHING = 1
+
+        /** A cached automatic match is used as it is only when it was made with today's rules. */
+        fun isCurrent(e: LyricsStore.Entry) = e.pinned || e.matchVersion >= MATCHING
+
+        /** A new match keeps the song's nudge only when it is the same record (owner Q17: a new version starts at 0). */
+        fun keptOffset(old: LyricsStore.Entry?, newId: Long?) = if (old?.candidate != null && old.candidate.id == newId) old.offsetMs else 0L
 
         /** Waits before the second and third tries. */
         val RETRY_DELAYS_MS = listOf(1_500L, 4_000L)
@@ -45,33 +61,50 @@ class LyricsRepo(private val store: LyricsStore) {
     suspend fun load(t: Track): Shown = withContext(Dispatchers.IO) {
         val cached = store.load(t.key)
         if (cached != null) {
-            if (cached.candidate != null) return@withContext found(cached.candidate, cached.pinned, cached.offsetMs)
+            if (cached.candidate != null && isCurrent(cached)) return@withContext found(cached.candidate, cached.pinned, cached.offsetMs, cached.unsure)
             // A remembered miss counts only if it was found with today's matching rules (title-only fallback added).
-            if (System.currentTimeMillis() - cached.fetchedAt < retryMissAfterMs && cached.fetchedAt > MATCHING_CHANGED_AT) return@withContext Shown.NotFound
+            if (cached.candidate == null && System.currentTimeMillis() - cached.fetchedAt < retryMissAfterMs && cached.fetchedAt > MATCHING_CHANGED_AT) return@withContext Shown.NotFound
         }
+        val old = cached?.candidate
+        fun stale() = if (cached != null && old != null) found(old, false, cached.offsetMs, cached.unsure) else Shown.Offline
         try {
             // A dropped connection gets two more tries before Lyrics says it can't reach LRCLIB (2026-10-09:
             // on a phone the connection dropped often, sometimes mid-song).
-            val c = withRetries(RETRY_DELAYS_MS) { lookup(t) }
-            store.save(t.key, LyricsStore.Entry(c, pinned = false, offsetMs = cached?.offsetMs ?: 0, fetchedAt = System.currentTimeMillis()))
-            if (c == null) Shown.NotFound else found(c, false, cached?.offsetMs ?: 0)
+            val m = withRetries(RETRY_DELAYS_MS) { lookup(t) }
+            val c = m.choice?.candidate
+            val offset = keptOffset(cached, c?.id)
+            store.save(t.key, LyricsStore.Entry(
+                c, pinned = false, offsetMs = offset, fetchedAt = System.currentTimeMillis(),
+                matchVersion = if (m.complete) MATCHING else 0, unsure = m.choice?.unsure ?: false,
+            ))
+            if (c == null) Shown.NotFound else found(c, false, offset, m.choice!!.unsure)
         } catch (_: IOException) {
-            Shown.Offline
+            stale()   // an older match still shows while LRCLIB can't be reached; it's looked up again next time
         } catch (_: org.json.JSONException) {
-            Shown.Offline
+            stale()
         }
     }
 
-    private fun lookup(t: Track): Candidate? {
+    /** [complete]: false when the search failed and only an exact hit was used (looked up again next time). */
+    private class Lookup(val choice: Matching.Choice?, val complete: Boolean)
+
+    /**
+     * Exact lookups first (the player's title, then a cleaned-up one), then always one search by title and artist, so
+     * the exact hit is weighed against the other records (0.5.0). Never a title-only search: another artist's song
+     * with the same title is not shown automatically (owner Q26); "Other versions" still lists those.
+     */
+    private fun lookup(t: Track): Lookup {
         val dur = t.durationMs?.let { it / 1000.0 }
-        exact { LrcLib.get(t.title, t.artist, t.album, dur) }?.let { return it }
         val clean = Matching.cleanTitle(t.title)
         val artist = t.artist.split(",", " & ", " feat", " ft.").first().trim()
-        exact { LrcLib.get(clean, artist, null, dur) }?.let { return it }
-        Matching.best(LrcLib.search(clean, artist), dur)?.let { return it }
-        // Last try: the title alone (e.g. "Operation Pyrite" is filed under its label, not the singer Spotify shows).
-        // Only with a known length, so Matching.best can insist on a match within 10 seconds.
-        return if (dur != null && dur > 0) Matching.best(LrcLib.searchTitle(clean), dur) else null
+        val hit = exact { LrcLib.get(t.title, t.artist, t.album, dur) } ?: exact { LrcLib.get(clean, artist, null, dur) }
+        val results = try {
+            LrcLib.search(clean, artist)
+        } catch (e: IOException) {
+            if (hit == null) throw e
+            return Lookup(Matching.Choice(hit, unsure = false), complete = false)
+        }
+        return Lookup(Matching.choose(hit, results, dur), complete = true)
     }
 
     private inline fun exact(block: () -> Candidate): Candidate? =
@@ -109,9 +142,9 @@ class LyricsRepo(private val store: LyricsStore) {
     suspend fun search(q: String): List<Candidate> = withContext(Dispatchers.IO) { LrcLib.search(q) }
     suspend fun searchTitle(title: String): List<Candidate> = withContext(Dispatchers.IO) { LrcLib.searchTitle(title) }
 
-    private fun found(c: Candidate, pinned: Boolean, offset: Long): Shown {
+    private fun found(c: Candidate, pinned: Boolean, offset: Long, unsure: Boolean = false): Shown {
         val synced = c.synced?.let { Lrc.parseSynced(it) }?.takeIf { it.isNotEmpty() }
         val lines = synced ?: c.plain?.let { Lrc.parsePlain(it) } ?: emptyList()
-        return Shown.Found(c, lines, synced != null, pinned, offset)
+        return Shown.Found(c, lines, synced != null, pinned, offset, unsure = unsure && !pinned)
     }
 }

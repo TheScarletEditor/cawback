@@ -26,7 +26,14 @@ import javax.crypto.spec.GCMParameterSpec
 class LyricsStore(context: Context) {
     private val dir = File(context.filesDir, "lyrics").apply { mkdirs() }
 
-    data class Entry(val candidate: Candidate?, val pinned: Boolean, val offsetMs: Long, val fetchedAt: Long)
+    /**
+     * [matchVersion]: the matching rules this automatic match was made with (LyricsRepo.MATCHING; 0 before 0.5.0 or
+     * when the search failed), so older matches are looked up again. [unsure]: the records disagreed or none fitted.
+     */
+    data class Entry(
+        val candidate: Candidate?, val pinned: Boolean, val offsetMs: Long, val fetchedAt: Long,
+        val matchVersion: Int = 0, val unsure: Boolean = false,
+    )
 
     private fun file(key: String) = File(dir, "${hash(key)}.json")
 
@@ -49,6 +56,8 @@ class LyricsStore(context: Context) {
                 pinned = o.optBoolean("pinned"),
                 offsetMs = o.optLong("offset"),
                 fetchedAt = o.optLong("at"),
+                matchVersion = o.optInt("mv"),
+                unsure = o.optBoolean("u"),
             )
         }.getOrNull()
     }
@@ -56,6 +65,7 @@ class LyricsStore(context: Context) {
     fun save(key: String, e: Entry) {
         val o = JSONObject()
             .put("pinned", e.pinned).put("offset", e.offsetMs).put("at", e.fetchedAt)
+            .put("mv", e.matchVersion).put("u", e.unsure)
         // The song this belongs to, so "Forget this song" finds every cached version of it (Track.key: title, artist, ...).
         key.split('\u0001').takeIf { it.size >= 2 }?.let { o.put("s", SongKey.of(it[0], it[1])) }
         e.candidate?.let {

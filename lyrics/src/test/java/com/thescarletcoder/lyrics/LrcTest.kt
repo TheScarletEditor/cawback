@@ -56,8 +56,8 @@ class LrcTest {
         val a = Candidate(1, "Song", "Artist", "Album", 200.0, false, plain = "x", synced = null)
         val b = Candidate(2, "Song", "Artist", "Album", 201.0, false, plain = "x", synced = "[00:01.00]x")
         val c = Candidate(3, "Song", "Artist", "Album", 260.0, false, plain = "x", synced = "[00:01.00]x")
-        assertEquals(2L, Matching.best(listOf(a, b, c), durationSec = 200.0)?.id)
+        assertEquals(2L, Matching.choose(null, listOf(a, b, c), durationSec = 200.0)?.candidate?.id)
         // Nothing within 10 seconds: no confident match.
-        assertEquals(null, Matching.best(listOf(c), durationSec = 200.0)?.id)
+        assertEquals(null, Matching.choose(null, listOf(c), durationSec = 200.0))
     }
 }

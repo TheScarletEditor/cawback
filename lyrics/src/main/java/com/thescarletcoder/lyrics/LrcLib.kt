@@ -94,10 +94,63 @@ object Matching {
     /** "Song - Remastered 2011" -> "Song". Keeps "(Live)" etc., which change the lyrics. */
     fun cleanTitle(t: String) = t.replace(dashSuffix, "").replace(feat, "").trim()
 
-    /** Closest duration within 10 s; synced beats plain. Null if nothing is close enough. */
-    fun best(cands: List<Candidate>, durationSec: Double?): Candidate? {
-        val usable = cands.filter { it.synced != null || it.plain != null || it.instrumental }
-        val near = if (durationSec == null || durationSec <= 0) usable else usable.filter { abs(it.durationSec - durationSec) <= 10 }
-        return near.sortedWith(compareBy<Candidate>({ it.synced == null }, { durationSec?.let { d -> abs(it.durationSec - d) } ?: 0.0 })).firstOrNull()
+    /** What Lyrics chose for a song, and whether it's unsure of the timing (the records disagree, or none fits). */
+    data class Choice(val candidate: Candidate, val unsure: Boolean)
+
+    /** A synced record fits the song when its last line comes no later than this after the song's end. */
+    const val FIT_MARGIN_SEC = 5.0
+
+    /** Two records agree when they have the same lines and nearly all of them start within this of each other. */
+    const val AGREE_WITHIN_SEC = 0.5
+    private const val AGREE_SHARE = 0.9
+
+    /** Line start times of a synced record, in seconds (empty without synced lyrics). */
+    fun times(c: Candidate): List<Double> = c.synced?.let { s -> Lrc.parseSynced(s).mapNotNull { it.timeMs?.div(1000.0) } }.orEmpty()
+
+    /** False when the record's lyrics run past the end of the song: its timing belongs to a longer cut. */
+    fun fits(c: Candidate, durationSec: Double?): Boolean {
+        val t = times(c)
+        return durationSec == null || durationSec <= 0 || t.isEmpty() || t.last() <= durationSec + FIT_MARGIN_SEC
+    }
+
+    fun agree(a: List<Double>, b: List<Double>): Boolean =
+        a.isNotEmpty() && a.size == b.size && a.indices.count { abs(a[it] - b[it]) <= AGREE_WITHIN_SEC } >= AGREE_SHARE * a.size
+
+    /**
+     * Pick the record to show (0.5.0, owner Q16, Q26): only records within 10 s of the song's length; a synced record
+     * that fits the song beats words only; among those, the timing most records agree on beats a lone upload, even the
+     * exact hit; inside that group the exact hit, then the closest length, then more lines (D-038). No fitting synced
+     * record: words only if there are any, else the closest synced record, marked unsure. Null when nothing is close.
+     * Results of a title-only search never come here: another artist's song is never shown automatically.
+     */
+    fun choose(exact: Candidate?, results: List<Candidate>, durationSec: Double?): Choice? {
+        val known = durationSec != null && durationSec > 0
+        fun gap(c: Candidate) = if (known) abs(c.durationSec - durationSec!!) else 0.0
+        val near = (listOfNotNull(exact) + results).distinctBy { it.id }
+            .filter { it.synced != null || it.plain != null || it.instrumental }
+            .filter { !known || gap(it) <= 10 }
+        if (near.isEmpty()) return null
+        val synced = near.filter { times(it).isNotEmpty() }
+        val fitting = synced.filter { fits(it, durationSec) }
+        if (fitting.isNotEmpty()) {
+            val groups = mutableListOf<MutableList<Candidate>>()
+            fitting.forEach { c ->
+                val t = times(c)
+                groups.firstOrNull { agree(times(it.first()), t) }?.add(c) ?: groups.add(mutableListOf(c))
+            }
+            val ranked = groups.sortedWith(
+                compareByDescending<List<Candidate>> { it.size }
+                    .thenByDescending { g -> exact != null && g.any { it.id == exact.id } }
+                    .thenBy { g -> g.minOf { gap(it) } }
+                    .thenByDescending { g -> g.maxOf { times(it).size } },
+            )
+            val best = ranked.first()
+            val pick = best.firstOrNull { it.id == exact?.id }
+                ?: best.sortedWith(compareBy<Candidate>({ gap(it) }, { -times(it).size })).first()
+            // No majority: another timing has as many records behind it.
+            return Choice(pick, unsure = ranked.size > 1 && ranked[1].size >= best.size)
+        }
+        near.filter { it.synced == null }.minByOrNull { gap(it) }?.let { return Choice(it, unsure = false) }   // words only: honest
+        return Choice(synced.minBy { gap(it) }, unsure = true)   // only records that run past the song's end
     }
 }
