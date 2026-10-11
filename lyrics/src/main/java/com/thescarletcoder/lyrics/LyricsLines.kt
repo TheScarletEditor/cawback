@@ -55,6 +55,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -236,11 +238,11 @@ private fun LyricRow(
             GapDots(isCurrent, line.timeMs, gapEnd, offsetMs, np, alpha)
         } else {
             // One size and one weight: nothing reflows when the song moves on. 6% end room so the scaled line never clips.
+            val (size, height) = LyricsSettings.lineSp(compact, settings.textSize)
             Text(
                 line.text,
                 fontFamily = Inter, fontWeight = FontWeight.Medium,
-                fontSize = (if (compact) 18f else 26f).times(LyricsSettings.TEXT_SCALE[settings.textSize]).sp,
-                lineHeight = (if (compact) 24f else 34f).times(LyricsSettings.TEXT_SCALE[settings.textSize]).sp,
+                fontSize = size.sp, lineHeight = height.sp,
                 color = text,
                 modifier = Modifier.fillMaxWidth(0.94f).graphicsLayer {
                     this.alpha = alpha
@@ -249,6 +251,41 @@ private fun LyricRow(
                 },
             )
         }
+    }
+}
+
+/**
+ * Settings > Display > Text size: two sample lines drawn like the lyrics (the current line with its bar, then a dimmed
+ * next line), at the chosen size and in the layout this window uses now. Our own words, never real lyrics (0.4.1, Q2).
+ */
+@Composable
+internal fun TextSizePreview() {
+    val compact = LocalCompact.current
+    val settings = LocalSettings.current
+    val (size, height) = LyricsSettings.lineSp(compact, settings.textSize)
+    val text = L.text
+    val dark = L.p.dark
+    @Composable
+    fun Line(words: String, current: Boolean) {
+        Row(Modifier.fillMaxWidth().padding(vertical = if (compact) 4.dp else 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(3.dp).heightIn(min = 30.dp).graphicsLayer { alpha = if (current) 1f else 0f }
+                .background(text.copy(alpha = if (dark) 0.55f else 0.45f), RoundedCornerShape(2.dp)))
+            Spacer(Modifier.width(16.dp))
+            Text(
+                words, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = size.sp, lineHeight = height.sp, color = text,
+                modifier = Modifier.fillMaxWidth(0.94f).graphicsLayer {
+                    alpha = if (current) 1f else Tunables[LyricsTuning.alphaName(dark, 1)]
+                    val s = if (current) Tunables[LyricsTuning.LINE_SCALE] else 1f
+                    scaleX = s; scaleY = s
+                    transformOrigin = TransformOrigin(0f, 0.5f)
+                },
+            )
+        }
+    }
+    // TalkBack hears one line for it, not the two samples (owner: "Preview of the chosen text size").
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp).clearAndSetSemantics { contentDescription = "Preview of the chosen text size" }) {
+        Line("This is how your lyrics will look.", current = true)
+        Line("The next line waits here.", current = false)
     }
 }
 
@@ -285,7 +322,7 @@ private fun EndNote(isCurrent: Boolean, compact: Boolean, onPick: () -> Unit) {
 fun PlainLyrics(s: Shown.Found) {
     val compact = LocalCompact.current
     val context = LocalContext.current
-    val k = LyricsSettings.TEXT_SCALE[LocalSettings.current.textSize]
+    val k = LyricsSettings.TEXT_SCALE[LocalSettings.current.textSize.coerceIn(LyricsSettings.TEXT_SCALE.indices)]
     val list = rememberLazyListState()
     // Same as synced: start right under the header; the top fade only once something has scrolled away.
     val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0 } }

@@ -298,6 +298,7 @@ private fun SettingsTabs(tab: SettingsTab, onTab: (SettingsTab) -> Unit) {
 private fun LyricsDisplaySettings() {
     val settings = LocalSettings.current
     Text("Text size", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp))
+    TextSizePreview()
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         LyricsSettings.TEXT_SIZES.forEachIndexed { i, n -> Choice(n, settings.textSize == i) { settings.chooseTextSize(i) } }
     }

@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.4.1 plan
 
-Status: **answers recorded 2026-10-11 (Q1 to Q12); the owner said go. Slices 1 and 2 done; slice 3 next.** Prepared 2026-10-11 with /prep (resume mode) from the owner's 0.4.0 device-test feedback (scarlet-hq D-042):
+Status: **answers recorded 2026-10-11 (Q1 to Q14); the owner said go. Slices 1 to 3 done; next: device tests on the owner's devices, then /finalize 0.4.1.** Prepared 2026-10-11 with /prep (resume mode) from the owner's 0.4.0 device-test feedback (scarlet-hq D-042):
 
 > "The settings page is getting log. We should group and tab it. Add a preview to lyric text size in the settings also. the current lyric should be centered, and stay in view when making the split smaller."
 
@@ -112,6 +112,19 @@ Device-test lines for the owner: "Settings: the four tabs; each way in opens its
 - Two sample lines above the size choices in the Lyrics tab.
 - One shared size function used by the preview and the lyrics screen.
 - Checks: JVM test that both read the same table for every size and layout; emulator: each size, compact and full, light and dark.
+
+**Done 2026-10-11** (start `0e0654a`; one commit). `/finalize --slice`: checklist pass; one review agent (no blocking findings; two owner questions Q13, Q14; re-check after the fixes). Build passes, 70/70 unit tests (LineSizeTest 3 new), lint 0 errors, 49 older warnings. Grep: `TEXT_SCALE[` only in `LyricsSettings.lineSp` (Player.kt) and PlainLyrics. Emulator (smoke copy, removed after): small phone, Small, Medium and Largest, light and dark; the lyrics rows draw the same sizes as before (same numbers, now from `lineSp`). Not run on screen: the compact layout of the preview (needs a window under 560dp tall or Flex mode), TalkBack spoken output.
+
+| Id | Finding | Fix |
+| --- | --- | --- |
+| L3-1 | PlainLyrics read the size table without a range check, so a bad saved step could crash it. | Clamped, like `lineSp`. JVM test for out-of-range steps. |
+| L3-2 | TalkBack read both sample sentences. | Q13: one item, "Preview of the chosen text size". |
+| L3-3 | README didn't mention the preview. | Q14. |
+| L3-4 | Known, left as is: in the compact layout the lyric rows have 16dp side padding and Settings 24dp, so the preview is 16dp narrower and a sample can wrap a little sooner. | None (cosmetic). |
+| L3-5 | Known, left as is: a current-line scale above about 1.064 (only Tuning in personal builds can set it; the default is 1.06) can clip the end of the first sample line. | None (personal builds only). |
+| L3-6 | Noted: tapping a larger size makes the preview taller, so the size choices move down under the finger. A second quick tap lands on the preview, which does nothing. | None. |
+
+Device-test lines for the owner: "Settings > Lyrics: tap each text size; the two sample lines change size at once and match the lyrics screen's size afterwards. In split screen (short window) and Flex mode the preview shows the smaller compact size. With TalkBack, the preview reads 'Preview of the chosen text size'."
 
 ### After the slices
 

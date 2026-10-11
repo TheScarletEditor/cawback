@@ -2,6 +2,13 @@
 
 Against `docs/LYRICS-0.4.1-PLAN.md`. Newest first. scarlet-hq mirrors these (hq-log). Decisions before 0.4.1 live in scarlet-hq (D-001 to D-043) and `docs/FINALIZE-0.4.0.md`.
 
+## 2026-10-11 (the owner, slice 3 mini-audit)
+
+| # | Question | Answer (word for word) | Effect | Check |
+| --- | --- | --- | --- | --- |
+| Q13 | TalkBack read both sample sentences between "Text size" and the choices | "\"Preview of the chosen text size\" (Recommended)" | The preview is one TalkBack item with that description. | Code: `clearAndSetSemantics` on the preview (LyricsLines.kt); device test with TalkBack. |
+| Q14 | README Display bullet mentions the preview | "Yes, as written (Recommended)" | "**Display.** Text size (with a preview of how the lyrics will look), lines already sung ..." | grep README. |
+
 ## 2026-10-11 (the owner, slice 2 mini-audit)
 
 | # | Question | Answer (word for word) | Effect | Check |

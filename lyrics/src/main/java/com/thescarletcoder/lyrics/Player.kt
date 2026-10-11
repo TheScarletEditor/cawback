@@ -98,6 +98,15 @@ class LyricsSettings(context: Context) {
         val TEXT_SIZES = listOf("Small", "Medium", "Large", "Largest")
         /** Font scale for each text size step. */
         val TEXT_SCALE = listOf(0.85f, 1f, 1.18f, 1.36f)
+
+        /**
+         * A synced lyric line's font size and line height, in sp, for the layout ([compact]: a short window or Flex
+         * mode) and a text size step. The lyrics and the Settings preview both use it, so they can't drift apart.
+         */
+        fun lineSp(compact: Boolean, textSize: Int): Pair<Float, Float> {
+            val k = TEXT_SCALE[textSize.coerceIn(TEXT_SCALE.indices)]
+            return (if (compact) 18f else 26f) * k to (if (compact) 24f else 34f) * k
+        }
         val FOLLOW_DELAYS = listOf(2, 4, 8)
     }
 }

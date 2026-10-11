@@ -19,7 +19,7 @@ Settings has four tabs: Lyrics, Player, Library and Privacy. Lyrics and Player s
 
 - **Your music app.** Pick the app Lyrics follows, or let it follow whatever is playing. Follow only that app (so podcasts and other apps are never looked up), or prefer it and follow others too. Apps on the "Never follow" list are never looked up on lrclib.net.
 - **"Lyrics + your app" shortcut.** Adds an icon to your home screen that opens Lyrics and your music app side by side.
-- **Display.** Text size, lines already sung dimmed or hidden, how long to wait after you scroll before it follows the song again (2, 4 or 8 seconds), and keeping the screen on while synced lyrics play.
+- **Display.** Text size (with a preview of how the lyrics will look), lines already sung dimmed or hidden, how long to wait after you scroll before it follows the song again (2, 4 or 8 seconds), and keeping the screen on while synced lyrics play.
 - **Timing.** Some headphones play a little late. Set a delay once each for the speaker, wired headphones and Bluetooth, and Lyrics applies the right one whenever that output is in use.
 - **Flex mode.** On a flip phone half-folded on a table, the lyrics sit above the fold and the song, play/pause and More sit below it.
 
