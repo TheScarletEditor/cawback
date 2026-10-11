@@ -83,7 +83,12 @@ android {
     // On-device tests run against the test copy, never against the real app's id.
     testBuildType = "labtest"
     // Bouncy Castle and jspecify both carry an OSGi manifest no one reads on Android.
-    packaging { resources { excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF" } }
+    packaging {
+        resources { excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF" }
+        // SQLCipher's native libraries zipped in the APK (owner, 2026-10-11): about 9.5 MB to download instead of
+        // 17.4; Android unzips the one it needs at install.
+        jniLibs { useLegacyPackaging = true }
+    }
 }
 
 dependencies {
