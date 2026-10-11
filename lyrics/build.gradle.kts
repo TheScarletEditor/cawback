@@ -23,8 +23,8 @@ android {
         applicationId = "com.thescarletcoder.lyrics"
         minSdk = 34
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.4.0"
         buildConfigField("boolean", "TUNING", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

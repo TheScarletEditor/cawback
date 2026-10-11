@@ -14,3 +14,6 @@ __pycache__/
 
 # Signed release APKs (published on GitHub Releases, not in git)
 dist/
+
+# Kotlin compiler daemon logs
+.kotlin/
