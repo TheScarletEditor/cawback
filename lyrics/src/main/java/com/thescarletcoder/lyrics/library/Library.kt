@@ -15,9 +15,9 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
 import com.thescarletcoder.lyrics.Matching
-import java.io.File
 import kotlinx.coroutines.flow.Flow
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
+import java.io.File
 
 /*
  * The Library (Lyrics 0.4; scope sections 6 and 11): songs, plays, moments and notes, in their own encrypted
@@ -299,7 +299,7 @@ class PlayTracker {
     }
 
     /** Track.key without its last part, the length: the same song whether or not its length is known yet. */
-    private fun song(trackKey: String?) = trackKey?.substringBeforeLast('')
+    private fun song(trackKey: String?) = trackKey?.substringBeforeLast('\u0001')
 
     /**
      * Lyrics is closing (or history was switched off): finish whatever was playing. If the same song is still playing

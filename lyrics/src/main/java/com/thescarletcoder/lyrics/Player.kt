@@ -89,7 +89,10 @@ class LyricsSettings(context: Context) {
     /** The app actually followed: the chosen one, or null for whatever is playing (also before one is chosen). */
     fun effectivePlayer(): String? = player?.ifEmpty { null }
 
-    fun rules() = SessionPick.Rules(effectivePlayer(), effectivePlayer() != null && onlyPlayer, ignored)
+    fun rules(): SessionPick.Rules {
+        val p = effectivePlayer()
+        return SessionPick.Rules(p, p != null && onlyPlayer, ignored)
+    }
 
     companion object {
         val TEXT_SIZES = listOf("Small", "Medium", "Large", "Largest")

@@ -5,13 +5,14 @@ import android.content.SharedPreferences
 import androidx.room.withTransaction
 import com.thescarletcoder.lyrics.LyricsStore
 import com.thescarletcoder.lyrics.Track
-import java.time.ZoneId
-import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.ZoneId
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Listening history settings (scope section 6, ruling of 2026-10-09): off until the user turns it on. Read straight from the
@@ -56,7 +57,7 @@ object History {
      * forgotten is dropped instead of bringing the song back. In memory only, so nothing about it is ever written down;
      * every recorder lives in this process.
      */
-    private val forgotten = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val forgotten = ConcurrentHashMap<String, Long>()
 
     fun noteForgotten(songKey: String, now: Long = System.currentTimeMillis()) { forgotten[songKey] = now }
 
@@ -157,15 +158,15 @@ class LibraryRepo(context: Context) {
 
     /** "Forget this song": its plays, note, moments and cached lyrics, everywhere. */
     suspend fun forget(songUid: String) {
-        val forgotten = db.withTransaction {
+        val (songKey, hashes) = db.withTransaction {
             val s = dao.song(songUid) ?: return@withTransaction null
             val h = dao.trackKeys(songUid)
             dao.deleteSong(songUid)   // plays, moments, note history and track keys go with it
             dao.insertTombstone(Tombstone(songUid, "song", System.currentTimeMillis()))
             s.matchKey to h
         } ?: return
-        History.noteForgotten(forgotten.first)   // a listen of it already being timed won't bring it back
-        withContext(Dispatchers.IO) { LyricsStore(app).run { forgetHashed(forgotten.second); forgetSong(forgotten.first) } }
+        History.noteForgotten(songKey)   // a listen of it already being timed won't bring it back
+        withContext(Dispatchers.IO) { LyricsStore(app).run { forgetHashed(hashes); forgetSong(songKey) } }
     }
 
     val songs get() = dao.observeSongs()

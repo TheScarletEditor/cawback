@@ -2,6 +2,7 @@ package com.thescarletcoder.lyrics
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
@@ -10,17 +11,16 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.content.SharedPreferences
 import android.service.notification.NotificationListenerService
 import com.thescarletcoder.lyrics.library.History
 import com.thescarletcoder.lyrics.library.PlayRecorder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 
 /**
  * Present so Android grants access to media sessions; notifications themselves are ignored. With listening history

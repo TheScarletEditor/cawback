@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,11 +58,11 @@ import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.scarlet.Motion
 import com.thescarletcoder.scarlet.ThemeChoice
 import com.thescarletcoder.scarlet.TuningPanel
-import java.util.Date
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Date
 
 /** Empty states (nothing playing, not found, offline): raven and halo, Fraunces headline, one washed button. */
 @Composable
@@ -217,10 +218,10 @@ fun SettingsPanel(
     var saved by remember { mutableStateOf<Int?>(null) }
     var confirming by remember { mutableStateOf(false) }
     var cleared by remember { mutableStateOf(false) }
-    var resetNudges by remember { mutableStateOf(0) }   // 0 = not asked, 1 = confirming, 2 = done
+    var resetNudges by remember { mutableIntStateOf(0) }   // 0 = not asked, 1 = confirming, 2 = done
     var deleting by remember { mutableStateOf<String?>(null) }   // "history" or "library" while confirming
     var deleted by remember { mutableStateOf<String?>(null) }
-    var restores by remember { mutableStateOf(0) }
+    var restores by remember { mutableIntStateOf(0) }
     val hasLibrary = remember(deleted, restores) { LibraryDatabase.exists(context) }
     val apps = remember { MediaApps.all(context) }
     LaunchedEffect(Unit) { saved = repo.savedCount() }

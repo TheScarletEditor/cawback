@@ -67,12 +67,12 @@ import com.thescarletcoder.scarlet.Motion
 import com.thescarletcoder.scarlet.ScarletTokens
 import com.thescarletcoder.scarlet.ThemeChoice
 import com.thescarletcoder.scarlet.Tunables
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class LyricsActivity : ComponentActivity() {
     private lateinit var nowPlaying: NowPlaying
@@ -431,7 +431,7 @@ private fun LyricsScreen(
                                 onSettings = { panel = Panel.SETTINGS }, onClose = { panel = Panel.NONE })
                             panel == Panel.EXPORT -> ExportPanel(onClose = { panel = Panel.LIBRARY })
                             panel == Panel.SONG && (songUid != null || songPending != null) -> {
-                                val here = t != null && if (songUid != null) songUid == playingUid else songPending.let { it != null && it.title == t.title && it.artist == t.artist }
+                                val here = t != null && if (songUid != null) songUid == playingUid else songPending?.let { it.title == t.title && it.artist == t.artist } == true
                                 SongPage(songUid, songPending, position = if (here) np::positionMs else null, onSeek = if (here) np::seekTo else null,
                                     onClose = { panel = if (songFromLibrary) Panel.LIBRARY else Panel.NONE })
                             }

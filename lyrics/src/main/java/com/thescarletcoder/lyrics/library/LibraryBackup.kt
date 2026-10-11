@@ -40,6 +40,9 @@ object LibraryBackup {
     const val EXTENSION = "lyrbak"
 
     class WrongPassphrase : Exception("That passphrase doesn't open this backup, or the file is damaged or incomplete.")
+    const val NEWER = "This backup is from a newer Scarlet Lyrics. Update Lyrics, then restore."
+    private const val TOO_LARGE = "This backup is too large to be a Scarlet Lyrics Library."
+
     /** A backup that is recognised but can't be read here; the message is meant for the user. */
     class Unreadable(message: String) : IllegalArgumentException(message)
     class NotABackup : Exception("This isn't a Scarlet Lyrics Library backup.")
@@ -75,7 +78,7 @@ object LibraryBackup {
         if (len !in 1..4096) throw NotABackup()
         val header = ByteArray(len).also { din.readFully(it) }
         val h = runCatching { JSONObject(String(header, Charsets.UTF_8)) }.getOrElse { throw NotABackup() }
-        if (h.optInt("format") != FORMAT || h.optString("kdf") != "Argon2id") throw Unreadable("This backup is from a newer Scarlet Lyrics. Update Lyrics, then restore.")
+        if (h.optInt("format") != FORMAT || h.optString("kdf") != "Argon2id") throw Unreadable(NEWER)
         val damaged = Unreadable("This backup's settings look damaged.")
         val params = runCatching { Params(h.getInt("m"), h.getInt("t"), h.getInt("p")) }.getOrElse { throw damaged }
         // Capped at what this app writes (with room to grow), so a damaged header can't demand a huge allocation.
@@ -83,7 +86,7 @@ object LibraryBackup {
         val salt = runCatching { Base64.getDecoder().decode(h.getString("salt")) }.getOrElse { throw damaged }
         val iv = ByteArray(IV_BYTES).also { din.readFully(it) }
         val sealed = din.readNBytes(MAX_SEALED + 1)
-        if (sealed.size > MAX_SEALED) throw Unreadable("This backup is too large to be a Scarlet Lyrics Library.")
+        if (sealed.size > MAX_SEALED) throw Unreadable(TOO_LARGE)
         val key = argon2(passphrase, salt, params)
         val plain = try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -92,7 +95,7 @@ object LibraryBackup {
             cipher.doFinal(sealed)
         } catch (_: AEADBadTagException) { throw WrongPassphrase() } finally { key.fill(0) }
         val unpacked = GZIPInputStream(plain.inputStream()).use { it.readNBytes(MAX_UNPACKED + 1) }
-        if (unpacked.size > MAX_UNPACKED) throw Unreadable("This backup is too large to be a Scarlet Lyrics Library.")
+        if (unpacked.size > MAX_UNPACKED) throw Unreadable(TOO_LARGE)
         val json = unpacked.toString(Charsets.UTF_8)
         plain.fill(0)
         return LibrarySnapshot.fromJson(JSONObject(json))

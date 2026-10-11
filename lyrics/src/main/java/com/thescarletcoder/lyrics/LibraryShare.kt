@@ -58,29 +58,29 @@ import com.thescarletcoder.lyrics.library.LibraryKey
 import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.lyrics.library.LibrarySnapshot
 import com.thescarletcoder.lyrics.library.SongKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /*
  * Library > Export and Settings > Library backup (scope section 6). Nothing here runs unless the user taps it, and an
- * export or a backup goes only where she sends it.
+ * export or a backup goes only where they send it.
  */
 
 private enum class Range(val label: String) { WEEK("Last 7 days"), MONTH("Last 30 days"), YEAR("This year"), LAST_YEAR("Last year"), CUSTOM("Pick dates") }
 
-/** Library > Export. */
-private fun count(n: Int, one: String) = "$n " + if (n == 1) one else one + "s"
+private fun count(n: Int, one: String, many: String = one + "s") = "$n " + if (n == 1) one else many
 
 /** Backup, restore or delete found the Library's key gone: the Library screen offers a new one. */
 const val KEY_GONE = "Your Library can't be opened on this device any more. Open the Library to start a new one, then restore."
 
+/** Library > Export. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExportPanel(onClose: () -> Unit) {
@@ -127,7 +127,8 @@ fun ExportPanel(onClose: () -> Unit) {
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             status = runCatching {
-                val bytes = (snap ?: error("not loaded")).let { build().toByteArray() }
+                if (snap == null) error("not loaded")
+                val bytes = build().toByteArray()
                 withContext(Dispatchers.IO) {
                     try {
                         context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
@@ -138,8 +139,10 @@ fun ExportPanel(onClose: () -> Unit) {
                 }
                 "Saved."
             }.getOrElse {
-                if (snap == null) runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
-                if (snap == null) "Couldn't save the file. Try again." else "Couldn't save the file."
+                if (snap == null) {
+                    runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+                    "Couldn't save the file. Try again."
+                } else "Couldn't save the file."
             }
         }
     }
@@ -392,16 +395,17 @@ fun OnThisDevice(repo: LyricsRepo, refresh: Any?) {
     data class Facts(val cached: Int, val library: com.thescarletcoder.lyrics.library.LibraryCounts?, val exports: Int, val hasLibrary: Boolean)
     val facts by produceState<Facts?>(null, refresh) {
         value = withContext(Dispatchers.IO) {
+            val has = LibraryDatabase.exists(context)
             Facts(
                 repo.savedCount(),
-                if (LibraryDatabase.exists(context)) runCatching { LibraryRepo(context).counts() }.getOrNull() else null,
+                if (has) runCatching { LibraryRepo(context).counts() }.getOrNull() else null,
                 File(context.cacheDir, "exports").listFiles()?.size ?: 0,
-                LibraryDatabase.exists(context),
+                has,
             )
         }
     }
     val f = facts ?: return
-    fun n(count: Int, one: String, many: String = one + "s") = "$count " + if (count == 1) one else many
+    fun n(n: Int, one: String, many: String = one + "s") = count(n, one, many)
 
     Item(
         "Saved lyrics: " + n(f.cached, "song"),
@@ -424,7 +428,7 @@ fun OnThisDevice(repo: LyricsRepo, refresh: Any?) {
     )
     if (f.exports > 0) Item(
         "Last shared export: " + n(f.exports, "file"),
-        "Kept in Lyrics' own temporary storage so the app you shared it with could open it. Replaced at the next export, and Android can clear it any time.",
+        "Kept in Lyrics' own temporary storage so the app you shared it with could open it. Replaced at the next export and removed after a day; Android can clear it sooner.",
     )
     Item(
         "Your settings",

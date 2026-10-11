@@ -1,7 +1,7 @@
 # Finalize Scarlet Lyrics 0.4.0
 
 Started 2026-10-10. Base: v0.2.0 (75718c7). Diff: 37 files, +3735 -162.
-Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes.
+Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes. Dry run complete 2026-10-11: Stages 4 to 7 still to run before 0.4.0 ships.
 
 ## Stages
 
@@ -10,7 +10,7 @@ Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes.
 | 0 | Preflight | done | 0.4.0 / versionCode 3 already bumped in 7b7d0e6 (base is 0.2.0 / 2). Tree clean apart from the smoke build type and smoke.ps1, committed as setup. |
 | 1 | Audit | done | 4 agents (spec, rules, manifest, data). 11 mechanical fixes, 11 questions answered and applied. Re-check: 52/52 unit tests, R8 release build, androidTest compile, rule greps clean. One regression from the D10 fix was caught by an existing test and fixed. |
 | 2 | Code review | done | 3 review agents by area + 1 security agent. 22 mechanical fixes, 4 questions answered and applied; 53/53 tests, R8 release build and androidTest compile pass. 5 regressions from Stage 1 work caught (R1, R5, R6, R7, S2). |
-| 3 | Cleanup | running | |
+| 3 | Cleanup | done | Lint (no errors; new warnings fixed, older style warnings left), cleanup agent (15 of 16 applied), no TODOs or commented-out code, TUNING off in release, docs match. 53/53 tests, R8 release build, androidTest compile. |
 | 4 | QA | skipped (dry run) | |
 | 5 | Smoke test | skipped (dry run) | |
 | 6 | Ship | skipped (dry run) | |
@@ -76,6 +76,11 @@ Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes.
 | S1 | Review | mechanical | LibraryExport.kt | Line breaks in other apps' titles could fake lines in the AI-ready text export | Control characters become spaces | |
 | S2 | Review | mechanical | History.kt | Forgotten-song hashes sat in plain prefs (new in Stage 1) | Kept in memory only | |
 | S3 | Review | mechanical | LibraryBackup.kt | A crafted backup could unpack to gigabytes | Size caps | |
+| C4-C17 | Cleanup | mechanical | LibraryShare.kt, History.kt, LibraryBackup.kt, LibrarySnapshot.kt, Player.kt, LyricsStore.kt, LyricsActivity.kt, Library.kt | Misplaced KDoc, duplicate plural helper, double checks and double work, stale comment, invisible U+0001 in source, duplicated message strings, convoluted checks | Simplified, same behavior | |
+| C18 | Cleanup | mechanical | 8 files | Import order broken by this run's own edits (repo uses Android Studio order: java, javax, kotlin last) | Restored | |
+| C19 | Cleanup | mechanical | Panels.kt:220,223 | Lint: boxed Int state in new 0.4 code | mutableIntStateOf | |
+| C20 | Cleanup | dropped | LyricsStore.kt CacheCipher | Near copy of LibraryKey's Keystore key setup | Kept apart: merging touches key creation for little gain | |
+| C21 | Cleanup | question | LibraryShare.kt:431 | "Replaced at the next export" no longer the whole story | asked (Q16) | |
 
 ## Questions
 
@@ -99,6 +104,7 @@ Stage 1: Q1 to Q11. Stage 2: Q12 to Q15. All answered 2026-10-11.
 | Q14 | R13 | "Save to the pressed song (Recommended)" | The moment goes on the song whose line was long-pressed |
 | Q15 | R20 | "Raise to 48dp (Recommended)" | Small buttons and header icons get a 48dp tap area, same look |
 | Copy | Stage 2 text | "Yes, as written" | Applied |
+| Q16 | C21 | "Update it (Recommended)" | "Replaced at the next export and removed after a day; Android can clear it sooner." (the existing Android clause kept) |
 
 ## Ship
 

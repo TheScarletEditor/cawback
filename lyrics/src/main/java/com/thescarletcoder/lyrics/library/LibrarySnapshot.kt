@@ -42,7 +42,7 @@ data class LibrarySnapshot(
         private fun JSONObject.list(name: String) = optJSONArray(name)?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.orEmpty()
 
         fun fromJson(o: JSONObject): LibrarySnapshot {
-            if (o.optInt("schema", 0) !in 1..SCHEMA) throw LibraryBackup.Unreadable("This backup is from a newer Scarlet Lyrics. Update Lyrics, then restore.")
+            if (o.optInt("schema", 0) !in 1..SCHEMA) throw LibraryBackup.Unreadable(LibraryBackup.NEWER)
             return LibrarySnapshot(
                 songs = o.list("songs").map {
                     Song(it.getString("uid"), it.getString("matchKey"), it.getString("title"), it.getString("artist"),

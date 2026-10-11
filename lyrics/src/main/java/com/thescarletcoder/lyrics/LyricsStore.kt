@@ -4,6 +4,8 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.thescarletcoder.lyrics.library.SongKey
+import org.json.JSONException
+import org.json.JSONObject
 import java.io.File
 import java.security.KeyStore
 import java.security.MessageDigest
@@ -12,8 +14,6 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
-import org.json.JSONException
-import org.json.JSONObject
 
 /**
  * Small on-device cache: fetched lyrics, "wrong lyrics" picks and timing nudges, one file per track.
@@ -34,8 +34,8 @@ class LyricsStore(context: Context) {
         val f = file(key)
         val o = synchronized(LOCK) {
             if (!f.exists()) return null
-            val r = runCatching { read(f) }.getOrElse { return null }   // a passing error: try again next time
-            r ?: run { f.delete(); return null }
+            // A passing error: try again next time. Never readable: deleted.
+            runCatching { read(f) }.getOrElse { return null } ?: run { f.delete(); return null }
         }
         return runCatching {
             Entry(
