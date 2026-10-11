@@ -2,6 +2,18 @@
 
 Against `docs/LYRICS-0.4.1-PLAN.md`. Newest first. scarlet-hq mirrors these (hq-log). Decisions before 0.4.1 live in scarlet-hq (D-001 to D-043) and `docs/FINALIZE-0.4.0.md`.
 
+## 2026-10-11 (the owner, 0.4.2 timing plan)
+
+Against `docs/LYRICS-0.4.2-PLAN.md`.
+
+| # | Question | Answer (word for word) | Effect | Check |
+| --- | --- | --- | --- | --- |
+| Q15 | Which ideas go into the timing plan | "Match the right cut (Recommended)", "Show fit in Other versions (Recommended)", "\"Line up now\" nudge (Recommended)" | Slices 1, 3 and 4 of the plan; fixing cuts that skip a section is out. | Per slice. |
+| Q16 | Prefer the timing most records agree on | "Yes, add it (Recommended)" | Part of slice 1, with the cut check and D-038's fuller record. | JVM test: a lone outlier loses to a group that agrees. |
+| Q17 | A nudge when another version is picked | "Reset to 0 on a new version (Recommended)" | Slice 2: picking a version or going back to automatic sets the offset to 0. | JVM test: pin after a nudge gives 0. |
+| Q18 | Songs matched before the smarter matching | "Yes, the next time each plays (Recommended)" | Unpinned matches from before 0.4.2 are looked up again on their next play; picks by hand stay. | JVM test on the cache entry's matching version. |
+| Q19 | How "Line up now" works | "Tap when you hear the line (Recommended)" | Slice 4: the next line and a "Now" button in the More sheet's Timing section. | JVM test on the offset sum; device test. |
+
 ## 2026-10-11 (the owner, slice 3 mini-audit)
 
 | # | Question | Answer (word for word) | Effect | Check |
