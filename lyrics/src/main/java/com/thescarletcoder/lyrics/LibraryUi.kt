@@ -75,10 +75,21 @@ private fun rememberLibrary(): LibraryRepo? {
     val opened by produceState<Result<LibraryRepo>?>(null, attempt) {
         value = withContext(Dispatchers.IO) { runCatching { LibraryRepo(context) } }
     }
+    var starting by remember { mutableStateOf(false) }
     val r = opened ?: return null
     val e = r.exceptionOrNull() ?: return r.getOrNull()
-    if (e !is LibraryKey.Gone) throw e
-    KeyGoneNotice { scope.launch { withContext(Dispatchers.IO) { LibraryDatabase.startFresh(context) }; attempt++ } }
+    if (starting) return null
+    if (e is LibraryKey.Gone) KeyGoneNotice {
+        starting = true
+        scope.launch {
+            runCatching { withContext(Dispatchers.IO) { LibraryDatabase.startFresh(context) } }
+            attempt++; starting = false
+        }
+    } else Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Anything else may pass (a busy key store): say so and offer another try, never crash.
+        Text("The Library couldn't be opened just now.", fontFamily = Inter, fontSize = 16.sp, color = L.soft)
+        Washed("Try again", { attempt++ })
+    }
     return null
 }
 
@@ -208,7 +219,7 @@ private fun StatsPage(repo: LibraryRepo, onSong: (String) -> Unit) {
         }
         val r = result ?: return@Column
         if (r.plays == 0) {
-            Text("No plays ${period.label.lowercase()}.", fontFamily = Inter, fontSize = 16.sp, color = L.soft, modifier = Modifier.padding(top = 18.dp))
+            Text(if (period == LibraryStats.Period.ALL) "No plays yet." else "No plays ${period.label.lowercase()}.", fontFamily = Inter, fontSize = 16.sp, color = L.soft, modifier = Modifier.padding(top = 18.dp))
             return@Column
         }
         Text(LibraryStats.duration(r.listenedMs), fontFamily = Fraunces, fontSize = 30.sp, color = L.text, modifier = Modifier.padding(top = 18.dp))
@@ -261,10 +272,12 @@ fun SongPage(songUid: String?, pending: Track?, position: (() -> Long)?, onSeek:
     val row by remember(uid) { uid?.let { repo.songRow(it) } ?: flowOf(null) }.collectAsState(null)
     val moments by remember(uid) { uid?.let { repo.moments(it) } ?: flowOf(emptyList()) }.collectAsState(emptyList())
     val earlier by remember(uid) { uid?.let { repo.noteHistory(it) } ?: flowOf(emptyList()) }.collectAsState(emptyList())
-    var note by remember(uid) { mutableStateOf<TextFieldValue?>(null) }
+    var note by remember(songUid, pending) { mutableStateOf<TextFieldValue?>(null) }   // a draft survives the row being made
     var showEarlier by remember { mutableStateOf(false) }
     var label by remember { mutableStateOf(TextFieldValue("")) }
     var forgetting by remember { mutableStateOf(false) }
+    var adding by remember { mutableStateOf(false) }
+    var forgetFailed by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
     LaunchedEffect(row) {
         val r = row
@@ -272,7 +285,8 @@ fun SongPage(songUid: String?, pending: Track?, position: (() -> Long)?, onSeek:
         if (r != null) loaded = true
         if (r == null && loaded) onClose()   // forgotten (here, or on the other device after a sync)
     }
-    val r = row ?: pending?.takeIf { uid == null }?.let { SongRow("", it.title, it.artist, it.album, false, "", 0, null, null, null) } ?: return
+    // Until its row arrives (also the moment after a first save), a pending song shows what's playing.
+    val r = row ?: pending?.let { SongRow("", it.title, it.artist, it.album, false, "", 0, null, null, null) } ?: return
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -338,9 +352,13 @@ fun SongPage(songUid: String?, pending: Track?, position: (() -> Long)?, onSeek:
             Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 NoteField(label, singleLine = true, hint = "Label (optional)") { label = it }
                 Washed("Add a moment here", {
+                    if (adding) return@Washed
                     val at = position()
                     val text = label.text.trim().take(80)
-                    scope.launch { ensureUid()?.let { repo.addMoment(it, at, text); label = TextFieldValue("") } }
+                    adding = true
+                    scope.launch {
+                        try { ensureUid()?.let { repo.addMoment(it, at, text); label = TextFieldValue("") } } finally { adding = false }
+                    }
                 })
             }
         }
@@ -351,9 +369,11 @@ fun SongPage(songUid: String?, pending: Track?, position: (() -> Long)?, onSeek:
             if (forgetting) {
                 Text("Remove its plays, note, moments and saved lyrics? This can't be undone.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
                 Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Washed("Forget", { scope.launch { repo.forget(saved) } })
+                    Washed("Forget", { scope.launch { if (runCatching { repo.forget(saved) }.isFailure) forgetFailed = true } })
                     Washed("Cancel", { forgetting = false })
                 }
+                if (forgetFailed) Text("That didn't finish. Nothing was forgotten.", fontFamily = Inter, fontSize = 15.sp, color = L.soft,
+                    modifier = Modifier.padding(top = 8.dp))
             } else Washed("Forget this song", { forgetting = true })
         }
         Box(Modifier.heightIn(min = 32.dp))
@@ -387,6 +407,7 @@ fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: suspend (Long, String) -
     var label by remember(at) { mutableStateOf(TextFieldValue("")) }
     var saved by remember(at) { mutableStateOf(false) }
     var failed by remember(at) { mutableStateOf(false) }
+    var saving by remember(at) { mutableStateOf(false) }
     LaunchedEffect(saved) { if (saved) { delay(1_200); onClose() } }
     if (at == null) return
     Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.35f))
@@ -405,7 +426,13 @@ fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: suspend (Long, String) -
                 Text(if (failed) "Couldn't save that moment. Try again?" else "Saves the time and your label, not the words.", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
                 NoteField(label, singleLine = true, hint = "Label (optional)") { label = it }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Washed("Save", { scope.launch { if (onSave(at, label.text.trim().take(80))) saved = true else failed = true } })
+                    Washed("Save", {
+                        if (saving) return@Washed
+                        saving = true
+                        scope.launch {
+                            try { if (onSave(at, label.text.trim().take(80))) saved = true else failed = true } finally { saving = false }
+                        }
+                    })
                     Washed("Cancel", onClose)
                 }
             }

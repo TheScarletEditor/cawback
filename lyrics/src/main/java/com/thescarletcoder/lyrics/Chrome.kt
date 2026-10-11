@@ -77,10 +77,10 @@ fun Header(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> 
         }
         Spacer(Modifier.width(10.dp))
         if (track != null) {
-            IconButton(40.dp, onPlayPause, if (playing) Icons.pause else Icons.play)
+            IconButton(40.dp, if (playing) "Pause" else "Play", onPlayPause, if (playing) Icons.pause else Icons.play)
             Spacer(Modifier.width(8.dp))
         }
-        IconButton(40.dp, onMore, Icons.more)
+        IconButton(40.dp, "More", onMore, Icons.more)
     }
 }
 
@@ -107,8 +107,8 @@ fun FlexControls(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: 
         }
         Spacer(Modifier.size(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (track != null) IconButton(64.dp, onPlayPause, if (playing) Icons.pause else Icons.play)
-            IconButton(52.dp, onMore, Icons.more)
+            if (track != null) IconButton(64.dp, if (playing) "Pause" else "Play", onPlayPause, if (playing) Icons.pause else Icons.play)
+            IconButton(52.dp, "More", onMore, Icons.more)
         }
     }
 }

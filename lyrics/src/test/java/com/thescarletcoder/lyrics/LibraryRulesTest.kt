@@ -109,6 +109,19 @@ class LibraryRulesTest {
         assertTrue(t.close(610_000)!!.earlierCounted)
     }
 
+    @Test fun offOrPauseEndsTheListenForGood() {
+        // 3 min heard, history turned off (drop), back on while the same song plays: a fresh listen, nothing carried over.
+        val t = PlayTracker()
+        t.at("a", true, 0)
+        t.close(180_000)
+        t.drop()
+        t.at("a", true, 200_000)
+        val f = t.close(230_000)!!
+        assertEquals(30_000, f.listenedMs)
+        assertEquals(200_000, f.startedAt)
+        assertFalse(f.earlierCounted)
+    }
+
     @Test fun anotherSongAfterClosingStartsFresh() {
         val t = PlayTracker()
         t.at("a", true, 0)

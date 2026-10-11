@@ -5,12 +5,13 @@ import android.content.SharedPreferences
 import androidx.room.withTransaction
 import com.thescarletcoder.lyrics.LyricsStore
 import com.thescarletcoder.lyrics.Track
+import java.time.ZoneId
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.time.ZoneId
-import java.util.UUID
+import kotlinx.coroutines.withContext
 
 /**
  * Listening history settings (scope section 6, ruling of 2026-10-09): off until the user turns it on. Read straight from the
@@ -51,52 +52,64 @@ object History {
     }
 
     /**
-     * Songs forgotten in the last day, as hashes (never the titles): a listen of one that was already being timed
-     * when it was forgotten is dropped instead of bringing the song back.
+     * Songs forgotten while Lyrics runs (song key to when): a listen of one that was already being timed when it was
+     * forgotten is dropped instead of bringing the song back. In memory only, so nothing about it is ever written down;
+     * every recorder lives in this process.
      */
-    private const val FORGOTTEN = "history_forgotten"
+    private val forgotten = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
-    fun noteForgotten(context: Context, songKey: String, now: Long = System.currentTimeMillis()) {
-        val p = prefs(context)
-        val keep = p.getStringSet(FORGOTTEN, emptySet())!!.filter { now - (it.substringAfter(' ').toLongOrNull() ?: 0) < 86_400_000L }
-        p.edit().putStringSet(FORGOTTEN, (keep + "${LyricsStore.hash(songKey)} $now").toSet()).apply()
-    }
+    fun noteForgotten(songKey: String, now: Long = System.currentTimeMillis()) { forgotten[songKey] = now }
 
-    fun forgottenSince(context: Context, songKey: String, since: Long): Boolean {
-        val h = LyricsStore.hash(songKey)
-        return prefs(context).getStringSet(FORGOTTEN, emptySet())!!.any {
-            it.substringBefore(' ') == h && (it.substringAfter(' ').toLongOrNull() ?: 0) >= since
-        }
-    }
+    fun forgottenSince(songKey: String, since: Long): Boolean = forgotten[songKey]?.let { it >= since } ?: false
 
     fun records(context: Context, where: Where, now: Long): Boolean {
         val p = prefs(context)
         return records(mode(p), where, p.getLong(PAUSED, 0), now)
     }
+
+    /** History is on and not paused (by either recorder). */
+    fun on(context: Context, now: Long): Boolean {
+        val p = prefs(context)
+        return mode(p) != Mode.OFF && now >= p.getLong(PAUSED, 0)
+    }
 }
 
 /**
- * Feeds what's playing to a [PlayTracker] and saves the listens that count. While history is off or paused it drops
- * the song being timed, so nothing from that time is ever written.
+ * Feeds what's playing to the one shared [PlayTracker] and saves the listens that count. Only the recorder for the
+ * current mode feeds it, so switching between "only while open" and "always" mid-song hands the listen over instead of
+ * dropping it, and a recreated screen or reconnected listener carries on with it. Off or paused drops the song being
+ * timed for good, so nothing from that time is ever written or continued.
  */
 class PlayRecorder(context: Context, private val where: History.Where) {
     private val app = context.applicationContext
-    private val tracker = PlayTracker()
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun onState(track: Track?, playing: Boolean) {
         val now = System.currentTimeMillis()
-        if (!History.records(app, where, now)) { tracker.close(now); return }
-        tracker.update(track?.key, track?.title.orEmpty(), track?.artist.orEmpty(), track?.album, track?.durationMs, playing, now)
-            ?.let(::finish)
+        val done = synchronized(tracker) {
+            if (!History.records(app, where, now)) {
+                if (!History.on(app, now)) tracker.drop()   // off or paused; otherwise it's the other recorder's listen
+                return
+            }
+            tracker.update(track?.key, track?.title.orEmpty(), track?.artist.orEmpty(), track?.album, track?.durationMs, playing, now)
+        }
+        done?.let(::finish)
     }
 
-    fun close() { tracker.close(System.currentTimeMillis())?.let(::finish) }
+    fun close() {
+        val now = System.currentTimeMillis()
+        if (!History.records(app, where, now)) return
+        synchronized(tracker) { tracker.close(now) }?.let(::finish)
+    }
+
+    private companion object {
+        val tracker = PlayTracker()
+    }
 
     private fun finish(f: PlayTracker.Finished) {
         if (f.earlierCounted || !PlayRule.counts(f.durationMs, f.listenedMs)) return
         if (!History.records(app, where, System.currentTimeMillis())) return
-        if (History.forgottenSince(app, SongKey.of(f.title, f.artist), f.startedAt)) return
+        if (History.forgottenSince(SongKey.of(f.title, f.artist), f.startedAt)) return
         io.launch { runCatching { LibraryRepo(app).recordPlay(f) } }
     }
 }
@@ -151,8 +164,8 @@ class LibraryRepo(context: Context) {
             dao.insertTombstone(Tombstone(songUid, "song", System.currentTimeMillis()))
             s.matchKey to h
         } ?: return
-        History.noteForgotten(app, forgotten.first)   // a listen of it already being timed won't bring it back
-        LyricsStore(app).run { forgetHashed(forgotten.second); forgetSong(forgotten.first) }
+        History.noteForgotten(forgotten.first)   // a listen of it already being timed won't bring it back
+        withContext(Dispatchers.IO) { LyricsStore(app).run { forgetHashed(forgotten.second); forgetSong(forgotten.first) } }
     }
 
     val songs get() = dao.observeSongs()

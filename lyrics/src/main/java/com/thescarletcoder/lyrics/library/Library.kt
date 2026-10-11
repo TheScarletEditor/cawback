@@ -206,17 +206,20 @@ abstract class LibraryDatabase : RoomDatabase() {
         }
 
         /**
-         * After LibraryKey.Gone: sets the unreadable database aside (renamed, never deleted) and forgets its key, so the
+         * After LibraryKey.Gone: sets the unreadable database and its wrapped key aside (renamed, never deleted), so the
          * next open makes a new, empty Library that a backup can be restored into.
          */
         fun startFresh(context: Context) = synchronized(this) {
             instance?.close(); instance = null
             val db = context.getDatabasePath(NAME)
             val aside = "library-unreadable-${System.currentTimeMillis()}"
-            listOf("", "-wal", "-shm", "-journal").forEach { ext ->
-                File(db.path + ext).takeIf { it.exists() }?.renameTo(File(db.parentFile, aside + ".db" + ext))
+            if (db.exists()) db.renameTo(File(db.parentFile, "$aside.db"))
+            // Its journal files belong to the old database only: moved with it, or removed so the new one starts clean.
+            listOf("-wal", "-shm", "-journal").forEach { ext ->
+                val f = File(db.path + ext)
+                if (f.exists() && !f.renameTo(File(db.parentFile, "$aside.db$ext"))) f.delete()
             }
-            LibraryKey.discard(context)
+            LibraryKey.setAside(context, aside)
         }
     }
 }
@@ -303,6 +306,9 @@ class PlayTracker {
      * when Lyrics comes back, the listen continues: an app switch doesn't split it, and a long song isn't counted twice.
      */
     fun close(now: Long): Finished? = finish(now)?.also { closed = it; closedAt = now }
+
+    /** History was turned off or paused: the song being timed is dropped, and can't be continued later either. */
+    fun drop() { key = null; playingSince = null; listened = 0; earlierCounted = false; closed = null }
 
     private fun finish(now: Long): Finished? {
         val k = key ?: return null

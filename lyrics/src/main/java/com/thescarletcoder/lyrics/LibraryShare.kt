@@ -76,6 +76,8 @@ import kotlinx.coroutines.withContext
 private enum class Range(val label: String) { WEEK("Last 7 days"), MONTH("Last 30 days"), YEAR("This year"), LAST_YEAR("Last year"), CUSTOM("Pick dates") }
 
 /** Library > Export. */
+private fun count(n: Int, one: String) = "$n " + if (n == 1) one else one + "s"
+
 /** Backup, restore or delete found the Library's key gone: the Library screen offers a new one. */
 const val KEY_GONE = "Your Library can't be opened on this device any more. Open the Library to start a new one, then restore."
 
@@ -85,7 +87,10 @@ fun ExportPanel(onClose: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val zone = remember { ZoneId.systemDefault() }
-    val snap by produceState<LibrarySnapshot?>(null) { value = withContext(Dispatchers.IO) { runCatching { LibraryRepo(context).snapshot() }.getOrNull() } }
+    var failed by remember { mutableStateOf<Throwable?>(null) }
+    val snap by produceState<LibrarySnapshot?>(null) {
+        value = withContext(Dispatchers.IO) { runCatching { LibraryRepo(context).snapshot() } }.onFailure { failed = it }.getOrNull()
+    }
 
     var which by remember { mutableStateOf(Which.ALL) }
     var range by remember { mutableStateOf(Range.MONTH) }
@@ -122,9 +127,20 @@ fun ExportPanel(onClose: () -> Unit) {
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             status = runCatching {
-                withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(build().toByteArray()) } }
+                val bytes = (snap ?: error("not loaded")).let { build().toByteArray() }
+                withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
+                    } catch (e: Exception) {
+                        runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }   // no empty file left behind
+                        throw e
+                    }
+                }
                 "Saved."
-            }.getOrElse { "Couldn't save the file." }
+            }.getOrElse {
+                if (snap == null) runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+                if (snap == null) "Couldn't save the file. Try again." else "Couldn't save the file."
+            }
         }
     }
 
@@ -174,7 +190,13 @@ fun ExportPanel(onClose: () -> Unit) {
         }
 
         Text(
-            when (songs) { null -> " "; 0 -> "Nothing to export with these choices."; 1 -> "1 song."; else -> "$songs songs." },
+            when {
+                failed is LibraryKey.Gone -> KEY_GONE
+                failed != null -> "The Library couldn't be opened just now. Go back and try again."
+                songs == null -> " "
+                songs == 0 -> "Nothing to export with these choices."
+                else -> count(songs, "song") + "."
+            },
             fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(top = 20.dp),
         )
         if (songs != null && songs > 0) {
@@ -253,6 +275,11 @@ fun LibraryBackupSection(onRestored: () -> Unit) {
         val p = pass.text.toCharArray()
         forget(); mode = null
         if (uri == null) { p.fill(' '); return@rememberLauncherForActivityResult }
+        if (p.size < LibraryBackup.MIN_PASSPHRASE) {   // Android stopped Lyrics while the picker was open: never back up without it
+            runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            status = "Enter your passphrase again, then choose where to save."
+            return@rememberLauncherForActivityResult
+        }
         busy = true; status = "Backing up..."
         scope.launch {
             status = runCatching {
@@ -268,7 +295,7 @@ fun LibraryBackupSection(onRestored: () -> Unit) {
                     }
                     snap
                 }
-            }.fold({ "Backed up ${it.songs.size} songs and ${it.plays.size} plays. Keep the passphrase somewhere safe: without it this backup can't be opened." },
+            }.fold({ "Backed up ${count(it.songs.size, "song")} and ${count(it.plays.size, "play")}. Keep the passphrase somewhere safe: without it this backup can't be opened." },
                 { e -> if (e is LibraryKey.Gone) KEY_GONE else "The backup didn't finish. Nothing was changed." })
             p.fill(' ')
             busy = false
@@ -312,7 +339,7 @@ fun LibraryBackupSection(onRestored: () -> Unit) {
                                 LibraryRepo(context).restore(snap)
                             }
                         }.fold(
-                            { r -> forget(); mode = null; onRestored(); "Restored. Your Library now has ${r.songsAfter} songs (was ${r.songsBefore}) and ${r.playsAfter} plays (was ${r.playsBefore})." },
+                            { r -> forget(); mode = null; onRestored(); "Restored. Your Library now has ${count(r.songsAfter, "song")} (was ${r.songsBefore}) and ${count(r.playsAfter, "play")} (was ${r.playsBefore})." },
                             { e ->
                                 when (e) {
                                     is LibraryKey.Gone -> KEY_GONE
@@ -362,13 +389,14 @@ private fun Secret(value: TextFieldValue, hint: String, onChange: (TextFieldValu
 fun OnThisDevice(repo: LyricsRepo, refresh: Any?) {
     val context = LocalContext.current
     val settings = LocalSettings.current
-    data class Facts(val cached: Int, val library: com.thescarletcoder.lyrics.library.LibraryCounts?, val exports: Int)
+    data class Facts(val cached: Int, val library: com.thescarletcoder.lyrics.library.LibraryCounts?, val exports: Int, val hasLibrary: Boolean)
     val facts by produceState<Facts?>(null, refresh) {
         value = withContext(Dispatchers.IO) {
             Facts(
                 repo.savedCount(),
                 if (LibraryDatabase.exists(context)) runCatching { LibraryRepo(context).counts() }.getOrNull() else null,
                 File(context.cacheDir, "exports").listFiles()?.size ?: 0,
+                LibraryDatabase.exists(context),
             )
         }
     }
@@ -383,7 +411,7 @@ fun OnThisDevice(repo: LyricsRepo, refresh: Any?) {
     )
     val lib = f.library
     Item(
-        if (lib == null) "Library: empty" else "Library: " + listOf(
+        if (lib == null) (if (f.hasLibrary) "Library: can't be opened on this device right now" else "Library: empty") else "Library: " + listOf(
             n(lib.songs, "song"), n(lib.plays, "play"), n(lib.notes, "note"), n(lib.moments, "moment"), n(lib.favorites, "favorite"),
         ).joinToString(", ") + if (lib.earlierNotes > 0) " (and " + n(lib.earlierNotes, "earlier note") + ")" else "",
         "Encrypted, with a key kept by Android's secure key store that never leaves this device. Listening history is " +

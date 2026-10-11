@@ -2,11 +2,13 @@ package com.thescarletcoder.lyrics.library
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import java.io.File
 import java.security.KeyStore
 import java.security.SecureRandom
-import java.security.GeneralSecurityException
+import java.security.UnrecoverableKeyException
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -34,12 +36,15 @@ object LibraryKey {
         val file = File(context.noBackupFilesDir, FILE)
         if (file.exists()) {
             val blob = file.readBytes()
-            val key = existingKey() ?: throw Gone()   // never a new key for an old file: it could never open it
+            if (blob.size <= IV_BYTES) throw Gone()
+            // Never a new key for an old file: it could never open it. Only a key that is really gone or replaced
+            // counts as Gone; anything else (a passing Keystore error) is thrown as it is, and opening is tried again.
+            val key = try { existingKey() } catch (_: UnrecoverableKeyException) { null } ?: throw Gone()
             try {
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                 cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, blob, 0, IV_BYTES))
                 return cipher.doFinal(blob, IV_BYTES, blob.size - IV_BYTES)
-            } catch (_: GeneralSecurityException) { throw Gone() }
+            } catch (_: AEADBadTagException) { throw Gone() } catch (_: KeyPermanentlyInvalidatedException) { throw Gone() }
         }
         if (LibraryDatabase.exists(context)) throw Gone()   // a database with no key: a new key can't open it
         val key = keystoreKey()
@@ -52,8 +57,11 @@ object LibraryKey {
         return raw
     }
 
-    /** Starting fresh: the wrapped key goes with the old database (the Keystore key itself is reused). */
-    fun discard(context: Context) { File(context.noBackupFilesDir, FILE).delete() }
+    /** Starting fresh: the wrapped key is set aside with the old database ([name]), never deleted. */
+    fun setAside(context: Context, name: String) {
+        val f = File(context.noBackupFilesDir, FILE)
+        if (f.exists() && !f.renameTo(File(context.noBackupFilesDir, "$name.key"))) f.delete()
+    }
 
     private fun existingKey(): SecretKey? =
         KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.getKey(ALIAS, null) as? SecretKey

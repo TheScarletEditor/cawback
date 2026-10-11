@@ -99,11 +99,11 @@ object LibraryExport {
             appendLine(); appendLine(title)
             list.forEach { r ->
                 val s = r.song
-                val cols = mutableListOf(s.title, s.artist, s.album.orEmpty())
+                val cols = mutableListOf(oneLine(s.title), oneLine(s.artist), oneLine(s.album.orEmpty()))
                 if (o.counts) cols += listOf(r.plays.toString(), day(r.first, zone), r.last?.let { day(it, zone) } ?: "")
                 appendLine("- " + cols.joinToString(" | "))
                 if (o.notes && s.note.isNotBlank()) appendLine("    Note: " + s.note.trim().replace("\n", "\n          "))
-                if (o.moments) r.moments.forEach { m -> appendLine("    Moment ${clock(m.atMs)}" + if (m.label.isNotBlank()) ": ${m.label.trim()}" else "") }
+                if (o.moments) r.moments.forEach { m -> appendLine("    Moment ${clock(m.atMs)}" + if (m.label.isNotBlank()) ": ${oneLine(m.label).trim()}" else "") }
             }
         }
         if (o.which == Which.FAVORITES) section("Favorites", rows)
@@ -134,4 +134,7 @@ object LibraryExport {
         val safe = if (v.isNotEmpty() && v[0] in "=+-@\t\r") "'$v" else v
         return if (safe.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + safe.replace("\"", "\"\"") + "\"" else safe
     }
+
+    /** Titles come from other apps' media sessions: a line break or control character in one can't fake extra lines. */
+    private fun oneLine(s: String) = s.replace(Regex("\\p{Cntrl}"), " ")
 }

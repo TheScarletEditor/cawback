@@ -31,6 +31,9 @@ object LibraryBackup {
     const val MEMORY_KIB = 64 * 1024
     private const val MAX_MEMORY_KIB = 256 * 1024
     private const val IV_BYTES = 12
+    // Far beyond any real Library (no lyrics are in it), small enough that a crafted file can't exhaust memory.
+    private const val MAX_SEALED = 64 * 1024 * 1024
+    private const val MAX_UNPACKED = 128 * 1024 * 1024
     const val PASSES = 3
     const val LANES = 2
     const val MIN_PASSPHRASE = 8
@@ -44,6 +47,7 @@ object LibraryBackup {
     data class Params(val memoryKiB: Int = MEMORY_KIB, val passes: Int = PASSES, val lanes: Int = LANES)
 
     fun write(out: OutputStream, snap: LibrarySnapshot, passphrase: CharArray, now: Long = System.currentTimeMillis(), params: Params = Params()) {
+        require(passphrase.size >= MIN_PASSPHRASE) { "passphrase too short" }
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val header = JSONObject().put("format", FORMAT).put("kdf", "Argon2id").put("m", params.memoryKiB).put("t", params.passes)
             .put("p", params.lanes).put("salt", Base64.getEncoder().encodeToString(salt)).put("created", now)
@@ -78,7 +82,8 @@ object LibraryBackup {
         if (params.memoryKiB !in 8..MAX_MEMORY_KIB || params.passes !in 1..10 || params.lanes !in 1..8) throw damaged
         val salt = runCatching { Base64.getDecoder().decode(h.getString("salt")) }.getOrElse { throw damaged }
         val iv = ByteArray(IV_BYTES).also { din.readFully(it) }
-        val sealed = din.readBytes()
+        val sealed = din.readNBytes(MAX_SEALED + 1)
+        if (sealed.size > MAX_SEALED) throw Unreadable("This backup is too large to be a Scarlet Lyrics Library.")
         val key = argon2(passphrase, salt, params)
         val plain = try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -86,7 +91,9 @@ object LibraryBackup {
             cipher.updateAAD(magic + header)
             cipher.doFinal(sealed)
         } catch (_: AEADBadTagException) { throw WrongPassphrase() } finally { key.fill(0) }
-        val json = GZIPInputStream(plain.inputStream()).use { it.readBytes() }.toString(Charsets.UTF_8)
+        val unpacked = GZIPInputStream(plain.inputStream()).use { it.readNBytes(MAX_UNPACKED + 1) }
+        if (unpacked.size > MAX_UNPACKED) throw Unreadable("This backup is too large to be a Scarlet Lyrics Library.")
+        val json = unpacked.toString(Charsets.UTF_8)
         plain.fill(0)
         return LibrarySnapshot.fromJson(JSONObject(json))
     }

@@ -27,8 +27,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
@@ -43,20 +41,19 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.thescarletcoder.scarlet.Motion
-import com.thescarletcoder.scarlet.ScarletTokens
-import com.thescarletcoder.scarlet.ThemeChoice
-import com.thescarletcoder.scarlet.Tunables
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -66,6 +63,10 @@ import com.thescarletcoder.lyrics.library.History
 import com.thescarletcoder.lyrics.library.LibraryDatabase
 import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.lyrics.library.PlayRecorder
+import com.thescarletcoder.scarlet.Motion
+import com.thescarletcoder.scarlet.ScarletTokens
+import com.thescarletcoder.scarlet.ThemeChoice
+import com.thescarletcoder.scarlet.Tunables
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -84,6 +85,8 @@ class LyricsActivity : ComponentActivity() {
     private val foldTop = mutableStateOf<Int?>(null)
     /** Set when Lyrics is opened fresh; the first start after that checks whether your music app should join it. */
     private var checkPlayer = false
+    // OPEN_PLAYER arrived: open the music app in onStart, once what's playing is known ("whatever is playing" needs it).
+    private var openPlayerPending = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -149,12 +152,16 @@ class LyricsActivity : ComponentActivity() {
         access.value = nowPlaying.hasAccess()
         nowPlaying.start()
         route.start()
+        if (openPlayerPending) {
+            openPlayerPending = false
+            window.decorView.post { openPlayerAlongside() }
+        }
         if (checkPlayer) {
             checkPlayer = false
             // Ruling of 2026-10-09: opening Lyrics while your music app is already playing brings it up beside Lyrics, on phones
             // and tablets, unless the screen is already split. Checked once the window knows its mode.
             window.decorView.post {
-                val pkg = settings.effectivePlayer()
+                val pkg = settings.effectivePlayer() ?: nowPlaying.currentPackage   // no app picked: whatever is playing
                 if (!isInMultiWindowMode && pkg != null && nowPlaying.isPlaying(pkg)) openPlayerAlongside()
             }
         }
@@ -176,7 +183,8 @@ class LyricsActivity : ComponentActivity() {
         val asked = i.getBooleanExtra(EXTRA_OPEN_PLAYER, false) || i.getBooleanExtra(EXTRA_OPEN_SPOTIFY, false)
         if (!asked) return false
         i.removeExtra(EXTRA_OPEN_PLAYER); i.removeExtra(EXTRA_OPEN_SPOTIFY)
-        openPlayerAlongside()
+        // Already on screen: what's playing is known now. Otherwise onStart opens it once it is.
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) openPlayerAlongside() else openPlayerPending = true
         return true
     }
 
@@ -261,16 +269,18 @@ private fun LyricsScreen(
     var shown by remember { mutableStateOf<Shown?>(null) }
     var finding by remember { mutableStateOf(false) }
     var slow by remember { mutableStateOf(false) }
-    var panel by remember { mutableStateOf(Panel.NONE) }
-    var sheet by remember { mutableStateOf(false) }
+    // Saveable: a font size or keyboard change recreates the activity, and the open page should survive it.
+    var panel by rememberSaveable { mutableStateOf(Panel.NONE) }
+    var sheet by rememberSaveable { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
     // The Library: which song's page is open, where Back goes from it, and the playing song's uid (moments, seeking).
-    var songUid by remember { mutableStateOf<String?>(null) }
-    var songFromLibrary by remember { mutableStateOf(false) }
+    var songUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var songFromLibrary by rememberSaveable { mutableStateOf(false) }
     var songPending by remember { mutableStateOf<Track?>(null) }   // the playing song, not in the Library yet
     var playingUid by remember { mutableStateOf<String?>(null) }
     // A lyric line was long-pressed: the time to bookmark (the sheet is open while this is set).
-    var momentAt by remember { mutableStateOf<Long?>(null) }
+    var momentAt by rememberSaveable { mutableStateOf<Long?>(null) }
+    var momentTrack by remember { mutableStateOf<Track?>(null) }   // the song that line belongs to
 
     // "You're set": access was just granted while Lyrics was showing the welcome screen.
     var sawWelcome by remember { mutableStateOf(!hasAccess) }
@@ -427,7 +437,7 @@ private fun LyricsScreen(
                             }
                             youreSet -> YoureSet()
                             else -> Content(shown, finding, slow, np, onGrant, playerLabel, onPlayer, onChoosePlayer = { panel = Panel.SETTINGS },
-                                onPick = { panel = Panel.PICKER }, onRetry = { reload++ }, onMoment = { momentAt = it })
+                                onPick = { panel = Panel.PICKER }, onRetry = { reload++ }, onMoment = { momentAt = it; momentTrack = track })
                         }
                     }
                     if (flexTop != null) FlexControls(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
@@ -453,7 +463,7 @@ private fun LyricsScreen(
             onLibrary = { panel = Panel.LIBRARY },
         )
         MomentSheet(momentAt, onClose = { momentAt = null }, onSave = { at, label ->
-            val t = track
+            val t = momentTrack ?: track
             t != null && withContext(Dispatchers.IO) {
                 runCatching { LibraryRepo(context).run { songFor(t, create = true)?.let { addMoment(it.uid, at, label) } != null } }.getOrDefault(false)
             }

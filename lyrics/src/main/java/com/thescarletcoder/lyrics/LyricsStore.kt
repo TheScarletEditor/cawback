@@ -4,14 +4,16 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.thescarletcoder.lyrics.library.SongKey
-import org.json.JSONObject
 import java.io.File
 import java.security.KeyStore
 import java.security.MessageDigest
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import org.json.JSONException
+import org.json.JSONObject
 
 /**
  * Small on-device cache: fetched lyrics, "wrong lyrics" picks and timing nudges, one file per track.
@@ -29,8 +31,12 @@ class LyricsStore(context: Context) {
     private fun file(key: String) = File(dir, "${hash(key)}.json")
 
     fun load(key: String): Entry? {
-        val f = file(key).takeIf { it.exists() } ?: return null
-        val o = read(f) ?: run { f.delete(); return null }
+        val f = file(key)
+        val o = synchronized(LOCK) {
+            if (!f.exists()) return null
+            val r = runCatching { read(f) }.getOrElse { return null }   // a passing error: try again next time
+            r ?: run { f.delete(); return null }
+        }
         return runCatching {
             Entry(
                 candidate = o.optJSONObject("c")?.let {
@@ -58,14 +64,16 @@ class LyricsStore(context: Context) {
                 .put("duration", it.durationSec).put("instrumental", it.instrumental)
                 .put("plain", it.plain ?: "").put("synced", it.synced ?: ""))
         }
-        runCatching { write(file(key), o) }   // only a cache: a failed write means a fresh fetch next time
+        runCatching { synchronized(LOCK) { write(file(key), o) } }   // only a cache: a failed write means a fresh fetch next time
     }
 
     /** Settings: "Reset all timing nudges". Every song's offset back to 0; lyrics and picks stay. */
     fun resetOffsets() {
         files().forEach { f ->
-            val o = read(f) ?: return@forEach
-            if (o.optLong("offset") != 0L) runCatching { write(f, o.put("offset", 0L)) }
+            synchronized(LOCK) {
+                val o = runCatching { read(f) }.getOrNull() ?: return@forEach
+                if (o.optLong("offset") != 0L) runCatching { write(f, o.put("offset", 0L)) }
+            }
         }
     }
 
@@ -80,19 +88,24 @@ class LyricsStore(context: Context) {
      */
     fun forgetSong(songKey: String) {
         files().forEach { f ->
-            val o = read(f) ?: return@forEach
-            val s = o.optString("s").ifBlank { null }
-                ?: o.optJSONObject("c")?.let { SongKey.of(it.optString("track"), it.optString("artist")) }
-            if (s == songKey) f.delete()
+            synchronized(LOCK) {
+                val o = runCatching { read(f) }.getOrNull() ?: return@forEach
+                val s = o.optString("s").ifBlank { null }
+                    ?: o.optJSONObject("c")?.let { SongKey.of(it.optString("track"), it.optString("artist")) }
+                if (s == songKey) f.delete()
+            }
         }
     }
 
     /** Encrypts the plain files 0.2.0 left. Run when Lyrics starts, off the main thread. */
     fun sealOldFiles() {
         files().forEach { f ->
-            val bytes = runCatching { f.readBytes() }.getOrNull() ?: return@forEach
-            if (CacheCipher.sealed(bytes)) return@forEach
-            runCatching { write(f, JSONObject(bytes.toString(Charsets.UTF_8))) }.onFailure { f.delete() }
+            synchronized(LOCK) {   // one file at a time, so lookups and nudges carry on in between
+                val bytes = runCatching { f.readBytes() }.getOrNull() ?: return@forEach
+                if (CacheCipher.sealed(bytes)) return@forEach
+                val o = try { JSONObject(bytes.toString(Charsets.UTF_8)) } catch (_: JSONException) { f.delete(); return@forEach }
+                runCatching { write(f, o) }   // if sealing fails now, the plain file stays for the next start
+            }
         }
     }
 
@@ -102,10 +115,17 @@ class LyricsStore(context: Context) {
 
     private fun files() = dir.listFiles()?.filter { it.name.endsWith(".json") }.orEmpty()
 
-    private fun read(f: File): JSONObject? = runCatching {
+    /**
+     * null when the file can never be read (damaged, or sealed with a key that's gone), so it may be deleted.
+     * Throws on anything that may pass, like a Keystore hiccup: the file must stay (it can hold the user's picks and nudges).
+     */
+    private fun read(f: File): JSONObject? {
         val bytes = f.readBytes()
-        JSONObject(if (CacheCipher.sealed(bytes)) CacheCipher.open(bytes) else bytes.toString(Charsets.UTF_8))
-    }.getOrNull()
+        val text = if (CacheCipher.sealed(bytes)) {
+            try { CacheCipher.open(bytes) } catch (_: AEADBadTagException) { return null }
+        } else bytes.toString(Charsets.UTF_8)
+        return try { JSONObject(text) } catch (_: JSONException) { null }
+    }
 
     private fun write(f: File, o: JSONObject) {
         val tmp = File(dir, f.name + ".tmp")
@@ -114,6 +134,9 @@ class LyricsStore(context: Context) {
     }
 
     companion object {
+        /** Every read-modify-write of a cache file, across all instances (startup sealing runs beside lookups). */
+        private val LOCK = Any()
+
         /** A track key as it's stored anywhere on disk: SHA-256, hex. */
         fun hash(key: String): String =
             MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }

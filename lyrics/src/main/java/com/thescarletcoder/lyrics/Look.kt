@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.compositionLocalOf
@@ -23,6 +24,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -59,7 +63,7 @@ object L {
 fun Washed(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, small: Boolean = false) {
     val shape = RoundedCornerShape(if (small) 20.dp else 24.dp)
     Box(
-        modifier.heightIn(min = if (small) 40.dp else 48.dp).clip(shape).background(L.wash).border(1.dp, L.washEdge, shape)
+        modifier.minimumInteractiveComponentSize().heightIn(min = if (small) 40.dp else 48.dp).clip(shape).background(L.wash).border(1.dp, L.washEdge, shape)
             .clickable(onClick = onClick).padding(horizontal = if (small) 14.dp else 18.dp, vertical = if (small) 8.dp else 12.dp),
         contentAlignment = Alignment.Center,
     ) { Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = if (small) 14.sp else 16.sp, color = L.text) }
@@ -67,10 +71,11 @@ fun Washed(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, sm
 
 /** A round washed icon button with a drawn icon (never a font glyph). */
 @Composable
-fun IconButton(size: Dp, onClick: () -> Unit, draw: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit) {
+fun IconButton(size: Dp, description: String, onClick: () -> Unit, draw: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit) {
     val c = L.text
     Box(
-        Modifier.size(size).clip(CircleShape).background(L.wash).border(1.dp, L.washEdge, CircleShape).clickable(onClick = onClick),
+        Modifier.minimumInteractiveComponentSize().size(size).clip(CircleShape).background(L.wash).border(1.dp, L.washEdge, CircleShape)
+            .clickable(onClickLabel = description, role = Role.Button, onClick = onClick).semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) { Canvas(Modifier.size(size * 0.45f)) { draw(c) } }
 }

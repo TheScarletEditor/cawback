@@ -9,8 +9,8 @@ Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes.
 |---|---|---|---|
 | 0 | Preflight | done | 0.4.0 / versionCode 3 already bumped in 7b7d0e6 (base is 0.2.0 / 2). Tree clean apart from the smoke build type and smoke.ps1, committed as setup. |
 | 1 | Audit | done | 4 agents (spec, rules, manifest, data). 11 mechanical fixes, 11 questions answered and applied. Re-check: 52/52 unit tests, R8 release build, androidTest compile, rule greps clean. One regression from the D10 fix was caught by an existing test and fixed. |
-| 2 | Code review | running | |
-| 3 | Cleanup | pending | |
+| 2 | Code review | done | 3 review agents by area + 1 security agent. 22 mechanical fixes, 4 questions answered and applied; 53/53 tests, R8 release build and androidTest compile pass. 5 regressions from Stage 1 work caught (R1, R5, R6, R7, S2). |
+| 3 | Cleanup | running | |
 | 4 | QA | skipped (dry run) | |
 | 5 | Smoke test | skipped (dry run) | |
 | 6 | Ship | skipped (dry run) | |
@@ -50,10 +50,36 @@ Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes.
 | C1 | Audit | mechanical | licenses/, README.md | SQLCipher (BSD) and Bouncy Castle (MIT) notices missing from a public binary release | Added both license files and Credits lines | |
 | C2 | Audit | question | LyricsActivity.kt:179 | Session-only players may be invisible (package visibility) | asked (Q11) | |
 | C3 | Audit | question | LyricsActivity.kt:168 | Any app can trigger OPEN_PLAYER (since 0.2, low impact) | asked with Q10 | |
+| R1 | Review | mechanical | LyricsActivity.kt:177 | With no app picked, Command's Listen opened nothing (what's playing wasn't known yet); regression from Q1 | Opens once playback is known (onStart), or at once if already on screen | |
+| R2 | Review | mechanical | LyricsStore.kt | Startup sealing could race a nudge or pick on the same file | One process-wide lock for every cache read-modify-write | |
+| R3 | Review | question | NowPlaying.kt:59, History.kt:87 | Switching history mode mid-song drops that listen | asked (Q13) | |
+| R4 | Review | mechanical | LyricsActivity.kt:262 | Font size or keyboard change reset the open page and moment sheet | Panel, song page and moment state are saveable | |
+| R5 | Review | mechanical | LyricsStore.kt:33,95 | A passing Keystore error deleted cache files (picks and nudges lost); regression from Q5 | Only a file that can never be read is deleted | |
+| R6 | Review | mechanical | Library.kt startFresh, LibraryKey.kt | Start fresh deleted the old key, so the set-aside Library could never open; a passing error counted as key gone | Key set aside with the database; Gone only for a key that's really gone; stray journal files handled | |
+| R7 | Review | mechanical | History.kt forget | Forget's cache scan ran on the main thread; a failure crashed | File work on IO; failure shows a message | |
+| R8 | Review | mechanical | LibraryKey.kt, LibraryUi.kt | Corrupt key entry or short key file crashed the Library screen every time | Treated as gone; any other open failure shows "try again" | |
+| R9 | Review | question | Library.kt PlayTracker | Continuing a listen after Off/Pause or a failed write; continuity lost when the recorder is recreated | asked with Q13 | |
+| R10 | Review | mechanical | LibraryShare.kt saveTo | After process death in the save picker, a backup could be written with an empty passphrase | Refuses without a passphrase, removes the empty file; write() requires one | |
+| R11 | Review | mechanical | LibraryUi.kt SongPage | First save on a pending song threw away an unsaved note and could save it empty; brief blank page | Draft keyed to the page; pending row shown until the real one arrives | |
+| R12 | Review | mechanical | LibraryUi.kt | Double tap saved a moment twice | One save per tap | |
+| R13 | Review | question | LyricsActivity.kt onSave | Moment goes on the next song if the song changes while typing the label | asked (Q14) | |
+| R14 | Review | mechanical | LibraryShare.kt Export | Key gone or open failure showed a blank Export page | Says why | |
+| R15 | Review | mechanical | LibraryShare.kt OnThisDevice | Unopenable Library listed as "empty" | Says it can't be opened right now | |
+| R16 | Review | mechanical | LibraryShare.kt | "1 songs", "1 plays" | Plurals | |
+| R17 | Review | mechanical | LibraryUi.kt Stats | "No plays all time." | "No plays yet." | |
+| R18 | Review | mechanical | LibraryShare.kt Export save | Failed export left an empty file | Removed on failure | |
+| R19 | Review | mechanical | Chrome.kt, Look.kt | Icon buttons had no TalkBack labels | Play, Pause, More | |
+| R20 | Review | question | Look.kt Washed(small), header icons | Touch targets under 48dp | asked (Q15) | |
+| R21 | Review | mechanical | LyricsLines.kt, Panels.kt Choice | Long-press bookmark not announced; choices don't say which is on | Labels and selected state for TalkBack | |
+| R22 | Review | mechanical | LibraryUi.kt | Double tap on Start a new Library set aside twice | One attempt at a time | |
+| R23 | Review | question | LyricsActivity.kt:157 | With no app picked, opening Lyrics doesn't bring up the app that's playing | asked (Q12) | |
+| S1 | Review | mechanical | LibraryExport.kt | Line breaks in other apps' titles could fake lines in the AI-ready text export | Control characters become spaces | |
+| S2 | Review | mechanical | History.kt | Forgotten-song hashes sat in plain prefs (new in Stage 1) | Kept in memory only | |
+| S3 | Review | mechanical | LibraryBackup.kt | A crafted backup could unpack to gigabytes | Size caps | |
 
 ## Questions
 
-All asked and answered 2026-10-11 (Stage 1).
+Stage 1: Q1 to Q11. Stage 2: Q12 to Q15. All answered 2026-10-11.
 
 | Q | Findings | Answer (owner's pick, word for word) | Follow-up |
 |---|---|---|---|
@@ -68,6 +94,11 @@ All asked and answered 2026-10-11 (Stage 1).
 | Q9 | D13, D14 | "Fix both (Recommended)" | Forget drops the in-progress listen and every cached version by title and artist |
 | Q10 | D15-D19, C3 | "File for the sync work (Recommended)" | Filed in scarlet-hq IDEAS as proposed, tagged for the Command link; exports older than a day cleared at start |
 | Q11 | C2 | "Check in device tests (Recommended)" | Line added to 0.4.0-DEVICE-TESTS.md |
+| Q12 | R23 | "Yes, the playing app (Recommended)" | With no app picked, opening Lyrics brings up whatever is playing |
+| Q13 | R3, R9 | "Fix all three" | One shared listen for both recorders: a mode switch hands it over, Off or Pause ends it for good, a recreated screen carries on |
+| Q14 | R13 | "Save to the pressed song (Recommended)" | The moment goes on the song whose line was long-pressed |
+| Q15 | R20 | "Raise to 48dp (Recommended)" | Small buttons and header icons get a 48dp tap area, same look |
+| Copy | Stage 2 text | "Yes, as written" | Applied |
 
 ## Ship
 

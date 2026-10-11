@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -49,18 +50,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thescarletcoder.lyrics.library.History
+import com.thescarletcoder.lyrics.library.LibraryDatabase
 import com.thescarletcoder.lyrics.library.LibraryKey
+import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.scarlet.Motion
 import com.thescarletcoder.scarlet.ThemeChoice
 import com.thescarletcoder.scarlet.TuningPanel
-import com.thescarletcoder.lyrics.library.History
-import com.thescarletcoder.lyrics.library.LibraryDatabase
-import com.thescarletcoder.lyrics.library.LibraryRepo
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.util.Date
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Empty states (nothing playing, not found, offline): raven and halo, Fraunces headline, one washed button. */
 @Composable
@@ -470,7 +471,7 @@ internal fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.clip(shape).background(if (selected) L.text.copy(alpha = 0.14f) else L.wash)
             .border(1.dp, if (selected) L.text.copy(alpha = 0.45f) else L.washEdge, shape)
-            .clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 12.dp),
+            .selectable(selected = selected, onClick = onClick).padding(horizontal = 18.dp, vertical = 12.dp),   // TalkBack says which is on
     ) { Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = L.text) }
 }
 

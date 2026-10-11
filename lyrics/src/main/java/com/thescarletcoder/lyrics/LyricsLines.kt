@@ -175,6 +175,8 @@ private fun LyricRow(
         Modifier.fillMaxWidth()
             .background(text.copy(alpha = 0.10f * wash.value))
             .combinedClickable(
+                onClickLabel = "Play from here",
+                onLongClickLabel = "Bookmark this moment",
                 onLongClick = {
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     onLongPress()
