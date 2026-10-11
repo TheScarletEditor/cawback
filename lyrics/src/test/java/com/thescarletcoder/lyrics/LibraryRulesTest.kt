@@ -73,6 +73,52 @@ class LibraryRulesTest {
         assertEquals(180_000L, t.close(100_000)!!.durationMs)
     }
 
+    @Test fun lateDurationKeepsTheSameListen() {
+        // Track.key ends with the length, so it changes when the length arrives late: still one listen, not two.
+        val t = PlayTracker()
+        val early = Track("Glass Harbor", "The Lanterns", null, null).key
+        val later = Track("Glass Harbor", "The Lanterns", null, 180_000).key
+        assertNull(t.at(early, true, 0, duration = null))
+        assertNull(t.at(later, true, 2_000, duration = 180_000))
+        val f = t.close(100_000)!!
+        assertEquals(100_000, f.listenedMs)
+        assertEquals(later, f.trackKey)
+    }
+
+    @Test fun comingBackToTheSameSongContinuesTheListen() {
+        // "Only while Lyrics is open": 60 s, away for a minute, back while the same song plays, 50 s more.
+        val t = PlayTracker()
+        t.at("a", true, 0)
+        val first = t.close(60_000)!!
+        assertFalse(PlayRule.counts(first.durationMs, first.listenedMs))   // not a play on its own
+        assertNull(t.at("a", true, 120_000))
+        val f = t.close(170_000)!!
+        assertEquals(110_000, f.listenedMs)
+        assertEquals(0, f.startedAt)
+        assertTrue(PlayRule.counts(f.durationMs, f.listenedMs))
+        assertFalse(f.earlierCounted)
+    }
+
+    @Test fun aLongSongIsNotCountedTwice() {
+        // A 10-minute track: 5 min (counted at 4), Lyrics closes, comes back, 5 min more: still one play.
+        val t = PlayTracker()
+        t.at("a", true, 0, duration = 600_000)
+        val first = t.close(300_000)!!
+        assertTrue(PlayRule.counts(first.durationMs, first.listenedMs))
+        t.at("a", true, 310_000, duration = 600_000)
+        assertTrue(t.close(610_000)!!.earlierCounted)
+    }
+
+    @Test fun anotherSongAfterClosingStartsFresh() {
+        val t = PlayTracker()
+        t.at("a", true, 0)
+        t.close(60_000)
+        t.at("b", true, 70_000)
+        val f = t.close(100_000)!!
+        assertEquals(30_000, f.listenedMs)
+        assertFalse(f.earlierCounted)
+    }
+
     @Test fun closeFinishesTheSongOnce() {
         val t = PlayTracker()
         t.at("a", true, 0)

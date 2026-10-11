@@ -49,7 +49,7 @@ class NowPlayingListener : NotificationListenerService() {
     private fun sync() {
         val always = History.mode(History.prefs(this)) == History.Mode.ALWAYS
         if (always && follow == null) {
-            val np = NowPlaying(this) { LyricsSettings(this).rules(this) }   // fresh settings every pick
+            val np = NowPlaying(this) { LyricsSettings(this).rules() }   // fresh settings every pick
             val rec = PlayRecorder(this, History.Where.BACKGROUND)
             val s = MainScope()
             follow = np; recorder = rec; scope = s
@@ -72,7 +72,7 @@ data class Track(val title: String, val artist: String, val album: String?, val 
 }
 
 /**
- * What's playing, via MediaSessionManager. Follows the music app Sam chose (or whatever is playing), and never an app
+ * What's playing, via MediaSessionManager. Follows the chosen music app (or whatever is playing), and never an app
  * on the ignore list ([rules], read fresh at every change). Holds no history: only the current track and its clock.
  */
 class NowPlaying(private val context: Context, private val rules: () -> SessionPick.Rules) {
@@ -172,8 +172,4 @@ class NowPlaying(private val context: Context, private val rules: () -> SessionP
 
     fun seekTo(ms: Long) { controller?.transportControls?.seekTo(ms) }
     fun playPause() { if (_playing.value) controller?.transportControls?.pause() else controller?.transportControls?.play() }
-
-    companion object {
-        const val SPOTIFY = "com.spotify.music"
-    }
 }

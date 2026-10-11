@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -48,11 +49,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thescarletcoder.lyrics.library.History
 import com.thescarletcoder.lyrics.library.LibraryDatabase
+import com.thescarletcoder.lyrics.library.LibraryKey
 import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.lyrics.library.LibraryStats
 import com.thescarletcoder.lyrics.library.SongRow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.ZoneId
@@ -67,8 +70,31 @@ import java.util.Date
 @Composable
 private fun rememberLibrary(): LibraryRepo? {
     val context = LocalContext.current
-    val repo by produceState<LibraryRepo?>(null) { value = withContext(Dispatchers.IO) { LibraryRepo(context) } }
-    return repo
+    val scope = rememberCoroutineScope()
+    var attempt by remember { mutableIntStateOf(0) }
+    val opened by produceState<Result<LibraryRepo>?>(null, attempt) {
+        value = withContext(Dispatchers.IO) { runCatching { LibraryRepo(context) } }
+    }
+    val r = opened ?: return null
+    val e = r.exceptionOrNull() ?: return r.getOrNull()
+    if (e !is LibraryKey.Gone) throw e
+    KeyGoneNotice { scope.launch { withContext(Dispatchers.IO) { LibraryDatabase.startFresh(context) }; attempt++ } }
+    return null
+}
+
+/** The Library's key is gone (LibraryKey.Gone): say so plainly and offer a new, empty Library. */
+@Composable
+private fun KeyGoneNotice(onStartFresh: () -> Unit) {
+    Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("This device's Library key is gone", fontFamily = Fraunces, fontSize = 22.sp, color = L.text)
+        Text(
+            "The key that unlocks your Library on this device no longer exists, so the Library can't be opened. This can " +
+                "happen after some device restores or resets. Start a new, empty Library? The old one is set aside, not " +
+                "deleted. You can then restore a Library backup from Settings.",
+            fontFamily = Inter, fontSize = 16.sp, color = L.soft,
+        )
+        Washed("Start a new Library", onStartFresh)
+    }
 }
 
 private enum class LibTab(val label: String) { SONGS("Songs"), STATS("Stats") }
@@ -149,7 +175,7 @@ private fun SongsList(repo: LibraryRepo, onSong: (String) -> Unit) {
             all!!.isEmpty() -> Text("No songs yet.", fontFamily = Inter, fontSize = 16.sp, color = L.soft, modifier = Modifier.padding(top = 16.dp))
             rows.isEmpty() -> Text("Nothing matches.", fontFamily = Inter, fontSize = 16.sp, color = L.soft, modifier = Modifier.padding(top = 16.dp))
         }
-        // Swiping the list scrolls it; only a tap opens a song (Sam's rule for every app).
+        // Swiping the list scrolls it; only a tap opens a song (the rule for every Scarlet app).
         LazyColumn(Modifier.fillMaxSize().padding(top = 8.dp)) {
             items(rows, key = { it.uid }) { r ->
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onSong(r.uid) }.padding(vertical = 12.dp, horizontal = 4.dp)) {
@@ -225,13 +251,16 @@ private fun RankedList(title: String, items: List<LibraryStats.Ranked>, onSong: 
  * [position] is set when this song is the one playing: moments can be added at the current time, and tapping one seeks.
  */
 @Composable
-fun SongPage(uid: String, position: (() -> Long)?, onSeek: ((Long) -> Unit)?, onClose: () -> Unit) {
+fun SongPage(songUid: String?, pending: Track?, position: (() -> Long)?, onSeek: ((Long) -> Unit)?, onClose: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repo = rememberLibrary() ?: return
-    val row by remember(uid) { repo.songRow(uid) }.collectAsState(null)
-    val moments by remember(uid) { repo.moments(uid) }.collectAsState(emptyList())
-    val earlier by remember(uid) { repo.noteHistory(uid) }.collectAsState(emptyList())
+    // A playing song that isn't in the Library yet ([pending]) gets its row only when a note, favorite or moment is saved.
+    var uid by remember(songUid, pending) { mutableStateOf(songUid) }
+    suspend fun ensureUid(): String? = uid ?: pending?.let { t -> repo.songFor(t, create = true)?.uid }?.also { uid = it }
+    val row by remember(uid) { uid?.let { repo.songRow(it) } ?: flowOf(null) }.collectAsState(null)
+    val moments by remember(uid) { uid?.let { repo.moments(it) } ?: flowOf(emptyList()) }.collectAsState(emptyList())
+    val earlier by remember(uid) { uid?.let { repo.noteHistory(it) } ?: flowOf(emptyList()) }.collectAsState(emptyList())
     var note by remember(uid) { mutableStateOf<TextFieldValue?>(null) }
     var showEarlier by remember { mutableStateOf(false) }
     var label by remember { mutableStateOf(TextFieldValue("")) }
@@ -243,7 +272,7 @@ fun SongPage(uid: String, position: (() -> Long)?, onSeek: ((Long) -> Unit)?, on
         if (r != null) loaded = true
         if (r == null && loaded) onClose()   // forgotten (here, or on the other device after a sync)
     }
-    val r = row ?: return
+    val r = row ?: pending?.takeIf { uid == null }?.let { SongRow("", it.title, it.artist, it.album, false, "", 0, null, null, null) } ?: return
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -261,7 +290,7 @@ fun SongPage(uid: String, position: (() -> Long)?, onSeek: ((Long) -> Unit)?, on
             fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 6.dp),
         )
         Box(Modifier.padding(top = 12.dp)) {
-            Choice(if (r.favorite) "Favorite" else "Mark as favorite", r.favorite) { scope.launch { repo.setFavorite(uid, !r.favorite) } }
+            Choice(if (r.favorite) "Favorite" else "Mark as favorite", r.favorite) { scope.launch { ensureUid()?.let { repo.setFavorite(it, !r.favorite) } } }
         }
 
         SettingsSection("Note")
@@ -269,7 +298,7 @@ fun SongPage(uid: String, position: (() -> Long)?, onSeek: ((Long) -> Unit)?, on
         NoteField(n) { note = it }
         if (n.text != r.note) {
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Washed("Save note", { scope.launch { repo.setNote(uid, n.text.trim()); note = TextFieldValue(n.text.trim()) } })
+                Washed("Save note", { scope.launch { ensureUid()?.let { repo.setNote(it, n.text.trim()); note = TextFieldValue(n.text.trim()) } } })
                 Washed("Undo changes", { note = TextFieldValue(r.note) })
             }
         }
@@ -311,19 +340,22 @@ fun SongPage(uid: String, position: (() -> Long)?, onSeek: ((Long) -> Unit)?, on
                 Washed("Add a moment here", {
                     val at = position()
                     val text = label.text.trim().take(80)
-                    scope.launch { repo.addMoment(uid, at, text); label = TextFieldValue("") }
+                    scope.launch { ensureUid()?.let { repo.addMoment(it, at, text); label = TextFieldValue("") } }
                 })
             }
         }
 
-        SettingsSection("Forget this song")
-        if (forgetting) {
-            Text("Remove its plays, note, moments and saved lyrics? This can't be undone.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
-            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Washed("Forget", { scope.launch { repo.forget(uid) } })
-                Washed("Cancel", { forgetting = false })
-            }
-        } else Washed("Forget this song", { forgetting = true })
+        val saved = uid
+        if (saved != null) {   // nothing to forget until the song is in the Library
+            SettingsSection("Forget this song")
+            if (forgetting) {
+                Text("Remove its plays, note, moments and saved lyrics? This can't be undone.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
+                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Washed("Forget", { scope.launch { repo.forget(saved) } })
+                    Washed("Cancel", { forgetting = false })
+                }
+            } else Washed("Forget this song", { forgetting = true })
+        }
         Box(Modifier.heightIn(min = 32.dp))
     }
 }
@@ -350,9 +382,11 @@ private fun NoteField(value: TextFieldValue, singleLine: Boolean = false, hint: 
  * [at] null = closed.
  */
 @Composable
-fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: (Long, String) -> Unit) {
+fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: suspend (Long, String) -> Boolean) {
+    val scope = rememberCoroutineScope()
     var label by remember(at) { mutableStateOf(TextFieldValue("")) }
     var saved by remember(at) { mutableStateOf(false) }
+    var failed by remember(at) { mutableStateOf(false) }
     LaunchedEffect(saved) { if (saved) { delay(1_200); onClose() } }
     if (at == null) return
     Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.35f))
@@ -368,10 +402,10 @@ fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: (Long, String) -> Unit) 
             if (saved) {
                 Text("Saved. It's in this song's Note and moments.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
             } else {
-                Text("Saves the time and your label, not the words.", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
+                Text(if (failed) "Couldn't save that moment. Try again?" else "Saves the time and your label, not the words.", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
                 NoteField(label, singleLine = true, hint = "Label (optional)") { label = it }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Washed("Save", { onSave(at, label.text.trim().take(80)); saved = true })
+                    Washed("Save", { scope.launch { if (onSave(at, label.text.trim().take(80))) saved = true else failed = true } })
                     Washed("Cancel", onClose)
                 }
             }

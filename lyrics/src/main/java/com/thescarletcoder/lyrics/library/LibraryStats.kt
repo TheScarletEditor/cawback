@@ -28,7 +28,7 @@ object LibraryStats {
         val favoriteHour: Int?,
     )
 
-    /** When [p] starts, in Sam's time zone. Weeks start on Monday. */
+    /** When [p] starts, in the device's time zone. Weeks start on Monday. */
     fun start(p: Period, now: Long, zone: ZoneId): Long {
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         val day: LocalDate = when (p) {

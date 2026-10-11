@@ -50,8 +50,8 @@ class LyricsRepo(private val store: LyricsStore) {
             if (System.currentTimeMillis() - cached.fetchedAt < retryMissAfterMs && cached.fetchedAt > MATCHING_CHANGED_AT) return@withContext Shown.NotFound
         }
         try {
-            // A dropped connection gets two more tries before Lyrics says it can't reach LRCLIB (Sam, 2026-10-09:
-            // on the phone the connection dropped often, sometimes mid-song).
+            // A dropped connection gets two more tries before Lyrics says it can't reach LRCLIB (2026-10-09:
+            // on a phone the connection dropped often, sometimes mid-song).
             val c = withRetries(RETRY_DELAYS_MS) { lookup(t) }
             store.save(t.key, LyricsStore.Entry(c, pinned = false, offsetMs = cached?.offsetMs ?: 0, fetchedAt = System.currentTimeMillis()))
             if (c == null) Shown.NotFound else found(c, false, cached?.offsetMs ?: 0)
@@ -77,7 +77,7 @@ class LyricsRepo(private val store: LyricsStore) {
     private inline fun exact(block: () -> Candidate): Candidate? =
         try { block().takeIf { it.synced != null || it.plain != null || it.instrumental } } catch (_: LrcLib.NotFound) { null }
 
-    /** "Wrong lyrics": Sam's pick sticks to this track. */
+    /** "Wrong lyrics": the user's pick sticks to this track. */
     suspend fun pin(t: Track, c: Candidate): Shown = withContext(Dispatchers.IO) {
         val offset = store.load(t.key)?.offsetMs ?: 0
         store.save(t.key, LyricsStore.Entry(c, pinned = true, offsetMs = offset, fetchedAt = System.currentTimeMillis()))

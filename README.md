@@ -35,10 +35,10 @@ Settings lets you set it up the way you listen:
 
 ## Privacy and permissions
 
-- **Internet, for one site only.** Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library, over HTTPS. That is the only place the app connects to. To find the words, it sends the song's title, artist, album and length. As with any website, LRCLIB also sees your IP address.
-- **Notification access**, because Android requires it for an app to see what's playing. Lyrics reads only the song title, artist and position. It never reads your notifications.
+- **Internet, for one site only.** Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library, over HTTPS. That is the only place the app connects to. To find the words, it sends the song's title, artist, album and length, and anything you type into a "Wrong lyrics?" search. As with any website, LRCLIB also sees your IP address.
+- **Notification access**, because Android requires it for an app to see what's playing. Lyrics sees only what's playing: the song's title, artist, album, length, position and cover art (the cover only tints the screen and is never saved). It never reads your notifications.
 - **Nothing from your Library leaves your device** unless you export it or make a backup, and then it goes only where you choose.
-- **Saved lyrics:** a small on-device cache keeps fetched lyrics (each with its song title and artist), your "Wrong lyrics?" picks and timing nudges. It's excluded from backups. Settings shows how many songs are saved and has "Clear saved lyrics".
+- **Saved lyrics:** a small encrypted on-device cache keeps fetched lyrics (each with its song title and artist), your "Wrong lyrics?" picks and timing nudges. It's excluded from backups. Settings shows how many songs are saved and has "Clear saved lyrics".
 - **Settings > What's on this device** shows exactly what Lyrics keeps, with real counts, and what it sends to lrclib.net.
 - The full privacy policy is at [thescarletcoder.com/privacy](https://thescarletcoder.com/privacy).
 
@@ -59,9 +59,11 @@ Tests: `gradlew :lyrics:testDebugUnitTest` runs the JVM tests. `labtest.ps1` run
 
 - Lyrics: [LRCLIB](https://lrclib.net).
 - Fonts: Inter and Fraunces, SIL Open Font License 1.1 (`licenses/`).
+- Encrypted Library: SQLCipher by Zetetic, BSD-style license (`licenses/`).
+- Backup key derivation: Bouncy Castle, MIT license (`licenses/`).
 
 ## License
 
 Scarlet Lyrics is free software: you can use it, study it, change it and share it under the [GNU General Public License v3.0](LICENSE). If you share a changed version, it has to stay open under the same license.
 
-Copyright (C) 2026 The Scarlet Coder. The fonts keep their own license, listed under Credits.
+Copyright (C) 2026 The Scarlet Coder. The fonts and bundled libraries keep their own licenses, listed under Credits.

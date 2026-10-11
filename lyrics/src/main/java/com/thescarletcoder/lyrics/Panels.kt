@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thescarletcoder.lyrics.library.LibraryKey
 import com.thescarletcoder.scarlet.Motion
 import com.thescarletcoder.scarlet.ThemeChoice
 import com.thescarletcoder.scarlet.TuningPanel
@@ -90,8 +91,9 @@ fun Welcome(onGrant: () -> Unit) {
         Text("Lyrics for whatever's playing", fontFamily = Fraunces, fontSize = 30.sp, lineHeight = 38.sp, color = L.text, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 12.dp))
         Text(
-            "It reads only the song title, artist and position. To find the words, it sends the song's title, artist, " +
-                "album and length to lrclib.net. Nothing else leaves your device.",
+            "It sees what's playing: the song's title, artist, album, length, position and cover (the cover only tints " +
+                "the screen and is never saved). To find the words, it sends the title, artist, album and length to " +
+                "lrclib.net, plus anything you type into a lyrics search. Nothing else leaves your device.",
             fontFamily = Inter, fontSize = 17.sp, color = L.soft, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 12.dp).widthIn(max = 480.dp),
         )
@@ -121,7 +123,7 @@ fun YoureSet() {
 @Composable
 fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate) -> Unit, onAuto: () -> Unit, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
-    // TextFieldValue so the cursor starts at the end of the pre-filled search (Sam couldn't reach the end on the phone).
+    // TextFieldValue so the cursor starts at the end of the pre-filled search (the end was out of reach on a phone).
     var query by remember {
         val start = "${Matching.cleanTitle(t.title)} ${t.artist}"
         mutableStateOf(TextFieldValue(start, TextRange(start.length)))
@@ -199,8 +201,8 @@ internal fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Un
 }
 
 /**
- * Settings (scope section 8, in order): your music app, lyrics display, timing, theme, saved lyrics, notification
- * access, about, and Tuning in personal builds.
+ * Settings: your music app, lyrics display, timing, theme, listening history, Library backup, saved lyrics,
+ * notification access, what's on this device, about, and Tuning in personal builds.
  */
 @Composable
 fun SettingsPanel(
@@ -227,7 +229,7 @@ fun SettingsPanel(
 
         // ---- your music app ----
         SettingsSection("Your music app")
-        val chosen = settings.effectivePlayer(context) ?: ""
+        val chosen = settings.effectivePlayer() ?: ""
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             apps.forEach { a -> Choice(a.label, chosen == a.pkg) { settings.choosePlayer(a.pkg); onFollowChanged() } }
             Choice("Whatever is playing", chosen == "") { settings.choosePlayer(""); onFollowChanged() }
@@ -368,12 +370,15 @@ fun SettingsPanel(
                         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Washed("Delete", {
                                 scope.launch {
-                                    withContext(Dispatchers.IO) {
-                                        val lib = LibraryRepo(context)
-                                        if (d == "history") lib.deleteHistory() else lib.deleteAll()
+                                    val failed = withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            val lib = LibraryRepo(context)
+                                            if (d == "history") lib.deleteHistory() else lib.deleteAll()
+                                        }.exceptionOrNull()
                                     }
-                                    deleting = null; deleted = d
-                                    if (d == "library") { saved = repo.savedCount(); onCleared() }
+                                    deleting = null
+                                    deleted = when (failed) { null -> d; is LibraryKey.Gone -> "gone"; else -> "failed" }
+                                    if (d == "library" && failed == null) { saved = repo.savedCount(); onCleared() }
                                 }
                             })
                             Washed("Cancel", { deleting = null })
@@ -382,7 +387,7 @@ fun SettingsPanel(
                 }
             }
             deleted?.let {
-                Text(if (it == "history") "Listening history deleted." else "Library deleted.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+                Text(when (it) { "history" -> "Listening history deleted."; "library" -> "Library deleted."; "gone" -> KEY_GONE; else -> "That didn't finish. Nothing was deleted." }, fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
             }
         }
 
@@ -423,7 +428,7 @@ fun SettingsPanel(
 
         SettingsSection("Notification access")
         Text(
-            if (hasAccess) "On. Scarlet Lyrics can see the song title, artist and position. It never reads your notifications."
+            if (hasAccess) "On. Scarlet Lyrics can see the song's title, artist, album, length, position and cover. It never reads your notifications."
             else "Off. Scarlet Lyrics needs it to see what's playing.",
             fontFamily = Inter, fontSize = 17.sp, color = L.text,
         )

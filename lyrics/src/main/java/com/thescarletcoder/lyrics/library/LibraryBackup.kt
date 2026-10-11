@@ -18,10 +18,10 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * "Back up the Library" (scope section 6; Sam 2026-10-09: protected by a passphrase, like Scarlet Command's backups).
+ * "Back up the Library" (scope section 6; ruling of 2026-10-09: protected by a passphrase, like Scarlet Command's backups).
  *
  * File = "LYRBAK01" + header length + JSON header (format, Argon2id parameters, salt, created) + 12-byte IV +
- * AES-256-GCM of the gzipped LibrarySnapshot JSON. The key comes from Sam's passphrase through Argon2id (64 MiB,
+ * AES-256-GCM of the gzipped LibrarySnapshot JSON. The key comes from the user's passphrase through Argon2id (64 MiB,
  * 3 passes), and the header is authenticated too, so nothing in the file can be changed unnoticed. Standard parts
  * only: Bouncy Castle's Argon2 and Android's AES-GCM. The passphrase is never stored.
  */
@@ -29,12 +29,16 @@ object LibraryBackup {
     private const val MAGIC = "LYRBAK01"
     private const val FORMAT = 1
     const val MEMORY_KIB = 64 * 1024
+    private const val MAX_MEMORY_KIB = 256 * 1024
+    private const val IV_BYTES = 12
     const val PASSES = 3
     const val LANES = 2
     const val MIN_PASSPHRASE = 8
     const val EXTENSION = "lyrbak"
 
-    class WrongPassphrase : Exception("That passphrase doesn't open this backup.")
+    class WrongPassphrase : Exception("That passphrase doesn't open this backup, or the file is damaged or incomplete.")
+    /** A backup that is recognised but can't be read here; the message is meant for the user. */
+    class Unreadable(message: String) : IllegalArgumentException(message)
     class NotABackup : Exception("This isn't a Scarlet Lyrics Library backup.")
 
     data class Params(val memoryKiB: Int = MEMORY_KIB, val passes: Int = PASSES, val lanes: Int = LANES)
@@ -48,11 +52,12 @@ object LibraryBackup {
         val key = argon2(passphrase, salt, params)
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"))
+            val iv = ByteArray(IV_BYTES).also { SecureRandom().nextBytes(it) }
+            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
             cipher.updateAAD(MAGIC.toByteArray(Charsets.US_ASCII) + header)
             val sealed = cipher.doFinal(plain)
             DataOutputStream(out).apply {
-                write(MAGIC.toByteArray(Charsets.US_ASCII)); writeInt(header.size); write(header); write(cipher.iv); write(sealed); flush()
+                write(MAGIC.toByteArray(Charsets.US_ASCII)); writeInt(header.size); write(header); write(iv); write(sealed); flush()
             }
         } finally { key.fill(0); plain.fill(0) }
     }
@@ -66,12 +71,15 @@ object LibraryBackup {
         if (len !in 1..4096) throw NotABackup()
         val header = ByteArray(len).also { din.readFully(it) }
         val h = runCatching { JSONObject(String(header, Charsets.UTF_8)) }.getOrElse { throw NotABackup() }
-        require(h.optInt("format") == FORMAT && h.optString("kdf") == "Argon2id") { "This backup is from a newer Scarlet Lyrics. Update Lyrics, then restore." }
-        val params = Params(h.getInt("m"), h.getInt("t"), h.getInt("p"))
-        require(params.memoryKiB in 8..(1024 * 1024) && params.passes in 1..10 && params.lanes in 1..8) { "This backup's settings look damaged." }
-        val iv = ByteArray(12).also { din.readFully(it) }
+        if (h.optInt("format") != FORMAT || h.optString("kdf") != "Argon2id") throw Unreadable("This backup is from a newer Scarlet Lyrics. Update Lyrics, then restore.")
+        val damaged = Unreadable("This backup's settings look damaged.")
+        val params = runCatching { Params(h.getInt("m"), h.getInt("t"), h.getInt("p")) }.getOrElse { throw damaged }
+        // Capped at what this app writes (with room to grow), so a damaged header can't demand a huge allocation.
+        if (params.memoryKiB !in 8..MAX_MEMORY_KIB || params.passes !in 1..10 || params.lanes !in 1..8) throw damaged
+        val salt = runCatching { Base64.getDecoder().decode(h.getString("salt")) }.getOrElse { throw damaged }
+        val iv = ByteArray(IV_BYTES).also { din.readFully(it) }
         val sealed = din.readBytes()
-        val key = argon2(passphrase, Base64.getDecoder().decode(h.getString("salt")), params)
+        val key = argon2(passphrase, salt, params)
         val plain = try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))

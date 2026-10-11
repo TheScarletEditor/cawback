@@ -66,6 +66,7 @@ import com.thescarletcoder.lyrics.library.History
 import com.thescarletcoder.lyrics.library.LibraryDatabase
 import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.lyrics.library.PlayRecorder
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -90,7 +91,7 @@ class LyricsActivity : ComponentActivity() {
         val prefs = LyricsPrefs(this)
         settings = LyricsSettings(this)
         route = AudioRoute(this)
-        nowPlaying = NowPlaying(this) { settings.rules(this) }
+        nowPlaying = NowPlaying(this) { settings.rules() }
         recorder = PlayRecorder(this, History.Where.SCREEN)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -99,6 +100,11 @@ class LyricsActivity : ComponentActivity() {
         }
         if (savedInstanceState == null && settings.keepPlaysDays > 0 && LibraryDatabase.exists(this)) {
             lifecycleScope.launch(Dispatchers.IO) { runCatching { LibraryRepo(this@LyricsActivity).prune(settings.keepPlaysDays) } }
+        }
+        if (savedInstanceState == null) lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { LyricsStore(this@LyricsActivity).sealOldFiles() }   // 0.2.0's plain cache files, encrypted
+            // A shared export only needs to outlive the share itself.
+            File(cacheDir, "exports").listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 86_400_000L }?.forEach { it.delete() }
         }
         val repo = LyricsRepo(LyricsStore(this))
         if (savedInstanceState == null) checkPlayer = !maybeOpenPlayer(intent)
@@ -123,7 +129,7 @@ class LyricsActivity : ComponentActivity() {
                         nowPlaying, repo, access.value, theme = choice,
                         onTheme = { c -> choice = c; prefs.theme = c; ScarletTokens.applyToSystem(this, c) },
                         onGrant = ::openAccessSettings, onPlayer = ::openPlayerAlongside,
-                        playerLabel = settings.effectivePlayer(this)?.let { MediaApps.label(this, it) },
+                        playerLabel = settings.effectivePlayer()?.let { MediaApps.label(this, it) },
                         output = route.output, foldTop = foldTop.value,
                         onFollowChanged = { nowPlaying.refresh(); updateShortcuts() },
                         onPinShortcut = ::pinShortcut,
@@ -145,10 +151,10 @@ class LyricsActivity : ComponentActivity() {
         route.start()
         if (checkPlayer) {
             checkPlayer = false
-            // Sam, 2026-10-09: opening Lyrics while your music app is already playing brings it up beside Lyrics, on the
-            // phone and the tablet, unless the screen is already split. Checked once the window knows its mode.
+            // Ruling of 2026-10-09: opening Lyrics while your music app is already playing brings it up beside Lyrics, on phones
+            // and tablets, unless the screen is already split. Checked once the window knows its mode.
             window.decorView.post {
-                val pkg = settings.effectivePlayer(this)
+                val pkg = settings.effectivePlayer()
                 if (!isInMultiWindowMode && pkg != null && nowPlaying.isPlaying(pkg)) openPlayerAlongside()
             }
         }
@@ -176,7 +182,7 @@ class LyricsActivity : ComponentActivity() {
 
     /** Your music app (or, with "whatever is playing", the app playing now) in the other half of the screen. */
     private fun openPlayerAlongside() {
-        val pkg = settings.effectivePlayer(this) ?: nowPlaying.currentPackage ?: return
+        val pkg = settings.effectivePlayer() ?: nowPlaying.currentPackage ?: return
         val launch = packageManager.getLaunchIntentForPackage(pkg) ?: return
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
         runCatching { startActivity(launch) }
@@ -192,7 +198,7 @@ class LyricsActivity : ComponentActivity() {
     /** The long-press shortcut, kept in step with the chosen app. */
     private fun updateShortcuts() {
         val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
-        val pkg = settings.effectivePlayer(this)
+        val pkg = settings.effectivePlayer()
         if (pkg == null) { runCatching { sm.removeAllDynamicShortcuts() }; return }
         runCatching { sm.dynamicShortcuts = listOf(playerShortcut(pkg)) }
     }
@@ -200,12 +206,12 @@ class LyricsActivity : ComponentActivity() {
     /** Settings: put "Lyrics + <your app>" on the home screen (Android asks first). */
     private fun pinShortcut() {
         val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
-        val pkg = settings.effectivePlayer(this) ?: return
+        val pkg = settings.effectivePlayer() ?: return
         if (!sm.isRequestPinShortcutSupported) return
         runCatching { sm.requestPinShortcut(playerShortcut(pkg), null) }
     }
 
-    /** Flex mode on the Flip: half-folded with the fold across the screen, lyrics above it and controls below. */
+    /** Flex mode on flip phones: half-folded with the fold across the screen, lyrics above it and controls below. */
     private fun watchFold() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -261,6 +267,7 @@ private fun LyricsScreen(
     // The Library: which song's page is open, where Back goes from it, and the playing song's uid (moments, seeking).
     var songUid by remember { mutableStateOf<String?>(null) }
     var songFromLibrary by remember { mutableStateOf(false) }
+    var songPending by remember { mutableStateOf<Track?>(null) }   // the playing song, not in the Library yet
     var playingUid by remember { mutableStateOf<String?>(null) }
     // A lyric line was long-pressed: the time to bookmark (the sheet is open while this is set).
     var momentAt by remember { mutableStateOf<Long?>(null) }
@@ -275,7 +282,7 @@ private fun LyricsScreen(
 
     // Reload only when the song itself changes (title and artist). Players update a song's details while it plays
     // (the length arrives late, the album art, a blank moment between updates); each of those used to drop the
-    // lyrics and fetch them again, so a shaky connection showed "Can't reach LRCLIB" mid-song (Sam, 2026-10-09).
+    // lyrics and fetch them again, so a shaky connection showed "Can't reach LRCLIB" mid-song (2026-10-09).
     val song = track?.let { it.title + "\u0001" + it.artist }
     var shownFor by remember { mutableStateOf<Pair<String, Int>?>(null) }   // the song and reload the lyrics belong to
     LaunchedEffect(hasAccess, song, reload) {
@@ -332,7 +339,7 @@ private fun LyricsScreen(
             else withContext(Dispatchers.IO) { runCatching { LibraryRepo(context).songFor(t, create = false)?.uid }.getOrNull() }
     }
 
-    // Header auto-hide (Sam's ruling): while a song plays with no sheet or panel open, fade 3 s after the last touch.
+    // Header auto-hide (owner's ruling): while a song plays with no sheet or panel open, fade 3 s after the last touch.
     var chrome by remember { mutableStateOf(true) }
     var touches by remember { mutableIntStateOf(0) }
     val canHide = playing && songShowing && !sheet && momentAt == null && panel == Panel.NONE && shown is Shown.Found
@@ -344,7 +351,7 @@ private fun LyricsScreen(
     val chromeAlpha by animateFloatAsState(if (chrome) 1f else 0f, tween(fadeMs, easing = Motion.NAV_EASE), label = "chrome")
     val chromeLift by animateDpAsState(if (chrome) 0.dp else (-6).dp, tween(fadeMs, easing = Motion.NAV_EASE), label = "lift")
 
-    // Keep the screen on while synced lyrics play (Settings, default on: the tablet on the nightstand).
+    // Keep the screen on while synced lyrics play (Settings, default on: a tablet as a bedside display).
     val keepOn = settings.keepScreenOn && playing && (shown as? Shown.Found)?.synced == true
     LaunchedEffect(keepOn) {
         val w = (context as? android.app.Activity)?.window ?: return@LaunchedEffect
@@ -409,13 +416,13 @@ private fun LyricsScreen(
                                 onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } },
                                 onClose = { panel = Panel.NONE })
                             panel == Panel.LIBRARY -> LibraryPanel(
-                                onSong = { songUid = it; songFromLibrary = true; panel = Panel.SONG },
+                                onSong = { songUid = it; songPending = null; songFromLibrary = true; panel = Panel.SONG },
                                 onExport = { panel = Panel.EXPORT },
                                 onSettings = { panel = Panel.SETTINGS }, onClose = { panel = Panel.NONE })
                             panel == Panel.EXPORT -> ExportPanel(onClose = { panel = Panel.LIBRARY })
-                            panel == Panel.SONG && songUid != null -> {
-                                val here = songUid == playingUid && t != null
-                                SongPage(songUid!!, position = if (here) np::positionMs else null, onSeek = if (here) np::seekTo else null,
+                            panel == Panel.SONG && (songUid != null || songPending != null) -> {
+                                val here = t != null && if (songUid != null) songUid == playingUid else songPending.let { it != null && it.title == t.title && it.artist == t.artist }
+                                SongPage(songUid, songPending, position = if (here) np::positionMs else null, onSeek = if (here) np::seekTo else null,
                                     onClose = { panel = if (songFromLibrary) Panel.LIBRARY else Panel.NONE })
                             }
                             youreSet -> YoureSet()
@@ -436,19 +443,19 @@ private fun LyricsScreen(
             onSongPage = {
                 val t = track
                 if (t != null) scope.launch {
-                    songUid = withContext(Dispatchers.IO) { LibraryRepo(context).songFor(t, create = true)?.uid }
+                    // Opening the page never adds the song to the Library: saving a note, favorite or moment does.
+                    songUid = withContext(Dispatchers.IO) { runCatching { LibraryRepo(context).songFor(t, create = false)?.uid }.getOrNull() }
+                    songPending = if (songUid == null) t else null
                     songFromLibrary = false
-                    if (songUid != null) panel = Panel.SONG
+                    panel = Panel.SONG
                 }
             },
             onLibrary = { panel = Panel.LIBRARY },
         )
         MomentSheet(momentAt, onClose = { momentAt = null }, onSave = { at, label ->
             val t = track
-            if (t != null) scope.launch {
-                withContext(Dispatchers.IO) {
-                    runCatching { LibraryRepo(context).run { songFor(t, create = true)?.let { addMoment(it.uid, at, label) } } }
-                }
+            t != null && withContext(Dispatchers.IO) {
+                runCatching { LibraryRepo(context).run { songFor(t, create = true)?.let { addMoment(it.uid, at, label) } != null } }.getOrDefault(false)
             }
         })
     }

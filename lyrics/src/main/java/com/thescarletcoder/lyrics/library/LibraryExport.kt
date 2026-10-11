@@ -5,7 +5,7 @@ import java.time.ZoneId
 
 /**
  * Library > Export (scope section 6): plain text (built for reading or pasting into an AI) or CSV. Only ever made
- * when Sam taps Export; it goes only where she sends it. Reads only the Library, which holds no lyrics, so no
+ * when the user taps Export; it goes only where they send it. Reads only the Library, which holds no lyrics, so no
  * export can contain any. Pure, so it is unit tested.
  */
 object LibraryExport {
@@ -27,7 +27,7 @@ object LibraryExport {
         val counts: Boolean = true,
         val notes: Boolean = true,
         val moments: Boolean = true,
-        /** The AI-ready paragraph at the top (Sam, decision 4: on by default). */
+        /** The AI-ready paragraph at the top (decision 4: on by default). */
         val aiHeader: Boolean = true,
         val format: Format = Format.TEXT,
     )
@@ -128,7 +128,7 @@ object LibraryExport {
 
     /**
      * One CSV cell, quoted when needed. A cell a spreadsheet would run as a formula (=, +, -, @) gets a leading
-     * apostrophe, so a song title can't become a formula in Sam's spreadsheet.
+     * apostrophe, so a song title can't become a formula in a spreadsheet.
      */
     fun cell(v: String): String {
         val safe = if (v.isNotEmpty() && v[0] in "=+-@\t\r") "'$v" else v

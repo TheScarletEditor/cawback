@@ -13,7 +13,7 @@ import java.time.ZoneId
 import java.util.UUID
 
 /**
- * Listening history settings (scope section 6, Sam 2026-10-09): off until Sam turns it on. Read straight from the
+ * Listening history settings (scope section 6, ruling of 2026-10-09): off until the user turns it on. Read straight from the
  * saved preferences every time, so the screen and the background listener always agree.
  */
 object History {
@@ -50,6 +50,25 @@ object History {
         else -> false
     }
 
+    /**
+     * Songs forgotten in the last day, as hashes (never the titles): a listen of one that was already being timed
+     * when it was forgotten is dropped instead of bringing the song back.
+     */
+    private const val FORGOTTEN = "history_forgotten"
+
+    fun noteForgotten(context: Context, songKey: String, now: Long = System.currentTimeMillis()) {
+        val p = prefs(context)
+        val keep = p.getStringSet(FORGOTTEN, emptySet())!!.filter { now - (it.substringAfter(' ').toLongOrNull() ?: 0) < 86_400_000L }
+        p.edit().putStringSet(FORGOTTEN, (keep + "${LyricsStore.hash(songKey)} $now").toSet()).apply()
+    }
+
+    fun forgottenSince(context: Context, songKey: String, since: Long): Boolean {
+        val h = LyricsStore.hash(songKey)
+        return prefs(context).getStringSet(FORGOTTEN, emptySet())!!.any {
+            it.substringBefore(' ') == h && (it.substringAfter(' ').toLongOrNull() ?: 0) >= since
+        }
+    }
+
     fun records(context: Context, where: Where, now: Long): Boolean {
         val p = prefs(context)
         return records(mode(p), where, p.getLong(PAUSED, 0), now)
@@ -75,8 +94,9 @@ class PlayRecorder(context: Context, private val where: History.Where) {
     fun close() { tracker.close(System.currentTimeMillis())?.let(::finish) }
 
     private fun finish(f: PlayTracker.Finished) {
-        if (!PlayRule.counts(f.durationMs, f.listenedMs)) return
+        if (f.earlierCounted || !PlayRule.counts(f.durationMs, f.listenedMs)) return
         if (!History.records(app, where, System.currentTimeMillis())) return
+        if (History.forgottenSince(app, SongKey.of(f.title, f.artist), f.startedAt)) return
         io.launch { runCatching { LibraryRepo(app).recordPlay(f) } }
     }
 }
@@ -98,7 +118,7 @@ class LibraryRepo(context: Context) {
         dao.insertPlay(Play(uid(), song.uid, f.startedAt, f.listenedMs))
     }
 
-    /** The replaced note goes to note_history: nothing Sam writes is lost. */
+    /** The replaced note goes to note_history: nothing the user writes is lost. */
     suspend fun setNote(songUid: String, text: String) = db.withTransaction {
         val s = dao.song(songUid) ?: return@withTransaction
         if (s.note == text) return@withTransaction
@@ -124,13 +144,15 @@ class LibraryRepo(context: Context) {
 
     /** "Forget this song": its plays, note, moments and cached lyrics, everywhere. */
     suspend fun forget(songUid: String) {
-        val hashes = db.withTransaction {
+        val forgotten = db.withTransaction {
+            val s = dao.song(songUid) ?: return@withTransaction null
             val h = dao.trackKeys(songUid)
             dao.deleteSong(songUid)   // plays, moments, note history and track keys go with it
             dao.insertTombstone(Tombstone(songUid, "song", System.currentTimeMillis()))
-            h
-        }
-        LyricsStore(app).forgetHashed(hashes)
+            s.matchKey to h
+        } ?: return
+        History.noteForgotten(app, forgotten.first)   // a listen of it already being timed won't bring it back
+        LyricsStore(app).run { forgetHashed(forgotten.second); forgetSong(forgotten.first) }
     }
 
     val songs get() = dao.observeSongs()
@@ -138,7 +160,7 @@ class LibraryRepo(context: Context) {
     fun moments(uid: String) = dao.observeMoments(uid)
     fun noteHistory(uid: String) = dao.observeNoteHistory(uid)
 
-    /** The Library row for what's playing; made when Sam first writes a note or a moment for it. */
+    /** The Library row for what's playing; made when the user first saves a note, favorite or moment for it. */
     suspend fun songFor(t: Track, create: Boolean): Song? = db.withTransaction {
         val key = SongKey.of(t.title, t.artist)
         dao.songByKey(key) ?: if (!create) null else {
@@ -156,20 +178,24 @@ class LibraryRepo(context: Context) {
         return LibraryStats.compute(dao.playsSince(from), songs, from, zone)
     }
 
-    /** Settings > "Delete listening history": every play. Songs, notes, moments and favorites stay. */
+    /**
+     * Settings > "Delete listening history": every play. Songs, notes, moments and favorites stay.
+     * A full reset (ruling of 2026-10-11): no deletion markers, so restoring a backup afterwards brings the plays back.
+     */
     suspend fun deleteHistory() = db.withTransaction {
-        val now = System.currentTimeMillis()
-        dao.allPlayUids().forEach { dao.insertTombstone(Tombstone(it, "play", now)) }
         dao.deleteAllPlays()
+        dao.deleteTombstones(listOf("play"))
     }
 
-    /** Settings > "Delete the Library": everything in it, and the cached lyrics of every song in it. */
+    /**
+     * Settings > "Delete the Library": everything in it, and the cached lyrics of every song in it. A full reset, so a
+     * later restore brings it all back; only songs forgotten one by one keep their marker and stay forgotten.
+     */
     suspend fun deleteAll() {
         val hashes = db.withTransaction {
-            val now = System.currentTimeMillis()
             val h = dao.allTrackKeys()
-            dao.allSongUids().forEach { dao.insertTombstone(Tombstone(it, "song", now)) }
             dao.deleteAllSongs()
+            dao.deleteTombstones(listOf("play", "moment"))
             h
         }
         LyricsStore(app).forgetHashed(hashes)

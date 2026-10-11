@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.PersistableBundle
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -53,33 +54,38 @@ import com.thescarletcoder.lyrics.library.LibraryBackup
 import com.thescarletcoder.lyrics.library.LibraryDatabase
 import com.thescarletcoder.lyrics.library.LibraryExport
 import com.thescarletcoder.lyrics.library.LibraryExport.Which
+import com.thescarletcoder.lyrics.library.LibraryKey
 import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.lyrics.library.LibrarySnapshot
 import com.thescarletcoder.lyrics.library.SongKey
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /*
- * Library > Export and Settings > Library backup (scope section 6). Nothing here runs unless Sam taps it, and an
+ * Library > Export and Settings > Library backup (scope section 6). Nothing here runs unless the user taps it, and an
  * export or a backup goes only where she sends it.
  */
 
 private enum class Range(val label: String) { WEEK("Last 7 days"), MONTH("Last 30 days"), YEAR("This year"), LAST_YEAR("Last year"), CUSTOM("Pick dates") }
 
 /** Library > Export. */
+/** Backup, restore or delete found the Library's key gone: the Library screen offers a new one. */
+const val KEY_GONE = "Your Library can't be opened on this device any more. Open the Library to start a new one, then restore."
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExportPanel(onClose: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val zone = remember { ZoneId.systemDefault() }
-    val snap by produceState<LibrarySnapshot?>(null) { value = withContext(Dispatchers.IO) { LibraryRepo(context).snapshot() } }
+    val snap by produceState<LibrarySnapshot?>(null) { value = withContext(Dispatchers.IO) { runCatching { LibraryRepo(context).snapshot() }.getOrNull() } }
 
     var which by remember { mutableStateOf(Which.ALL) }
     var range by remember { mutableStateOf(Range.MONTH) }
@@ -230,7 +236,7 @@ private fun copy(context: Context, body: String): String {
     return "Copied."
 }
 
-/** Settings > Library backup: back up to a file Sam picks, or restore from one, locked with her passphrase. */
+/** Settings > Library backup: back up to a file the user picks, or restore from one, locked with their passphrase. */
 @Composable
 fun LibraryBackupSection(onRestored: () -> Unit) {
     val context = LocalContext.current
@@ -251,12 +257,19 @@ fun LibraryBackupSection(onRestored: () -> Unit) {
         scope.launch {
             status = runCatching {
                 withContext(Dispatchers.IO) {
+                    // Encrypt fully first, then write, so a failure never leaves a broken backup file behind.
                     val snap = LibraryRepo(context).snapshot()
-                    context.contentResolver.openOutputStream(uri, "wt")!!.use { LibraryBackup.write(it, snap, p) }
+                    val bytes = ByteArrayOutputStream().also { LibraryBackup.write(it, snap, p) }.toByteArray()
+                    try {
+                        context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
+                    } catch (e: Exception) {
+                        runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+                        throw e
+                    }
                     snap
                 }
             }.fold({ "Backed up ${it.songs.size} songs and ${it.plays.size} plays. Keep the passphrase somewhere safe: without it this backup can't be opened." },
-                { "The backup didn't finish. Nothing was changed." })
+                { e -> if (e is LibraryKey.Gone) KEY_GONE else "The backup didn't finish. Nothing was changed." })
             p.fill(' ')
             busy = false
         }
@@ -299,12 +312,14 @@ fun LibraryBackupSection(onRestored: () -> Unit) {
                                 LibraryRepo(context).restore(snap)
                             }
                         }.fold(
-                            { r -> forget(); mode = null; onRestored(); "Restored. Your Library now has ${r.songsAfter} songs (was ${r.songsBefore}) and ${r.playsAfter} plays." },
+                            { r -> forget(); mode = null; onRestored(); "Restored. Your Library now has ${r.songsAfter} songs (was ${r.songsBefore}) and ${r.playsAfter} plays (was ${r.playsBefore})." },
                             { e ->
                                 when (e) {
-                                    is LibraryBackup.WrongPassphrase -> "That passphrase doesn't open this backup."
+                                    is LibraryKey.Gone -> KEY_GONE
+                                    is LibraryBackup.WrongPassphrase -> "That passphrase doesn't open this backup, or the file is damaged or incomplete."
                                     is LibraryBackup.NotABackup -> { forget(); mode = null; "That file isn't a Scarlet Lyrics Library backup." }
-                                    is IllegalArgumentException -> e.message ?: "This backup can't be read."
+                                    is LibraryBackup.Unreadable -> e.message ?: "This backup can't be read."
+                                    is IllegalArgumentException -> "This backup can't be read."
                                     else -> "The restore didn't finish. Your Library wasn't changed."
                                 }
                             },
@@ -363,7 +378,7 @@ fun OnThisDevice(repo: LyricsRepo, refresh: Any?) {
     Item(
         "Saved lyrics: " + n(f.cached, "song"),
         "Lyrics already fetched, so a song you've played before shows up at once and works offline, with your " +
-            "\"Wrong lyrics?\" picks and timing nudges. Each one includes the song's title and artist. Not encrypted; " +
+            "\"Wrong lyrics?\" picks and timing nudges. Each one includes the song's title and artist. Encrypted on this device; " +
             "goes nowhere, and Android's backups are switched off for Lyrics.",
     )
     val lib = f.library

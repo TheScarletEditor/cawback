@@ -32,7 +32,7 @@ object LyricsTuning {
     }
 
     private val list = listOf(
-        // Sam, 2026-10-09: 0.9 (the spec started at 0.07). At this strength the saturation cap sets how vivid it gets.
+        // Ruling of 2026-10-09: 0.9 (the spec started at 0.07). At this strength the saturation cap sets how vivid it gets.
         Tunable(TINT_STRENGTH, "Album tint", 0.9f, 0f, 1f, 0.01f),
         Tunable(TINT_SATURATION, "Album tint", 0.5f, 0f, 1f, 0.01f),
         Tunable(TINT_FADE_MS, "Album tint", 800f, 0f, 2000f, 50f, isInt = true),
@@ -53,7 +53,7 @@ object LyricsTuning {
 
     fun init(context: Context) {
         val store = context.getSharedPreferences("tuning", Context.MODE_PRIVATE)
-        // Once: Sam set the tint to 0.9 as the new starting point (2026-10-09). A value saved under the old 0..0.3 slider
+        // Once: the tint was set to 0.9 as the new starting point (2026-10-09). A value saved under the old 0..0.3 slider
         // would otherwise hide it.
         if (!store.getBoolean("tint_default_09", false)) store.edit().remove(TINT_STRENGTH).putBoolean("tint_default_09", true).apply()
         Tunables.init(store, list)

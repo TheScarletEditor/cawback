@@ -85,7 +85,7 @@ fun Header(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> 
 }
 
 /**
- * Flex mode (the Flip half-folded on a table): below the fold, the song with its cover, and big play/pause and more
+ * Flex mode (a flip phone half-folded on a table): below the fold, the song with its cover, and big play/pause and more
  * buttons that are easy to reach on the bottom half. Lyrics fill the top half.
  */
 @Composable
@@ -142,7 +142,7 @@ fun MoreSheet(
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(L.surface)
                     .clickable(remember { MutableInteractionSource() }, indication = null) { }
-                    // Scrolls when the window is short (split screen on the Flip): every row stays reachable.
+                    // Scrolls when the window is short (split screen on a flip phone): every row stays reachable.
                     .verticalScroll(rememberScrollState())
                     .navigationBarsPadding().padding(horizontal = 24.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),

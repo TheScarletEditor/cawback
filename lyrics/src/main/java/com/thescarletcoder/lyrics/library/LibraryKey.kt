@@ -6,6 +6,7 @@ import android.security.keystore.KeyProperties
 import java.io.File
 import java.security.KeyStore
 import java.security.SecureRandom
+import java.security.GeneralSecurityException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -23,15 +24,25 @@ object LibraryKey {
     private const val GCM_TAG_BITS = 128
     private const val IV_BYTES = 12
 
+    /**
+     * The Library exists but its key can't be unwrapped any more (the Keystore key or the wrapped file is gone).
+     * The database can never be opened again on this device: LibraryDatabase.startFresh, then restore a backup.
+     */
+    class Gone : Exception("This device's Library key is gone.")
+
     fun passphrase(context: Context): ByteArray {
         val file = File(context.noBackupFilesDir, FILE)
-        val key = keystoreKey()
         if (file.exists()) {
             val blob = file.readBytes()
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, blob, 0, IV_BYTES))
-            return cipher.doFinal(blob, IV_BYTES, blob.size - IV_BYTES)
+            val key = existingKey() ?: throw Gone()   // never a new key for an old file: it could never open it
+            try {
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, blob, 0, IV_BYTES))
+                return cipher.doFinal(blob, IV_BYTES, blob.size - IV_BYTES)
+            } catch (_: GeneralSecurityException) { throw Gone() }
         }
+        if (LibraryDatabase.exists(context)) throw Gone()   // a database with no key: a new key can't open it
+        val key = keystoreKey()
         val raw = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key)
@@ -41,9 +52,14 @@ object LibraryKey {
         return raw
     }
 
+    /** Starting fresh: the wrapped key goes with the old database (the Keystore key itself is reused). */
+    fun discard(context: Context) { File(context.noBackupFilesDir, FILE).delete() }
+
+    private fun existingKey(): SecretKey? =
+        KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.getKey(ALIAS, null) as? SecretKey
+
     private fun keystoreKey(): SecretKey {
-        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        existingKey()?.let { return it }
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         gen.init(
             KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)

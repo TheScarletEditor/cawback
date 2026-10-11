@@ -15,13 +15,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
 import com.thescarletcoder.lyrics.Matching
+import java.io.File
 import kotlinx.coroutines.flow.Flow
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 /*
  * The Library (Lyrics 0.4; scope sections 6 and 11): songs, plays, moments and notes, in their own encrypted
  * database, separate from the lyrics cache. Never any lyric text. Every row has a uid and timestamps so the Command
- * link can sync it between Sam's devices (newest edit wins; replaced notes are kept in note_history; deletions
+ * link can sync it between the owner's devices (newest edit wins; replaced notes are kept in note_history; deletions
  * travel as tombstones).
  */
 
@@ -55,7 +56,7 @@ data class Play(
     val listenedMs: Long,
 )
 
-/** A bookmarked time in a song with Sam's own label. Never the line's text. */
+/** A bookmarked time in a song with the user's own label. Never the line's text. */
 @Entity(
     tableName = "moment",
     foreignKeys = [ForeignKey(entity = Song::class, parentColumns = ["uid"], childColumns = ["songUid"], onDelete = ForeignKey.CASCADE)],
@@ -70,7 +71,7 @@ data class Moment(
     val updatedAt: Long,
 )
 
-/** A note that was replaced (an edit, or the older side of a sync conflict). Nothing Sam writes is lost. */
+/** A note that was replaced (an edit, or the older side of a sync conflict). Nothing the user writes is lost. */
 @Entity(
     tableName = "note_history",
     foreignKeys = [ForeignKey(entity = Song::class, parentColumns = ["uid"], childColumns = ["songUid"], onDelete = ForeignKey.CASCADE)],
@@ -155,9 +156,7 @@ interface LibraryDao {
 
     @Query("SELECT * FROM note_history WHERE songUid = :uid ORDER BY replacedAt DESC") fun observeNoteHistory(uid: String): Flow<List<NoteHistory>>
     @Query("SELECT * FROM play WHERE startedAt >= :from") suspend fun playsSince(from: Long): List<Play>
-    @Query("SELECT uid FROM play") suspend fun allPlayUids(): List<String>
     @Query("DELETE FROM play") suspend fun deleteAllPlays()
-    @Query("SELECT uid FROM song") suspend fun allSongUids(): List<String>
     @Query("SELECT trackKey FROM song_track") suspend fun allTrackKeys(): List<String>
     @Query("DELETE FROM song") suspend fun deleteAllSongs()
 
@@ -182,6 +181,7 @@ interface LibraryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertTombstones(l: List<Tombstone>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertTracks(l: List<SongTrack>)
     @Query("DELETE FROM tombstone") suspend fun deleteAllTombstones()
+    @Query("DELETE FROM tombstone WHERE kind IN (:kinds)") suspend fun deleteTombstones(kinds: List<String>)
 }
 
 @Database(entities = [Song::class, Play::class, Moment::class, NoteHistory::class, Tombstone::class, SongTrack::class], version = 1)
@@ -203,6 +203,20 @@ abstract class LibraryDatabase : RoomDatabase() {
                     .openHelperFactory(SupportOpenHelperFactory(LibraryKey.passphrase(context)))
                     .build().also { instance = it }
             }
+        }
+
+        /**
+         * After LibraryKey.Gone: sets the unreadable database aside (renamed, never deleted) and forgets its key, so the
+         * next open makes a new, empty Library that a backup can be restored into.
+         */
+        fun startFresh(context: Context) = synchronized(this) {
+            instance?.close(); instance = null
+            val db = context.getDatabasePath(NAME)
+            val aside = "library-unreadable-${System.currentTimeMillis()}"
+            listOf("", "-wal", "-shm", "-journal").forEach { ext ->
+                File(db.path + ext).takeIf { it.exists() }?.renameTo(File(db.parentFile, aside + ".db" + ext))
+            }
+            LibraryKey.discard(context)
         }
     }
 }
@@ -234,14 +248,19 @@ object PlayRule {
  * can't fake a play (only real listening time adds up). Pure: feed it the state, it says when a play finished.
  */
 class PlayTracker {
+    /** [earlierCounted]: this listen continues one that already counted before Lyrics closed, so it isn't a new play. */
     data class Finished(val trackKey: String, val title: String, val artist: String, val album: String?, val durationMs: Long?,
-                        val startedAt: Long, val listenedMs: Long)
+                        val startedAt: Long, val listenedMs: Long, val earlierCounted: Boolean = false)
 
     private var key: String? = null
     private var title = ""; private var artist = ""; private var album: String? = null; private var duration: Long? = null
     private var startedAt = 0L
     private var listened = 0L
     private var playingSince: Long? = null
+    private var earlierCounted = false
+    // The listen [close] ended, so coming back to the same song soon after continues it instead of starting over.
+    private var closed: Finished? = null
+    private var closedAt = 0L
 
     /**
      * The latest state: [trackKey] null when nothing is followed. Returns the previous song's listen when it ended
@@ -249,15 +268,25 @@ class PlayTracker {
      */
     fun update(trackKey: String?, title: String, artist: String, album: String?, durationMs: Long?, playing: Boolean, now: Long): Finished? {
         var done: Finished? = null
-        if (trackKey != key) {
-            done = close(now)
+        if (song(trackKey) != song(key)) {
+            done = finish(now)
             key = trackKey
             if (trackKey != null) {
                 this.title = title; this.artist = artist; this.album = album; duration = durationMs
-                startedAt = now; listened = 0
+                val c = closed
+                if (c != null && song(c.trackKey) == song(trackKey) && now - closedAt < (c.durationMs?.takeIf { it > 0 } ?: RESUME_MS)) {
+                    startedAt = c.startedAt; listened = c.listenedMs
+                    earlierCounted = c.earlierCounted || PlayRule.counts(c.durationMs, c.listenedMs)
+                } else {
+                    startedAt = now; listened = 0; earlierCounted = false
+                }
+                closed = null
             }
             playingSince = null
-        } else if (durationMs != null) duration = durationMs   // the length often arrives a moment late
+        } else {   // the same song; the length often arrives a moment late
+            key = trackKey
+            if (durationMs != null) duration = durationMs
+        }
         if (key != null) {
             val since = playingSince
             if (playing && since == null) playingSince = now
@@ -266,12 +295,25 @@ class PlayTracker {
         return done
     }
 
-    /** Lyrics is closing (or history was switched off): finish whatever was playing. */
-    fun close(now: Long): Finished? {
+    /** Track.key without its last part, the length: the same song whether or not its length is known yet. */
+    private fun song(trackKey: String?) = trackKey?.substringBeforeLast('')
+
+    /**
+     * Lyrics is closing (or history was switched off): finish whatever was playing. If the same song is still playing
+     * when Lyrics comes back, the listen continues: an app switch doesn't split it, and a long song isn't counted twice.
+     */
+    fun close(now: Long): Finished? = finish(now)?.also { closed = it; closedAt = now }
+
+    private fun finish(now: Long): Finished? {
         val k = key ?: return null
         playingSince?.let { listened += now - it }
-        val f = Finished(k, title, artist, album, duration, startedAt, listened)
-        key = null; playingSince = null; listened = 0
+        val f = Finished(k, title, artist, album, duration, startedAt, listened, earlierCounted)
+        key = null; playingSince = null; listened = 0; earlierCounted = false
         return f
+    }
+
+    private companion object {
+        /** How long a closed listen of unknown length can still be continued. */
+        const val RESUME_MS = 600_000L
     }
 }

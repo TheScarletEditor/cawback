@@ -38,7 +38,7 @@ val Inter = FontFamily(Font(R.font.inter_regular), Font(R.font.inter_medium, Fon
 /** The resolved theme for everything below it. Lyrics uses neutrals only; scarlet only where no music shows. */
 val LocalPalette = compositionLocalOf { ScarletTokens.DARK }
 
-/** Short window (the Flip's split screen gives Lyrics the top half): compact header and smaller lyrics. */
+/** Short window (a flip phone's split screen gives Lyrics the top half): compact header and smaller lyrics. */
 val LocalCompact = staticCompositionLocalOf { false }
 
 /** Neutral colours derived from the theme. */

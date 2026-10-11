@@ -42,7 +42,7 @@ data class LibrarySnapshot(
         private fun JSONObject.list(name: String) = optJSONArray(name)?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.orEmpty()
 
         fun fromJson(o: JSONObject): LibrarySnapshot {
-            require(o.optInt("schema", 0) in 1..SCHEMA) { "This backup is from a newer Scarlet Lyrics. Update Lyrics, then restore." }
+            if (o.optInt("schema", 0) !in 1..SCHEMA) throw LibraryBackup.Unreadable("This backup is from a newer Scarlet Lyrics. Update Lyrics, then restore.")
             return LibrarySnapshot(
                 songs = o.list("songs").map {
                     Song(it.getString("uid"), it.getString("matchKey"), it.getString("title"), it.getString("artist"),
@@ -63,7 +63,7 @@ data class LibrarySnapshot(
 
 /**
  * Combines two Libraries: restoring a backup into this one now, syncing two devices through the Command link later.
- * Sam's rules (scope section 11): plays from both always add up; a note or favorite changed on both sides goes to the
+ * The rules (scope section 11): plays from both always add up; a note or favorite changed on both sides goes to the
  * newest edit, and the older note is kept in note history; anything deleted on either side stays deleted.
  * Deterministic, so two devices merging the same data end up identical. Pure, so it is unit tested.
  */

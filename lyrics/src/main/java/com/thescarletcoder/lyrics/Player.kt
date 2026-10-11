@@ -21,13 +21,13 @@ val LocalSettings = staticCompositionLocalOf<LyricsSettings> { error("LyricsSett
 val LocalOutputDelay = compositionLocalOf { 0 }
 
 /**
- * Lyrics 0.3 "Your player" settings (scope section 5, Sam's rulings 2026-10-09). Compose state, saved on every change.
+ * Lyrics 0.3 "Your player" settings (scope section 5, rulings of 2026-10-09). Compose state, saved on every change.
  * Nothing here leaves the device; none of it is a history.
  */
 class LyricsSettings(context: Context) {
     private val p = context.getSharedPreferences("lyrics_prefs", Context.MODE_PRIVATE)
 
-    /** The music app Lyrics follows; "" = whatever is playing; null = not chosen yet (Spotify if it's installed). */
+    /** The music app Lyrics follows; "" or null (not chosen yet) = whatever is playing. */
     var player by mutableStateOf(p.getString("player", null))
         private set
     /** Follow only [player] (the suggested default once one is chosen), or whatever plays except [ignored]. */
@@ -39,7 +39,7 @@ class LyricsSettings(context: Context) {
     /** 0..3: Small, Medium, Large, Largest. */
     var textSize by mutableIntStateOf(p.getInt("text_size", 1))
         private set
-    /** Keep the screen on while a synced song plays (the tablet on the nightstand). */
+    /** Keep the screen on while a synced song plays (a tablet as a bedside display). */
     var keepScreenOn by mutableStateOf(p.getBoolean("keep_screen_on", true))
         private set
     /** Lines already sung: dimmed (default) or hidden. */
@@ -53,7 +53,7 @@ class LyricsSettings(context: Context) {
     var delayWired by mutableIntStateOf(p.getInt("delay_wired", 0)); private set
     var delayBluetooth by mutableIntStateOf(p.getInt("delay_bluetooth", 0)); private set
 
-    /** Listening history (the Library, 0.4): off until Sam turns it on. Read by the recorders through History. */
+    /** Listening history (the Library, 0.4): off until the user turns it on. Read by the recorders through History. */
     var historyMode by mutableStateOf(History.mode(p)); private set
     /** History paused until this time (History.PAUSED_UNTIL_ON = until turned back on); 0 = not paused. */
     var historyPausedUntil by mutableLongStateOf(p.getLong(History.PAUSED, 0)); private set
@@ -86,14 +86,10 @@ class LyricsSettings(context: Context) {
 
     fun delayFor(out: Output) = when (out) { Output.SPEAKER -> delaySpeaker; Output.WIRED -> delayWired; Output.BLUETOOTH -> delayBluetooth }
 
-    /** The app actually followed: the chosen one, or Spotify when nothing's chosen yet and it's installed. */
-    fun effectivePlayer(context: Context): String? = when (val chosen = player) {
-        null -> NowPlaying.SPOTIFY.takeIf { MediaApps.installed(context, NowPlaying.SPOTIFY) }
-        "" -> null
-        else -> chosen
-    }
+    /** The app actually followed: the chosen one, or null for whatever is playing (also before one is chosen). */
+    fun effectivePlayer(): String? = player?.ifEmpty { null }
 
-    fun rules(context: Context) = SessionPick.Rules(effectivePlayer(context), player != "" && onlyPlayer, ignored)
+    fun rules() = SessionPick.Rules(effectivePlayer(), effectivePlayer() != null && onlyPlayer, ignored)
 
     companion object {
         val TEXT_SIZES = listOf("Small", "Medium", "Large", "Largest")
@@ -129,9 +125,6 @@ object MediaApps {
             .map { App(it, label(context, it)) }
             .sortedBy { it.label.lowercase() }
     }
-
-    fun installed(context: Context, pkg: String) =
-        runCatching { context.packageManager.getPackageInfo(pkg, 0); true }.getOrDefault(false)
 
     fun label(context: Context, pkg: String): String = runCatching {
         val pm = context.packageManager

@@ -10,6 +10,7 @@ Your music app, your settings, and a private Library that's off until you turn i
 
 **Your player**
 - Follows any music app you pick, or whatever is playing. Follow only your app, or other apps too.
+- If you never picked a music app, Lyrics now follows whatever is playing. Pick yours in Settings > Your music app.
 - "Never follow" list: ignored apps are never looked up.
 - "Lyrics + your app" home screen shortcut opens both side by side.
 - Text size, sung lines dimmed or hidden, and how soon it follows the song again after you scroll.
@@ -27,7 +28,8 @@ Your music app, your settings, and a private Library that's off until you turn i
 - Settings > What's on this device shows exactly what Lyrics keeps and what it sends.
 
 **Privacy**
-- No new permissions. Still connects only to lrclib.net, still reads only title, artist and position.
+- No new permissions. Still connects only to lrclib.net. Lyrics sees only what's playing (title, artist, album, length, position and cover); the cover only tints the screen and is never saved.
+- Saved lyrics are now encrypted on your device too.
 - The Library is encrypted on your device and never stores lyrics, which app played a song, or your location.
 - Android's own cloud backup is off for Lyrics: use Library backup to move to a new phone.
 

@@ -106,7 +106,7 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}) 
     val current by remember(s) { derivedStateOf { Lrc.indexAt(s.lines, pos) } }
     LaunchedEffect(dragged) { if (dragged) lastTouch = System.currentTimeMillis() }
     LaunchedEffect(current) {
-        // Follow the song unless Sam scrolled in the last few seconds (Settings: 2, 4 or 8).
+        // Follow the song unless the user scrolled in the last few seconds (Settings: 2, 4 or 8).
         if (!dragged && System.currentTimeMillis() - lastTouch > settings.followDelaySec * 1000L) glideTo(list, current.coerceAtLeast(0), anchor, Motion.duration(context, Tunables.int(LyricsTuning.GLIDE_MS)))
     }
 
