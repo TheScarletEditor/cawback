@@ -91,6 +91,13 @@ object Icons {
         drawRoundRect(c, Offset(w * 0.18f, h * 0.1f), androidx.compose.ui.geometry.Size(w * 0.22f, h * 0.8f), androidx.compose.ui.geometry.CornerRadius(w * 0.05f))
         drawRoundRect(c, Offset(w * 0.6f, h * 0.1f), androidx.compose.ui.geometry.Size(w * 0.22f, h * 0.8f), androidx.compose.ui.geometry.CornerRadius(w * 0.05f))
     }
+    /** Back: a left-pointing chevron. */
+    val back: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit = { c ->
+        val w = size.width; val h = size.height
+        drawPath(Path().apply { moveTo(w * 0.66f, h * 0.12f); lineTo(w * 0.28f, h * 0.5f); lineTo(w * 0.66f, h * 0.88f) }, c,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(w * 0.14f, cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                join = androidx.compose.ui.graphics.StrokeJoin.Round))
+    }
     val more: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit = { c ->
         val r = size.width * 0.1f
         listOf(0.18f, 0.5f, 0.82f).forEach { x -> drawCircle(c, r, Offset(size.width * x, size.height / 2)) }

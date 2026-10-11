@@ -8,8 +8,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -20,11 +22,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -36,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,31 +52,45 @@ import com.thescarletcoder.scarlet.Tunables
 /**
  * Header: album thumbnail (only with art), title in Fraunces, artist, a drawn play/pause and a drawn "more".
  * The six text chips are gone; everything else lives in the More sheet.
+ * With [onBack] (a page is open) it's the now-playing bar: a back arrow before the song, and tapping either goes back
+ * a step, to the lyrics from any first-level page. With nothing playing it names where that is: "Back to [backTo]".
  */
 @Composable
-fun Header(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> Unit, onMore: () -> Unit) {
+fun Header(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> Unit, onMore: () -> Unit, onBack: (() -> Unit)? = null, backTo: String = "Lyrics") {
     val compact = LocalCompact.current
     val swap = Motion.duration(LocalContext.current, Tunables.int(LyricsTuning.SWAP_MS))
     Row(
         Modifier.fillMaxWidth().padding(horizontal = if (compact) 16.dp else 24.dp, vertical = if (compact) 8.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Old title fades out, then the new one fades in.
-        AnimatedContent(
-            targetState = track to art, contentKey = { it.first?.key to (it.second != null) },
-            transitionSpec = { fadeIn(tween(swap, delayMillis = swap)) togetherWith fadeOut(tween(swap)) },
-            modifier = Modifier.weight(1f), label = "title",
-        ) { (t, a) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (a != null) {
-                    Image(a.thumb, contentDescription = null, contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)))
-                    Spacer(Modifier.width(12.dp))
+        // With a page open, the arrow and the song are one button: back a step.
+        val back = Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Back", role = Role.Button) { onBack?.invoke() }
+        Row(if (onBack != null) Modifier.weight(1f).heightIn(min = 48.dp).then(back) else Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            if (onBack != null) {
+                // Drawn like the other header buttons; the whole bar is the tap target, so this one only shows the way.
+                Box(Modifier.size(40.dp).clip(CircleShape).background(L.wash).border(1.dp, L.washEdge, CircleShape), contentAlignment = Alignment.Center) {
+                    val c = L.text
+                    Canvas(Modifier.size(18.dp)) { Icons.back(this, c) }
                 }
-                Column(Modifier.weight(1f)) {
-                    Text(t?.title ?: "Scarlet Lyrics", fontFamily = Fraunces, fontSize = if (compact) 17.sp else 20.sp, color = L.text,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (t != null) Text(t.artist, fontFamily = Inter, fontSize = 13.sp, color = L.soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.width(12.dp))
+            }
+            // Old title fades out, then the new one fades in.
+            AnimatedContent(
+                targetState = track to art, contentKey = { it.first?.key to (it.second != null) },
+                transitionSpec = { fadeIn(tween(swap, delayMillis = swap)) togetherWith fadeOut(tween(swap)) },
+                modifier = Modifier.weight(1f), label = "title",
+            ) { (t, a) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (a != null) {
+                        Image(a.thumb, contentDescription = null, contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)))
+                        Spacer(Modifier.width(12.dp))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(t?.title ?: if (onBack != null) "Back to $backTo" else "Scarlet Lyrics", fontFamily = Fraunces,
+                            fontSize = if (compact) 17.sp else 20.sp, color = L.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (t != null) Text(t.artist, fontFamily = Inter, fontSize = 13.sp, color = L.soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -147,7 +166,7 @@ fun MoreSheet(
                     .navigationBarsPadding().padding(horizontal = 24.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                if (hasTrack && shown !is Shown.NoAccess) SheetRow("Wrong lyrics?", "Pick a different version or search by hand.") { onClose(); onWrong() }
+                if (hasTrack && shown !is Shown.NoAccess) SheetRow("Other versions", "Find a synced or different version, or search by hand.") { onClose(); onWrong() }
                 if (shown is Shown.Found && shown.synced) {
                     Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
                         Text("Timing", fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = L.text)

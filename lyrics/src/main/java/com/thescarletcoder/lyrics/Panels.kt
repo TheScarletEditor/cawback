@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -125,7 +127,7 @@ fun YoureSet() {
 }
 
 @Composable
-fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate) -> Unit, onAuto: () -> Unit, onClose: () -> Unit) {
+fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate) -> Unit, onAuto: () -> Unit) {
     val scope = rememberCoroutineScope()
     // TextFieldValue so the cursor starts at the end of the pre-filled search (the end was out of reach on a phone).
     var query by remember {
@@ -148,14 +150,12 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
     }
     LaunchedEffect(Unit) { run() }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-        // The field gets the full width; the buttons go underneath (narrow phone screens).
+    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Text("Other versions", fontFamily = Fraunces, fontSize = 28.sp, color = L.text, modifier = Modifier.padding(bottom = 12.dp))
+        // The field gets the full width; the button goes underneath (narrow phone screens).
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SearchField(query, { query = it }, ::run)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Washed("Search", ::run)
-                Washed("Close", onClose)
-            }
+            Washed("Search", ::run)
         }
         if (current?.pinned == true) Box(Modifier.padding(top = 10.dp)) { Washed("Go back to the automatic match", onAuto) }
         status?.let { Text(it, fontFamily = Inter, fontSize = 16.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp)) }
@@ -212,7 +212,7 @@ internal fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Un
 fun SettingsPanel(
     repo: LyricsRepo, hasAccess: Boolean, theme: ThemeChoice, onTheme: (ThemeChoice) -> Unit,
     onGrant: () -> Unit, onCleared: () -> Unit, output: Output, onFollowChanged: () -> Unit, onPinShortcut: () -> Unit,
-    onTuning: () -> Unit, onClose: () -> Unit,
+    onTuning: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -408,7 +408,7 @@ fun SettingsPanel(
             },
             fontFamily = Inter, fontSize = 17.sp, color = L.text,
         )
-        Text("Includes your \"Wrong lyrics?\" picks and timing nudges.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
+        Text("Includes your \"Other versions\" picks and timing nudges.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
         Box(Modifier.padding(top = 12.dp)) {
             when {
                 confirming -> Column {
@@ -452,18 +452,15 @@ fun SettingsPanel(
             Box(Modifier.padding(top = 12.dp)) { Washed("Open tuning", onTuning) }
         }
 
-        Box(Modifier.padding(top = 28.dp, bottom = 24.dp)) { Washed("Close", onClose) }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
-fun TuningPage(onClose: () -> Unit) {
+fun TuningPage() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Tuning", fontFamily = Fraunces, fontSize = 28.sp, color = L.text, modifier = Modifier.weight(1f))
-            Washed("Back", onClose)
-        }
+        Text("Tuning", fontFamily = Fraunces, fontSize = 28.sp, color = L.text)
         TuningPanel(L.p, Inter)
     }
 }

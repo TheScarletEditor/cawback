@@ -86,7 +86,7 @@ fun Modifier.edgeFade(top: () -> Float = { 1f }): Modifier = this
 @Composable
 /**
  * [onMoment]: a line was long-pressed; bookmark that time in the song (the Library; never the line's text).
- * [onPick]: "Try another version" on the end note (opens Wrong lyrics?).
+ * [onPick]: "Try another version" on the end note (opens Other versions).
  */
 fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, onPick: () -> Unit = {}) {
     val list = rememberLazyListState()

@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -248,7 +249,17 @@ class LyricsActivity : ComponentActivity() {
     }
 }
 
-private enum class Panel { NONE, PICKER, SETTINGS, TUNING, LIBRARY, SONG, EXPORT }
+internal enum class Panel {
+    NONE, PICKER, SETTINGS, TUNING, LIBRARY, SONG, EXPORT;
+
+    /** Where one step back goes (system Back and the now-playing bar). Pure, so it is unit tested. */
+    fun back(songFromLibrary: Boolean): Panel = when {
+        this == TUNING -> SETTINGS
+        this == SONG && songFromLibrary -> LIBRARY
+        this == EXPORT -> LIBRARY
+        else -> NONE
+    }
+}
 
 @Composable
 private fun LyricsScreen(
@@ -369,16 +380,16 @@ private fun LyricsScreen(
         else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
+    // One step back from a page: the system Back and the now-playing bar (Header with onBack) both use it.
+    fun pageBack() { panel = panel.back(songFromLibrary) }
     BackHandler(enabled = sheet || momentAt != null || panel != Panel.NONE) {
         when {
             sheet -> sheet = false
             momentAt != null -> momentAt = null
-            panel == Panel.TUNING -> panel = Panel.SETTINGS
-            panel == Panel.SONG && songFromLibrary -> panel = Panel.LIBRARY
-            panel == Panel.EXPORT -> panel = Panel.LIBRARY
-            else -> panel = Panel.NONE
+            else -> pageBack()
         }
     }
+    val onBack: (() -> Unit)? = if (panel != Panel.NONE) ::pageBack else null
 
     val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
     // The sheets sit outside the safe-area padding, so their dimming covers the whole screen, status bar included.
@@ -406,30 +417,36 @@ private fun LyricsScreen(
             val density = LocalDensity.current
             // Flex mode: the fold's position inside this box (it's measured in window pixels).
             var boxTop by remember { mutableIntStateOf(0) }
+            var headerPx by remember { mutableIntStateOf(0) }
             val flexTop = foldTop?.let { with(density) { (it - boxTop).toDp() } }?.takeIf { it > 120.dp && it < maxHeight - 120.dp }
             CompositionLocalProvider(LocalCompact provides (compact || flexTop != null)) {
                 Column(Modifier.fillMaxSize().onGloballyPositioned { boxTop = it.positionInWindow().y.toInt() }) {
                     // The header keeps its space while hidden, so nothing moves when it fades. In Flex mode the controls
                     // sit below the fold instead.
-                    if (flexTop == null) Box(Modifier.fillMaxWidth().offset(y = chromeLift).graphicsLayer { alpha = chromeAlpha }) {
-                        Header(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
+                    // In Flex mode a page still gets the now-playing bar on top, so the way back is always in view; the page
+                    // gives up the bar's height so it still ends at the fold.
+                    val barOnTop = flexTop != null && onBack != null
+                    if (flexTop == null || barOnTop) Box(Modifier.fillMaxWidth().offset(y = chromeLift).graphicsLayer { alpha = chromeAlpha }
+                        .onSizeChanged { headerPx = it.height }) {
+                        Header(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause, onMore = { sheet = true }, onBack = onBack,
+                            backTo = when (panel.back(songFromLibrary)) { Panel.SETTINGS -> "Settings"; Panel.LIBRARY -> "Library"; else -> "Lyrics" })
                     }
-                    Box(if (flexTop != null) Modifier.height(flexTop).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth()) {
+                    val pageTop = if (barOnTop) with(density) { headerPx.toDp() } else 0.dp
+                    Box(if (flexTop != null) Modifier.height((flexTop - pageTop).coerceAtLeast(0.dp)).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth()) {
                         val t = track
                         when {
-                            panel == Panel.TUNING -> TuningPage { panel = Panel.SETTINGS }
+                            panel == Panel.TUNING -> TuningPage()
                             panel == Panel.SETTINGS -> SettingsPanel(repo, hasAccess, theme, onTheme, onGrant, onCleared = { reload++ },
                                 output = output, onFollowChanged = onFollowChanged, onPinShortcut = onPinShortcut,
-                                onTuning = { panel = Panel.TUNING }, onClose = { panel = Panel.NONE })
+                                onTuning = { panel = Panel.TUNING })
                             panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
                                 onPick = { c -> scope.launch { shown = repo.pin(t, c); panel = Panel.NONE } },
-                                onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } },
-                                onClose = { panel = Panel.NONE })
+                                onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } })
                             panel == Panel.LIBRARY -> LibraryPanel(
                                 onSong = { songUid = it; songPending = null; songFromLibrary = true; panel = Panel.SONG },
                                 onExport = { panel = Panel.EXPORT },
-                                onSettings = { panel = Panel.SETTINGS }, onClose = { panel = Panel.NONE })
-                            panel == Panel.EXPORT -> ExportPanel(onClose = { panel = Panel.LIBRARY })
+                                onSettings = { panel = Panel.SETTINGS })
+                            panel == Panel.EXPORT -> ExportPanel()
                             panel == Panel.SONG && (songUid != null || songPending != null) -> {
                                 val here = t != null && if (songUid != null) songUid == playingUid else songPending?.let { it.title == t.title && it.artist == t.artist } == true
                                 SongPage(songUid, songPending, position = if (here) np::positionMs else null, onSeek = if (here) np::seekTo else null,

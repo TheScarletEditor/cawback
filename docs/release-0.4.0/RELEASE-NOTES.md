@@ -17,6 +17,9 @@ Your music app, your settings, and a private Library that's off until you turn i
 - Keep the screen on while synced lyrics play.
 - Timing per output: set a delay once for the speaker, wired headphones and Bluetooth.
 - Flex mode on flip phones: lyrics above the fold, controls below.
+- Easier to get around: every page has a bar at the top with the song playing; tap it to go back.
+- "Wrong lyrics?" is now "Other versions": find a synced or different version, or search by hand.
+- When a version's lyrics run out before the song does, Lyrics says so and offers another version.
 
 **Your Library (optional, off by default)**
 - Listening history: off, only while Lyrics is open, or always.

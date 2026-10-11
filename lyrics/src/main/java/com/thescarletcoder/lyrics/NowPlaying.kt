@@ -67,7 +67,7 @@ class NowPlayingListener : NotificationListenerService() {
 }
 
 data class Track(val title: String, val artist: String, val album: String?, val durationMs: Long?) {
-    /** Stable key for caching and "wrong lyrics" picks. Hashed before it touches disk. */
+    /** Stable key for caching and "Other versions" picks. Hashed before it touches disk. */
     val key get() = listOf(title, artist, album.orEmpty(), ((durationMs ?: 0) / 1000).toString()).joinToString("\u0001")
 }
 

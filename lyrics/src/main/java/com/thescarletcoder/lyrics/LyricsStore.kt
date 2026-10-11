@@ -16,7 +16,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Small on-device cache: fetched lyrics, "wrong lyrics" picks and timing nudges, one file per track.
+ * Small on-device cache: fetched lyrics, "Other versions" picks and timing nudges, one file per track.
  * File names are hashes, so the folder doesn't read as a listening history. Excluded from every backup.
  *
  * Encrypted at rest (AES-GCM with a non-exportable Android Keystore key). 0.2.0 wrote plain JSON: [sealOldFiles]

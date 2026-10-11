@@ -77,7 +77,7 @@ class LyricsRepo(private val store: LyricsStore) {
     private inline fun exact(block: () -> Candidate): Candidate? =
         try { block().takeIf { it.synced != null || it.plain != null || it.instrumental } } catch (_: LrcLib.NotFound) { null }
 
-    /** "Wrong lyrics": the user's pick sticks to this track. */
+    /** "Other versions": the user's pick sticks to this track. */
     suspend fun pin(t: Track, c: Candidate): Shown = withContext(Dispatchers.IO) {
         val offset = store.load(t.key)?.offsetMs ?: 0
         store.save(t.key, LyricsStore.Entry(c, pinned = true, offsetMs = offset, fetchedAt = System.currentTimeMillis()))

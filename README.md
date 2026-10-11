@@ -8,7 +8,7 @@ Android 14 or newer. Free, open source, no ads, no tracking, no account.
 
 - Follows the song playing in your music app and highlights the line being sung. Tap a line to jump the song there.
 - Timing a little off? Nudge it earlier or later, and it remembers for that song.
-- "Wrong lyrics?" lets you pick a different match, and it sticks to that track.
+- "Other versions" lets you pick a synced or different version, and it sticks to that track.
 - Works in split screen next to your music app. Open it while your music app is playing and the app comes up beside it (unless the screen is already split).
 - If the connection drops, it tries again quietly and the lyrics appear once you're back online.
 - Light and dark (or following the system). While a song plays, a little of its album cover tints the background, taken from the art your music app already shares with Android. Art is never downloaded, and the tint is never saved.
@@ -35,10 +35,10 @@ Settings lets you set it up the way you listen:
 
 ## Privacy and permissions
 
-- **Internet, for one site only.** Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library, over HTTPS. That is the only place the app connects to. To find the words, it sends the song's title, artist, album and length, and anything you type into a "Wrong lyrics?" search. As with any website, LRCLIB also sees your IP address.
+- **Internet, for one site only.** Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library, over HTTPS. That is the only place the app connects to. To find the words, it sends the song's title, artist, album and length, and anything you type into an "Other versions" search. As with any website, LRCLIB also sees your IP address.
 - **Notification access**, because Android requires it for an app to see what's playing. Lyrics sees only what's playing: the song's title, artist, album, length, position and cover art (the cover only tints the screen and is never saved). It never reads your notifications.
 - **Nothing from your Library leaves your device** unless you export it or make a backup, and then it goes only where you choose.
-- **Saved lyrics:** a small encrypted on-device cache keeps fetched lyrics (each with its song title and artist), your "Wrong lyrics?" picks and timing nudges. It's excluded from backups. Settings shows how many songs are saved and has "Clear saved lyrics".
+- **Saved lyrics:** a small encrypted on-device cache keeps fetched lyrics (each with its song title and artist), your "Other versions" picks and timing nudges. It's excluded from backups. Settings shows how many songs are saved and has "Clear saved lyrics".
 - **Settings > What's on this device** shows exactly what Lyrics keeps, with real counts, and what it sends to lrclib.net.
 - The full privacy policy is at [thescarletcoder.com/privacy](https://thescarletcoder.com/privacy).
 
