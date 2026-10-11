@@ -67,7 +67,9 @@ import java.util.Date
 /** Empty states (nothing playing, not found, offline): raven and halo, Fraunces headline, one washed button. */
 @Composable
 fun EmptyState(title: String, body: String?, action: String?, onAction: (() -> Unit)?, raven: Boolean = true) {
-    Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+    // Scrolls, like Welcome: a phone in landscape is too short for the raven, text and button.
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp), verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally) {
         if (raven) RavenHalo(96.dp)
         Text(title, fontFamily = Fraunces, fontSize = 28.sp, color = L.text, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
         if (body != null) Text(body, fontFamily = Inter, fontSize = 17.sp, color = L.soft, textAlign = TextAlign.Center,

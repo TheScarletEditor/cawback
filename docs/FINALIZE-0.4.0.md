@@ -11,8 +11,8 @@ Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes. Dry run 
 | 1 | Audit | done | 4 agents (spec, rules, manifest, data). 11 mechanical fixes, 11 questions answered and applied. Re-check: 52/52 unit tests, R8 release build, androidTest compile, rule greps clean. One regression from the D10 fix was caught by an existing test and fixed. |
 | 2 | Code review | done | 3 review agents by area + 1 security agent. 22 mechanical fixes, 4 questions answered and applied; 53/53 tests, R8 release build and androidTest compile pass. 5 regressions from Stage 1 work caught (R1, R5, R6, R7, S2). |
 | 3 | Cleanup | done | Lint (no errors; new warnings fixed, older style warnings left), cleanup agent (15 of 16 applied), no TODOs or commented-out code, TUNING off in release, docs match. 53/53 tests, R8 release build, androidTest compile. |
-| 4 | QA | done | Pass 1 (after the QA1 fix): 54/54 unit tests, lint no new issues, release, personal and smoke builds, APK checks (0.4.0 / 3, not debuggable, permissions as 0.2.0), labtest 8/8 on the tablet; QA2 found. Pass 2 (after the QA2 fix): all the same, APK 17.4 MB with arm64-v8a, armeabi-v7a, x86_64; clean. |
-| 5 | Smoke test | pending | |
+| 4 | QA | done | Pass 1 (after the QA1 fix): 54/54 unit tests, lint no new issues, release, personal and smoke builds, APK checks (0.4.0 / 3, not debuggable, permissions as 0.2.0), labtest 8/8 on the tablet; QA2 found. Pass 2 (after the QA2 fix): all the same, APK 17.4 MB with arm64-v8a, armeabi-v7a, x86_64; clean. Pass 3 (after the Stage 5 fix SM1): all the same; clean. |
+| 5 | Smoke test | running | Part 1 done: smoke copy on the Pixel 8, small phone (font 1.3) and Pixel tablet emulators, light and dark, rotation, home/back and return; no crash or ANR. The lyrics screen itself can't be driven on an emulator (no player there reads a test file's tags), so it is covered by the owner's device tests, including the end note (QA1). SM1 fixed, QA re-run (pass 3), landscape re-checked. Part 2 (owner device tests) next. |
 | 6 | Ship | pending | |
 | 7 | Wrap-up | pending | |
 
@@ -83,10 +83,11 @@ Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes. Dry run 
 | C21 | Cleanup | question | LibraryShare.kt:431 | "Replaced at the next export" no longer the whole story | asked (Q16) | |
 | QA1 | QA | question | LyricsLines.kt SyncedLyrics, Lrc.kt | Owner report (phone, 0.2.0): on a song whose LRCLIB record stops early (last sung line at 2:13 of 3:17, then one blank line at 3:14), the last line stayed current to the end over gap dots that never filled. Not a timing bug: 7 of the 9 synced records for that song stop there; 2 longer ones exist | asked (Q17, Q18); end note built (Lrc.withEnd, EndNote) with a unit test | |
 | QA2 | QA | question | lyrics/build.gradle.kts | Release APK 22.4 MB against 2.2 MB in 0.2.0: SQLCipher's native library for four CPU types (about 19 MB); expected dependency (Library encryption) | asked (Q19); 32-bit x86 dropped (abiFilters) | |
+| SM1 | Smoke | mechanical | Panels.kt:69 EmptyState | Phone in landscape: "Nothing playing" and the Library's "Nothing here yet" squeezed their button to a sliver and cut text (small phone at font 1.3 worst) | Empty states scroll, like Welcome; re-checked in landscape | |
 
 ## Questions
 
-Stage 1: Q1 to Q11. Stage 2: Q12 to Q15. Stage 3: Q16. Stage 4: Q17 to Q19. All answered 2026-10-11. QA findings use ids QA1, QA2... so they don't clash with question numbers.
+Stage 1: Q1 to Q11. Stage 2: Q12 to Q15. Stage 3: Q16. Stage 4: Q17 to Q19. All answered 2026-10-11. QA findings use ids QA1, QA2... and smoke findings SM1, SM2... so they don't clash with question numbers or the review's S ids.
 
 | Q | Findings | Answer (owner's pick, word for word) | Follow-up |
 |---|---|---|---|
