@@ -31,6 +31,20 @@ class LrcTest {
         assertEquals(2, Lrc.indexAt(l, 99_000))
     }
 
+    @Test fun endComesAfterTheLastSungLine() {
+        // Record that stops early: last words at 2:13, then only a blank at 3:14.
+        val early = Lrc.withEnd(Lrc.parseSynced("[00:10.00]one\n[00:20.00]\n[02:13.00]two\n[03:14.00]"))!!
+        assertEquals(listOf(10_000L, 20_000L, 133_000L, 143_000L), early.map { it.timeMs })
+        assertEquals(3, Lrc.indexAt(early, 175_000))
+        assertEquals(2, Lrc.indexAt(early, 140_000))
+        // A blank soon after the last line ends it there; no trailing blank still gets an end.
+        assertEquals(64_000L, Lrc.withEnd(Lrc.parseSynced("[01:00.00]one\n[01:04.00]\n[01:30.00]"))!!.last().timeMs)
+        assertEquals(listOf("one", ""), Lrc.withEnd(Lrc.parseSynced("[01:00.00]one"))!!.map { it.text })
+        // Nothing sung: nothing to end.
+        assertEquals(null, Lrc.withEnd(Lrc.parseSynced("[00:05.00]\n[00:09.00]")))
+        assertEquals(null, Lrc.withEnd(emptyList()))
+    }
+
     @Test fun cleansTitles() {
         assertEquals("Song", Matching.cleanTitle("Song - Remastered 2011"))
         assertEquals("Song", Matching.cleanTitle("Song (feat. Someone)"))

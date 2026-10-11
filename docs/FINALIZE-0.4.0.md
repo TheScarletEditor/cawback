@@ -1,7 +1,7 @@
 # Finalize Scarlet Lyrics 0.4.0
 
 Started 2026-10-10. Base: v0.2.0 (75718c7). Diff: 37 files, +3735 -162.
-Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes. Dry run complete 2026-10-11: Stages 4 to 7 still to run before 0.4.0 ships.
+Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes. Dry run complete 2026-10-11. Full run resumed 2026-10-11 at Stage 4.
 
 ## Stages
 
@@ -11,10 +11,10 @@ Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes. Dry run 
 | 1 | Audit | done | 4 agents (spec, rules, manifest, data). 11 mechanical fixes, 11 questions answered and applied. Re-check: 52/52 unit tests, R8 release build, androidTest compile, rule greps clean. One regression from the D10 fix was caught by an existing test and fixed. |
 | 2 | Code review | done | 3 review agents by area + 1 security agent. 22 mechanical fixes, 4 questions answered and applied; 53/53 tests, R8 release build and androidTest compile pass. 5 regressions from Stage 1 work caught (R1, R5, R6, R7, S2). |
 | 3 | Cleanup | done | Lint (no errors; new warnings fixed, older style warnings left), cleanup agent (15 of 16 applied), no TODOs or commented-out code, TUNING off in release, docs match. 53/53 tests, R8 release build, androidTest compile. |
-| 4 | QA | skipped (dry run) | |
-| 5 | Smoke test | skipped (dry run) | |
-| 6 | Ship | skipped (dry run) | |
-| 7 | Wrap-up | skipped (dry run) | |
+| 4 | QA | done | Pass 1 (after the QA1 fix): 54/54 unit tests, lint no new issues, release, personal and smoke builds, APK checks (0.4.0 / 3, not debuggable, permissions as 0.2.0), labtest 8/8 on the tablet; QA2 found. Pass 2 (after the QA2 fix): all the same, APK 17.4 MB with arm64-v8a, armeabi-v7a, x86_64; clean. |
+| 5 | Smoke test | pending | |
+| 6 | Ship | pending | |
+| 7 | Wrap-up | pending | |
 
 ## Findings
 
@@ -81,10 +81,12 @@ Mode: dry run (Stages 0 to 3; the first run of /finalize). Public: yes. Dry run 
 | C19 | Cleanup | mechanical | Panels.kt:220,223 | Lint: boxed Int state in new 0.4 code | mutableIntStateOf | |
 | C20 | Cleanup | dropped | LyricsStore.kt CacheCipher | Near copy of LibraryKey's Keystore key setup | Kept apart: merging touches key creation for little gain | |
 | C21 | Cleanup | question | LibraryShare.kt:431 | "Replaced at the next export" no longer the whole story | asked (Q16) | |
+| QA1 | QA | question | LyricsLines.kt SyncedLyrics, Lrc.kt | Owner report (phone, 0.2.0): on a song whose LRCLIB record stops early (last sung line at 2:13 of 3:17, then one blank line at 3:14), the last line stayed current to the end over gap dots that never filled. Not a timing bug: 7 of the 9 synced records for that song stop there; 2 longer ones exist | asked (Q17, Q18); end note built (Lrc.withEnd, EndNote) with a unit test | |
+| QA2 | QA | question | lyrics/build.gradle.kts | Release APK 22.4 MB against 2.2 MB in 0.2.0: SQLCipher's native library for four CPU types (about 19 MB); expected dependency (Library encryption) | asked (Q19); 32-bit x86 dropped (abiFilters) | |
 
 ## Questions
 
-Stage 1: Q1 to Q11. Stage 2: Q12 to Q15. All answered 2026-10-11.
+Stage 1: Q1 to Q11. Stage 2: Q12 to Q15. Stage 3: Q16. Stage 4: Q17 to Q19. All answered 2026-10-11. QA findings use ids QA1, QA2... so they don't clash with question numbers.
 
 | Q | Findings | Answer (owner's pick, word for word) | Follow-up |
 |---|---|---|---|
@@ -105,6 +107,9 @@ Stage 1: Q1 to Q11. Stage 2: Q12 to Q15. All answered 2026-10-11.
 | Q15 | R20 | "Raise to 48dp (Recommended)" | Small buttons and header icons get a 48dp tap area, same look |
 | Copy | Stage 2 text | "Yes, as written" | Applied |
 | Q16 | C21 | "Update it (Recommended)" | "Replaced at the next export and removed after a day; Android can clear it sooner." (the existing Android clause kept) |
+| Q17 | QA1 | "End note + link (Recommended)" | About 10 s after the last sung line (or at a blank line sooner), a soft note "That's all the lyrics this version has." with a "Try another version" button that opens Wrong lyrics? |
+| Q18 | QA1 | "Leave for after 0.4.0 (Recommended)" | Preferring the fuller record when several match: filed in scarlet-hq IDEAS as proposed at hq-log |
+| Q19 | QA2 | "Drop 32-bit x86 only (Recommended)" | abiFilters arm64-v8a, armeabi-v7a, x86_64 |
 
 ## Ship
 

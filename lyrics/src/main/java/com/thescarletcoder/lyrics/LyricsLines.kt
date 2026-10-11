@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -83,8 +84,11 @@ fun Modifier.edgeFade(top: () -> Float = { 1f }): Modifier = this
     }
 
 @Composable
-/** [onMoment]: a line was long-pressed; bookmark that time in the song (the Library; never the line's text). */
-fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}) {
+/**
+ * [onMoment]: a line was long-pressed; bookmark that time in the song (the Library; never the line's text).
+ * [onPick]: "Try another version" on the end note (opens Wrong lyrics?).
+ */
+fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, onPick: () -> Unit = {}) {
     val list = rememberLazyListState()
     val dragged by list.interactionSource.collectIsDraggedAsState()
     var pos by remember { mutableLongStateOf(0L) }
@@ -102,8 +106,11 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}) 
             while (true) { pos = np.positionMs() + offset; delay(60) }
         }
     }
+    // The last row is the end note when the lyrics run out (Lrc.withEnd).
+    val lines = remember(s) { Lrc.withEnd(s.lines) ?: s.lines }
+    val endRow = if (lines !== s.lines) lines.lastIndex else -1
     // Only the line index drives the list, so it recomposes when the line changes, not 16 times a second.
-    val current by remember(s) { derivedStateOf { Lrc.indexAt(s.lines, pos) } }
+    val current by remember(lines) { derivedStateOf { Lrc.indexAt(lines, pos) } }
     LaunchedEffect(dragged) { if (dragged) lastTouch = System.currentTimeMillis() }
     LaunchedEffect(current) {
         // Follow the song unless the user scrolled in the last few seconds (Settings: 2, 4 or 8).
@@ -120,8 +127,9 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}) 
             state = list, contentPadding = PaddingValues(top = 8.dp, bottom = maxHeight - top),
             modifier = Modifier.fillMaxSize().edgeFade { topFade },
         ) {
-            itemsIndexed(s.lines) { i, line ->
-                val gapEnd = if (line.text.isBlank()) s.lines.getOrNull(i + 1)?.timeMs else null
+            itemsIndexed(lines) { i, line ->
+                if (i == endRow) { EndNote(i == current, compact, onPick); return@itemsIndexed }
+                val gapEnd = if (line.text.isBlank()) lines.getOrNull(i + 1)?.timeMs else null
                 LyricRow(i, line, current, compact, gapEnd, offset, np, settings,
                     onLongPress = { line.timeMs?.let { onMoment((it - offset).coerceAtLeast(0)) } }) {
                     line.timeMs?.let { np.seekTo((it - offset).coerceAtLeast(0)); lastTouch = 0 }
@@ -226,6 +234,19 @@ private fun GapDots(isCurrent: Boolean, start: Long, end: Long?, offsetMs: Long,
             val a = if (isCurrent) 0.22f + 0.78f * (p * 3 - i).coerceIn(0f, 1f) else 0.22f
             Box(Modifier.size(7.dp).background(c.copy(alpha = a), CircleShape))
         }
+    }
+}
+
+/** After the last sung line: says the words have run out, with a way to another version. Fades in when it's reached. */
+@Composable
+private fun EndNote(isCurrent: Boolean, compact: Boolean, onPick: () -> Unit) {
+    val context = LocalContext.current
+    val alpha by animateFloatAsState(if (isCurrent) 1f else 0f, tween(Motion.duration(context, 520), easing = Motion.NAV_EASE), label = "end")
+    Column(Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha }
+        .padding(start = if (compact) 35.dp else 43.dp, end = 16.dp, top = 12.dp)) {
+        Text("That's all the lyrics this version has.", fontFamily = Inter, fontSize = 17.sp, color = L.soft)
+        // Tappable only once it shows, so an unseen button can't catch a tap meant for a line above.
+        if (isCurrent) Box(Modifier.padding(top = 10.dp)) { Washed("Try another version", onPick, small = true) }
     }
 }
 

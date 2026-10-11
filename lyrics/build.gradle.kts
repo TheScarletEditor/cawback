@@ -27,6 +27,8 @@ android {
         versionName = "0.4.0"
         buildConfigField("boolean", "TUNING", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // SQLCipher ships a native library per CPU type. No Android 14 phone is 32-bit x86; x86_64 stays for emulators.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
 
     buildTypes {

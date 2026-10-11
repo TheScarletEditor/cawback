@@ -498,7 +498,7 @@ private fun Content(
             )
             is Shown.Found -> when {
                 s.lines.isEmpty() -> EmptyState(if (s.candidate.instrumental) "Instrumental" else "No words for this one", null, null, null, raven = false)
-                s.synced -> SyncedLyrics(s, np, onMoment)
+                s.synced -> SyncedLyrics(s, np, onMoment, onPick)
                 else -> PlainLyrics(s)
             }
         }

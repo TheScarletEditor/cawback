@@ -40,6 +40,22 @@ object Lrc {
         return min.toLong() * 60_000 + sec.toLong() * 1000 + fracMs
     }
 
+    /** How long the last sung line stays current before the end note takes over. */
+    const val END_AFTER_MS = 10_000L
+
+    /**
+     * Synced [lines] with their trailing blank lines replaced by one end line (blank, so the screen shows the end note
+     * there): at the first trailing blank, or [END_AFTER_MS] after the last sung line, whichever is sooner. Some LRCLIB
+     * records stop early (seen 2026-10-11: a record whose last line came a minute before the song ended); without this
+     * the last line stayed current until the song ended, over dots that never filled. Null when there is nothing sung to end after.
+     */
+    fun withEnd(lines: List<LyricLine>): List<LyricLine>? {
+        val last = lines.indexOfLast { it.text.isNotBlank() }
+        val lastAt = lines.getOrNull(last)?.timeMs ?: return null
+        val endAt = minOf(lines.getOrNull(last + 1)?.timeMs ?: Long.MAX_VALUE, lastAt + END_AFTER_MS)
+        return lines.subList(0, last + 1) + LyricLine(endAt, "")
+    }
+
     /** Index of the line being sung at [positionMs], or -1 before the first line. */
     fun indexAt(lines: List<LyricLine>, positionMs: Long): Int {
         var lo = 0; var hi = lines.size - 1; var ans = -1
