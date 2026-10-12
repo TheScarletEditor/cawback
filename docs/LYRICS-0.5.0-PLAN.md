@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.5.0 plan: your timing
 
-Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slices 1 to 4 built (3 and 4 wait for the owner's device check), slice 5 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
+Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slices 1 to 5 built (3 to 5 wait for the owner's device check), slice 6 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
 
 ## Why
 
@@ -109,6 +109,16 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    | M19 | The approved row text promised "the next line", but the bar waits 10 to 20 s for a safe one | Owner: "\"...the line shown\" (Recommended)": "Tap Now the moment you hear the line shown. The whole song moves." |
 
 5. **Fit in Other versions.** Each version shows how it fits the song, title-only results show their artist (Q26). Wording to the owner at the slice.
+   **Built 2026-10-11** (`3fd8e9c` and the mini-audit fixes). Wording and order approved by the owner ("runs past the end of this song", "same timing as N others" / "as 1 other", "different artist"; best fit first). `/finalize --slice`: one review agent, 5 findings fixed (M20 to M24). 98/98 unit tests, lint 0 errors. Device check by the owner. Not decided by the owner, chosen here: words-only versions sort between fitting synced ones and synced ones that run past the end (words don't claim a timing).
+
+   | Id | Finding | Fix |
+   | --- | --- | --- |
+   | M20 | "different artist" for the same artists credited another way (slashes, reordered, "Feat.", "Ke$ha"), and false matches by substring ("Earth, Wind & Fire" and "Arcade Fire") | Both credits split the same way; whole names compared; JVM tests for each case |
+   | M21 | Every row said "different artist" when the song's artist is blank, unknown or "Various Artists" | No artist note then |
+   | M22 | The order put the artist before fit, against the decision | Fitting, agreeing, same artist, then length |
+   | M23 | "Showing now" could be cut off at the end of a long row | First in the row |
+   | M24 | The sorting ran on the main thread, twice | Once, off the main thread |
+
 6. **Fixes in the Library backup** (Q25). Format tests, restore of an old backup.
 7. **Share your fix** (Q23). Preview of exactly what's sent, Send, the publish flow. Tests on the payload builder; one real publish only with the owner's OK for that exact song.
 

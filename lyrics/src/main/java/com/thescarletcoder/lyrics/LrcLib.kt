@@ -100,35 +100,50 @@ object Matching {
      */
     data class Fit(val fits: Boolean, val agreeing: Int, val otherArtist: Boolean)
 
-    private fun norm(s: String) = s.lowercase().removePrefix("the ").filter { it.isLetterOrDigit() }
+    private val creditSplit = Regex("""\s*(?:,|&|/|;|\+|×|、|＆|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b|\bvs\.?|\bx\b)\s*""", RegexOption.IGNORE_CASE)
+    private val unknownArtists = setOf("", "unknown", "unknownartist", "variousartists", "various")
 
-    /** True when [candidate] names one of the song's artists ("X-Ecutioners, Mike Shinoda" matches "The X-Ecutioners"). */
-    fun sameArtist(songArtist: String, candidate: String): Boolean {
-        val c = norm(candidate)
-        if (c.isEmpty()) return false
-        return songArtist.split(",", "&", " feat", " ft.", " with ", " x ").map { norm(it.trim()) }.filter { it.isNotEmpty() }
-            .any { it == c || (it.length >= 3 && c.contains(it)) || (c.length >= 3 && it.contains(c)) }
-    }
+    /** One name as compared: lower case, "$" as "s" (Ke$ha), no leading "the", letters and digits only (any script). */
+    private fun norm(s: String) = s.lowercase().replace('$', 's').trim().removePrefix("the ").filter { it.isLetterOrDigit() }
+
+    /** The names in a credit ("Pitbull feat. Kesha", "Mike Shinoda/X-Ecutioners"), each as compared. */
+    fun names(credit: String): Set<String> = credit.split(creditSplit).map { norm(it) }.filter { it.isNotEmpty() }.toSet()
+
+    /** False when the credit says nothing about who it is (blank, "<unknown>", "Various Artists"). */
+    fun knownArtist(credit: String) = norm(credit) !in unknownArtists && names(credit).isNotEmpty()
+
+    /** True when the two credits share a whole name ("X-Ecutioners, Mike Shinoda" and "The X-Ecutioners" do). */
+    fun sameArtist(songArtist: String, candidate: String): Boolean = names(songArtist).intersect(names(candidate)).isNotEmpty()
+
+    /** How each version fits; [ordered] is the list best fit first (owner, 0.5.0). Work it out off the main thread. */
+    class Fits(val ordered: List<Candidate>, val fit: Map<Long, Fit>)
 
     fun fitOf(cands: List<Candidate>, durationSec: Double?, songArtist: String): Map<Long, Fit> {
         val t = cands.associate { it.id to times(it) }
+        val artistKnown = knownArtist(songArtist)
         return cands.associate { c ->
             val mine = t.getValue(c.id)
             c.id to Fit(
-                fits = fits(c, durationSec),
+                fits = mine.isEmpty() || durationSec == null || durationSec <= 0 || mine.last() <= durationSec + FIT_MARGIN_SEC,
                 agreeing = if (mine.isEmpty()) 0 else cands.count { o -> o.id != c.id && agree(mine, t.getValue(o.id)) },
-                otherArtist = !sameArtist(songArtist, c.artist),
+                otherArtist = artistKnown && knownArtist(c.artist) && !sameArtist(songArtist, c.artist),
             )
         }
     }
 
-    /** Best fit first (owner, 0.5.0): the song's artist, then synced and fitting, words only, synced too long; then agreement, length. */
-    fun bestFirst(cands: List<Candidate>, durationSec: Double?, songArtist: String): List<Candidate> {
+    /**
+     * Best fit first (owner, 0.5.0: fitting, agreeing, same artist, then length). Fitting synced versions come first,
+     * then words only, then synced versions that run past the end (that middle place wasn't decided; words don't claim
+     * a timing). Each group by agreement, then the song's artist, then the closest length.
+     */
+    fun bestFirst(cands: List<Candidate>, durationSec: Double?, songArtist: String): Fits {
         val f = fitOf(cands, durationSec, songArtist)
-        fun kind(c: Candidate) = when { times(c).isEmpty() -> 1; f.getValue(c.id).fits -> 0; else -> 2 }
+        val synced = cands.associate { it.id to (it.synced != null && times(it).isNotEmpty()) }
+        fun kind(c: Candidate) = when { synced.getValue(c.id).not() -> 1; f.getValue(c.id).fits -> 0; else -> 2 }
         val known = durationSec != null && durationSec > 0
-        return cands.sortedWith(compareBy<Candidate>({ f.getValue(it.id).otherArtist }, { kind(it) }, { -f.getValue(it.id).agreeing },
+        val ordered = cands.sortedWith(compareBy<Candidate>({ kind(it) }, { -f.getValue(it.id).agreeing }, { f.getValue(it.id).otherArtist },
             { if (known) abs(it.durationSec - durationSec!!) else 0.0 }))
+        return Fits(ordered, f)
     }
 
     /** What Lyrics chose for a song, and whether it's unsure of the timing (the records disagree, or none fits). */

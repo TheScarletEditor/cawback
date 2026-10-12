@@ -141,6 +141,7 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
         mutableStateOf(TextFieldValue(start, TextRange(start.length)))
     }
     var results by remember { mutableStateOf<List<Candidate>?>(null) }
+    var fit by remember { mutableStateOf<Map<Long, Matching.Fit>>(emptyMap()) }
     var status by remember { mutableStateOf<String?>(null) }
     fun run() {
         status = "Searching..."; results = null
@@ -149,7 +150,10 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
                 var r = repo.search(query.text.trim())
                 // Nothing for title + artist? Try the title alone: some songs are filed under a label or composer.
                 if (r.isEmpty()) r = repo.searchTitle(Matching.cleanTitle(t.title))
-                results = Matching.bestFirst(r, t.durationMs?.let { it / 1000.0 }, t.artist)   // best fit first (owner, 0.5.0)
+                // Best fit first (owner, 0.5.0), worked out off the main thread.
+                val fits = withContext(Dispatchers.Default) { Matching.bestFirst(r, t.durationMs?.let { it / 1000.0 }, t.artist) }
+                fit = fits.fit
+                results = fits.ordered
                 status = if (r.isEmpty()) "Nothing found. Try fewer words." else null
             } catch (_: Exception) { status = "Can't reach LRCLIB. Check your internet connection." }
         }
@@ -165,7 +169,6 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
         }
         if (current?.pinned == true) Box(Modifier.padding(top = 10.dp)) { Washed("Go back to the automatic match", onAuto) }
         status?.let { Text(it, fontFamily = Inter, fontSize = 16.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp)) }
-        val fit = remember(results) { Matching.fitOf(results.orEmpty(), t.durationMs?.let { it / 1000.0 }, t.artist) }
         LazyColumn(Modifier.fillMaxSize().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(results.orEmpty()) { _, c ->
                 val f = fit[c.id]
@@ -181,6 +184,7 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
                     Text(c.track, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 18.sp, color = L.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         listOfNotNull(
+                            if (chosen) "Showing now" else null,   // first, so a long row never cuts it off
                             c.artist, c.album.ifBlank { null },
                             "%d:%02d".format(c.durationSec.toInt() / 60, c.durationSec.toInt() % 60),
                             when { c.synced != null -> "Synced"; c.plain != null -> "Words only"; c.instrumental -> "Instrumental"; else -> null },
@@ -188,7 +192,6 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
                             if (f != null && c.synced != null && !f.fits) "runs past the end of this song" else null,
                             f?.agreeing?.takeIf { it > 0 }?.let { if (it == 1) "same timing as 1 other" else "same timing as $it others" },
                             if (f?.otherArtist == true) "different artist" else null,
-                            if (chosen) "Showing now" else null,
                         ).joinToString("  ·  "),
                         fontFamily = Inter, fontSize = 15.sp, color = L.soft, maxLines = 3, overflow = TextOverflow.Ellipsis,
                     )

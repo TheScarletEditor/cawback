@@ -93,15 +93,32 @@ class MatchingTest {
         assertFalse(f.getValue(2).otherArtist)
         // Best fit first: the song's artist before another's; then fitting synced, words only, too long.
         val words = rec(6, 213.0, null)
-        val order = Matching.bestFirst(cands + words, 248.0, "Artist").map { it.id }
-        assertEquals(4L, order.last())                // another artist goes last
-        assertEquals(listOf(2L, 3L, 5L), order.take(3))   // the three that fit 4:08 and agree
+        val order = Matching.bestFirst(cands + words, 248.0, "Artist").ordered.map { it.id }
+        // At 4:08 every synced record fits: those that agree first (2, 3, 5 by the song's artist, then 4 by another),
+        // then the lone one (1), then words only (6).
+        assertEquals(listOf(2L, 3L, 5L, 4L, 1L, 6L), order)
+        // At 3:33 the album timing runs past the end: words only come before records that are too long.
+        assertEquals(6L, Matching.bestFirst(cands + words, 213.0, "Artist").ordered.first().id)
     }
 
-    @Test fun sameArtistMatchesCreditsAndThe() {
+    @Test fun sameArtistComparesWholeNamesInAnyCredit() {
         assertTrue(Matching.sameArtist("X-Ecutioners, Mike Shinoda, Mr. Hahn", "The X-Ecutioners"))
-        assertTrue(Matching.sameArtist("Pitbull, Kesha", "Kesha"))
+        assertTrue(Matching.sameArtist("X-Ecutioners, Mike Shinoda, Mr. Hahn", "Mike Shinoda/X-Ecutioners/Mr. Hahn"))
+        assertTrue(Matching.sameArtist("Kesha, Pitbull", "Pitbull Feat. Ke\$ha"))
+        assertTrue(Matching.sameArtist("U2", "U2, Green Day"))
+        assertTrue(Matching.sameArtist("MØ", "Major Lazer & MØ"))
+        assertFalse(Matching.sameArtist("Earth, Wind & Fire", "Arcade Fire"))
+        assertFalse(Matching.sameArtist("Tyler, the Creator", "Bonnie Tyler"))
+        assertFalse(Matching.sameArtist("R.E.M.", "The Rembrandts"))
         assertFalse(Matching.sameArtist("TX2", "Rush"))
+    }
+
+    @Test fun anUnknownArtistGivesNoArtistNote() {
+        val c = listOf(rec(1, 248.0, good))
+        assertFalse(Matching.fitOf(c, 248.0, "<unknown>").getValue(1).otherArtist)
+        assertFalse(Matching.fitOf(c, 248.0, "Various Artists").getValue(1).otherArtist)
+        assertFalse(Matching.fitOf(c, 248.0, "").getValue(1).otherArtist)
+        assertTrue(Matching.fitOf(c, 248.0, "Someone").getValue(1).otherArtist)
     }
 
     @Test fun nothingCloseIsNoMatch() {
