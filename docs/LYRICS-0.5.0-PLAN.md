@@ -94,6 +94,7 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    | M10 | This song stayed open over a new song, or with nothing playing | Closes when the song changes or the button goes (a recreate keeps it) |
    | M11 | A confirm left open could clear the next song's timing | Resets with the song |
    | M12 | The button flickered out while the next song loaded | Stays while loading |
+   | M13 | The M9 fix dropped a second quick Earlier or Later (screen and saved timing apart) | Compares the version, not the screen state; re-review clean apart from a sheet that closes during the blank moment between songs (accepted) |
 
 4. **Line up now and Fix lines.** "Now" for the next line (Q19); Fix lines mode (Q22). Device test with a real song.
 5. **Fit in Other versions.** Each version shows how it fits the song, title-only results show their artist (Q26). Wording to the owner at the slice.

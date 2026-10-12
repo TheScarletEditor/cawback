@@ -412,7 +412,8 @@ private fun LyricsScreen(
         { songSheet = true; sheetSong = song }
     } else null
     // The sheet belongs to the song it was opened for: a new song, or nothing to show, closes it (a recreate doesn't).
-    if (songSheet && (songButton == null || song != sheetSong)) songSheet = false
+    val songGone = songButton == null || song != sheetSong
+    LaunchedEffect(songGone) { if (songGone) songSheet = false }
 
     val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
     // The sheets sit outside the safe-area padding, so their dimming covers the whole screen, status bar included.
@@ -488,11 +489,20 @@ private fun LyricsScreen(
         }
         SongSheet(
             songSheet, shown, onClose = { songSheet = false }, onWrong = { panel = Panel.PICKER },
-            // Applied only if the same lyrics are still showing: a song that changed meanwhile keeps its own.
+            // Applied to what shows now, and only if it's still the same version: a song that changed meanwhile keeps its
+            // own, and quick taps all count.
             onNudge = { d -> val t = track; val s = shown
-                if (t != null && s is Shown.Found) scope.launch { val next = repo.nudge(t, d); if (shown === s) shown = s.copy(offsetMs = next) } },
+                if (t != null && s is Shown.Found) scope.launch {
+                    val next = repo.nudge(t, d)
+                    val cur = shown
+                    if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = next)
+                } },
             onClear = { val t = track; val s = shown
-                if (t != null && s is Shown.Found) scope.launch { repo.clearTiming(t); if (shown === s) shown = s.copy(offsetMs = 0, anchors = emptyList()) } },
+                if (t != null && s is Shown.Found) scope.launch {
+                    repo.clearTiming(t)
+                    val cur = shown
+                    if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = 0, anchors = emptyList())
+                } },
         )
         MoreSheet(
             sheet, shown, hasTrack = track != null && hasAccess, playerLabel = playerLabel?.takeIf { !inSplit },
