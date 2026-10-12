@@ -13,8 +13,8 @@ Mode: full. Public: yes.
 | 1 | Audit | done | Release manifest: same permissions as 0.4.1 (INTERNET and the dynamic-receiver permission); manifest source and dependencies unchanged since v0.4.1. 4 agents (decisions, hard rules, manifest and dependencies, data safety). 6 mechanical fixes (A1 to A6), 8 questions (Q1 to Q8) all answered and applied, plus the new wording approved word for word. Build, 114/114 unit tests, lint 0 errors, no em dashes, no real artist names left in the repo. |
 | 2 | Code review | done | 3 agents (data and matching; screens and the Android pass; security). 12 mechanical fixes (R1 to R12), 1 question (Q10, answered); three re-reviews: 5 more (R14 to R18), then clean. R13 dropped (owner's earlier choice). Android pass clean apart from R8: R8 rules, light and dark, touch targets, rotation and recreate. Build, 115/115 unit tests, lint 0 errors. |
 | 3 | Cleanup | done | simplify (4 agents: reuse, simplification, efficiency, altitude) and own checks: no TODOs, no commented-out code, TUNING off in release, no em dashes, licenses unchanged (no new dependencies), nothing unused. 8 applied (C1 to C8), larger changes skipped (C9 to C11), release notes drafted (C12, Q11). Build, release build, 115/115 unit tests, lint 0 errors. |
-| 4 | QA | done | Pass 1 (at af78909), clean: 115/115 unit tests; lintRelease 0 errors, warnings the same set as before the base (GradleDependency 21, UseKtx 15, UseTomlInstead 7, and 7 others); release, personal and smoke builds pass (R8); release APK 0.5.0 / 5, no suffix, not debuggable, permissions as 0.4.1, 9.63 MB unsigned (0.4.1: 9.59 MB signed), ABIs arm64-v8a, armeabi-v7a, x86_64; labtest 8/8 on the tablet (test copy removed). |
-| 5 | Smoke test | pending | |
+| 4 | QA | done | Pass 1 (at af78909), clean: 115/115 unit tests; lintRelease 0 errors, warnings the same set as before the base (GradleDependency 21, UseKtx 15, UseTomlInstead 7, and 7 others); release, personal and smoke builds pass (R8); release APK 0.5.0 / 5, no suffix, not debuggable, permissions as 0.4.1, 9.63 MB unsigned (0.4.1: 9.59 MB signed), ABIs arm64-v8a, armeabi-v7a, x86_64; labtest 8/8 on the tablet (test copy removed). Re-run after S1 (pass 2, at 397d5ff) and after S2 (pass 3, at 387f316): every step again, both clean. |
+| 5 | Smoke test | running | Part 1 done (smoke copy at 75c8901; each emulator first given the personal build 0.5.0+75c8901): phone, small phone at font 1.3 and tablet, light and dark: every Settings tab, the Library page, the Library's Open Settings opens Library; no crash, no ANR. The scripted rotation step didn't run (the app had left the front); rotation is unchanged since 0.4.1 and in the owner's checklist. The lyrics screen, This song, Fix lines and Share can't be driven on an emulator (no player feeds a song): covered by the owner's device tests. Smoke copy removed everywhere. Emulators then matched to the devices' 0.5.0+397d5ff. Part 2: personal build installed with the owner's OK (tablet 75c8901, then both devices 397d5ff); checklist scarlet-hq projects/scarlet-lyrics/0.5.0-DEVICE-TESTS.md; waiting for the owner. |
 | 6 | Ship | pending | |
 | 7 | Wrap-up | pending | |
 
@@ -52,6 +52,8 @@ Mode: full. Public: yes.
 | R18 | Review | mechanical | LyricsRepo.kt load | (second re-review) The re-read after a change could repeat without end if a save kept failing | Read again once; then shown without saving | stage 2 |
 | R16 | Review | mechanical | LyricsStore.kt restoreFix | (re-review) A file that can't be decoded counted as failed, so "Restore again" could never help | Kept, not failed | stage 2 |
 | R17 | Review | mechanical | LyricsActivity.kt picker | (re-review) A pick that couldn't be saved closed the list silently | The list stays open to try again | stage 2 |
+| S1 | Smoke | question | Panels.kt SharePanel | Owner: the share preview should also confirm what will not be sent | Q12: "Not sent: ..." under the intro | 397d5ff |
+| S2 | Smoke | question | Panels.kt:577 Privacy | "picks and timing nudges" leaves out fixed lines | Q13: "picks and timing" | 387f316 |
 | C1 | Cleanup | mechanical | LyricsStore.kt, LibraryShare.kt | Fully qualified TimingFix and LibrarySnapshot names | Imports | stage 3 |
 | C2 | Cleanup | mechanical | LyricsStore.kt forgetSong, fixes | The song-key fallback written twice | One `songOf` | stage 3 |
 | C3 | Cleanup | mechanical | LyricsActivity.kt | The same-version screen update written four times | One `updateIf` | stage 3 |
@@ -83,6 +85,8 @@ All asked and answered 2026-10-12.
 | Q8 | A14: real credits in pushed history | "Leave history (Recommended)" | Fixed going forward only |
 | Q10 | R6: a busy key store during a backup or restore | "Fail and say so (Recommended)" | Backup fails with its usual "The backup didn't finish. Nothing was changed."; restore adds "Some of your timing couldn't be restored. Restore again to bring it back." |
 | Q11 | C12: the 0.5.0 release notes draft | "Yes, as written (Recommended)" | Used for the GitHub release |
+| Q12 | S1: what Share does not send | "Yes, as written (Recommended)" | "Not sent: who you are (Lyrics has no account), your Library, your listening history, notes and moments, or anything about other songs. As with every lookup, lrclib.net sees your internet address." |
+| Q13 | S2: Privacy text | "Yes, change it (Recommended)" | "Includes your \"Other versions\" picks and timing." |
 | Q9 | The new text from Q2, Q4 and the README, word for word | "Yes, as written (Recommended)" | As shown |
 
 ## Ship
