@@ -23,8 +23,8 @@ android {
         applicationId = "com.thescarletcoder.lyrics"
         minSdk = 34
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4.1"
+        versionCode = 5
+        versionName = "0.5.0"
         buildConfigField("boolean", "TUNING", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // SQLCipher ships a native library per CPU type. No Android 14 phone is 32-bit x86; x86_64 stays for emulators.
