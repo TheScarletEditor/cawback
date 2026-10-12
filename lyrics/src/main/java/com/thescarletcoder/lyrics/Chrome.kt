@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -65,6 +66,10 @@ fun Header(
 ) {
     val compact = LocalCompact.current
     val swap = Motion.duration(LocalContext.current, Tunables.int(LyricsTuning.SWAP_MS))
+    // A narrow window (a split under about 340dp) drops the album thumbnail, so the title keeps its room beside
+    // This song, play/pause and More.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val narrow = maxWidth < 340.dp
     Row(
         Modifier.fillMaxWidth().padding(horizontal = if (compact) 16.dp else 24.dp, vertical = if (compact) 8.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -87,7 +92,7 @@ fun Header(
                 modifier = Modifier.weight(1f), label = "title",
             ) { (t, a) ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (a != null) {
+                    if (a != null && !narrow) {
                         Image(a.thumb, contentDescription = null, contentScale = ContentScale.Crop,
                             modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)))
                         Spacer(Modifier.width(12.dp))
@@ -110,6 +115,7 @@ fun Header(
             Spacer(Modifier.width(8.dp))
         }
         IconButton(40.dp, "More", onMore, draw = Icons.more)
+    }
     }
 }
 
@@ -193,7 +199,8 @@ private fun BottomSheet(open: Boolean, onClose: () -> Unit, content: @Composable
 fun SongSheet(
     open: Boolean, shown: Shown?, onClose: () -> Unit, onWrong: () -> Unit, onNudge: (Long) -> Unit, onClear: () -> Unit,
 ) {
-    var confirmClear by remember(open) { mutableStateOf(false) }
+    // Reset with the song too, so a confirm left open can never clear the next song's timing.
+    var confirmClear by remember(open, (shown as? Shown.Found)?.candidate?.id) { mutableStateOf(false) }
     BottomSheet(open, onClose) {
         Text("This song", fontFamily = Fraunces, fontSize = 22.sp, color = L.text, modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp))
         val found = shown as? Shown.Found

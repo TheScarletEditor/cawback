@@ -295,6 +295,7 @@ private fun LyricsScreen(
     }
     var sheet by rememberSaveable { mutableStateOf(false) }
     var songSheet by rememberSaveable { mutableStateOf(false) }   // This song (0.5.0)
+    var sheetSong by rememberSaveable { mutableStateOf<String?>(null) }   // the song it was opened for
     var reload by remember { mutableIntStateOf(0) }
     // The Library: which song's page is open, where Back goes from it, and the playing song's uid (moments, seeking).
     var songUid by rememberSaveable { mutableStateOf<String?>(null) }
@@ -405,10 +406,13 @@ private fun LyricsScreen(
         }
     }
     val onBack: (() -> Unit)? = if (panel != Panel.NONE) ::pageBack else null
-    // This song: on the lyrics screen whenever a song's lyrics (or "No lyrics found") are showing (owner Q20).
-    val songButton: (() -> Unit)? = if (panel == Panel.NONE && songShowing && (shown is Shown.Found || shown is Shown.NotFound)) {
-        { songSheet = true }
+    // This song: on the lyrics screen whenever a song's lyrics (or "No lyrics found") are showing, and while the next
+    // song's lyrics load, so the title doesn't jump (owner Q20).
+    val songButton: (() -> Unit)? = if (panel == Panel.NONE && songShowing && (shown is Shown.Found || shown is Shown.NotFound || shown == null)) {
+        { songSheet = true; sheetSong = song }
     } else null
+    // The sheet belongs to the song it was opened for: a new song, or nothing to show, closes it (a recreate doesn't).
+    if (songSheet && (songButton == null || song != sheetSong)) songSheet = false
 
     val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
     // The sheets sit outside the safe-area padding, so their dimming covers the whole screen, status bar included.
@@ -484,10 +488,11 @@ private fun LyricsScreen(
         }
         SongSheet(
             songSheet, shown, onClose = { songSheet = false }, onWrong = { panel = Panel.PICKER },
+            // Applied only if the same lyrics are still showing: a song that changed meanwhile keeps its own.
             onNudge = { d -> val t = track; val s = shown
-                if (t != null && s is Shown.Found) scope.launch { shown = s.copy(offsetMs = repo.nudge(t, d)) } },
+                if (t != null && s is Shown.Found) scope.launch { val next = repo.nudge(t, d); if (shown === s) shown = s.copy(offsetMs = next) } },
             onClear = { val t = track; val s = shown
-                if (t != null && s is Shown.Found) scope.launch { repo.clearTiming(t); shown = s.copy(offsetMs = 0, anchors = emptyList()) } },
+                if (t != null && s is Shown.Found) scope.launch { repo.clearTiming(t); if (shown === s) shown = s.copy(offsetMs = 0, anchors = emptyList()) } },
         )
         MoreSheet(
             sheet, shown, hasTrack = track != null && hasAccess, playerLabel = playerLabel?.takeIf { !inSplit },

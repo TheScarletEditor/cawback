@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.5.0 plan: your timing
 
-Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slices 1 and 2 done, slice 3 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
+Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slices 1 to 3 built (3 waits for the owner's device check), slice 4 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
 
 ## Why
 
@@ -85,6 +85,16 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    Notes for slices 3 and 4: the timing label (now the base nudge only) must say when anchors are set; taps must pass the line's time in the record (`s.lines[i]`), not the shifted time on screen.
 
 3. **The header icon and "This song" sheet.** Drawn icon (brand rule), unsure dot (Q24), the sheet with Other versions, Earlier and Later (moved from More), and the end note without its button (Q21). Emulator and device check.
+   **Built 2026-10-11** (`d082a15` and the mini-audit fixes). Wording approved by the owner (heading, TalkBack labels, unsure note, timing line, Clear my timing and its confirm); Other versions only in This song (owner: "Only in This song (Recommended)"). `/finalize --slice`: one review agent, 5 findings fixed (M8 to M12). 92/92 unit tests (the timing line's wording tested), lint 0 errors, 49 older warnings. Not seen on an emulator (no player there shows the button): device check by the owner.
+
+   | Id | Finding | Fix |
+   | --- | --- | --- |
+   | M8 | The extra header button left the title almost no room in a narrow split | Under 340dp the album thumbnail drops |
+   | M9 | Earlier or Clear tapped as the song changed could put the old song's lyrics back | Applied only if the same lyrics still show |
+   | M10 | This song stayed open over a new song, or with nothing playing | Closes when the song changes or the button goes (a recreate keeps it) |
+   | M11 | A confirm left open could clear the next song's timing | Resets with the song |
+   | M12 | The button flickered out while the next song loaded | Stays while loading |
+
 4. **Line up now and Fix lines.** "Now" for the next line (Q19); Fix lines mode (Q22). Device test with a real song.
 5. **Fit in Other versions.** Each version shows how it fits the song, title-only results show their artist (Q26). Wording to the owner at the slice.
 6. **Fixes in the Library backup** (Q25). Format tests, restore of an old backup.
