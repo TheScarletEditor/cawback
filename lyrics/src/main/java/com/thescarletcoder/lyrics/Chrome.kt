@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -182,7 +183,9 @@ private fun BottomSheet(open: Boolean, onClose: () -> Unit, content: @Composable
     val ms = Motion.duration(LocalContext.current, Motion.NAV_MS)
     AnimatedVisibility(open, enter = fadeIn(tween(ms, easing = Motion.NAV_EASE)), exit = fadeOut(tween(ms, easing = Motion.NAV_EASE))) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f))
-            .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onClose))
+            // TalkBack reads it as "Close" (owner, finalize 0.5.0 S5).
+            .clickable(remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close", role = Role.Button, onClick = onClose)
+            .semantics { contentDescription = "Close" })
     }
     // A tall sheet (large text) stops below the status bar, never under the clock (finalize 0.5.0 S3).
     Box(Modifier.fillMaxSize().statusBarsPadding().padding(top = 8.dp), contentAlignment = Alignment.BottomCenter) {
@@ -193,7 +196,8 @@ private fun BottomSheet(open: Boolean, onClose: () -> Unit, content: @Composable
         ) {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(L.surface)
-                    .clickable(remember { MutableInteractionSource() }, indication = null) { }
+                    // Taps on the sheet stay on it, without making it one nameless button for TalkBack (S4).
+                    .pointerInput(Unit) { detectTapGestures { } }
                     // Scrolls when the window is short (split screen on a flip phone): every row stays reachable.
                     .verticalScroll(rememberScrollState())
                     .navigationBarsPadding().padding(horizontal = 24.dp, vertical = 18.dp),
