@@ -294,6 +294,7 @@ private fun LyricsScreen(
         lastPanel = panel
     }
     var sheet by rememberSaveable { mutableStateOf(false) }
+    var songSheet by rememberSaveable { mutableStateOf(false) }   // This song (0.5.0)
     var reload by remember { mutableIntStateOf(0) }
     // The Library: which song's page is open, where Back goes from it, and the playing song's uid (moments, seeking).
     var songUid by rememberSaveable { mutableStateOf<String?>(null) }
@@ -376,7 +377,7 @@ private fun LyricsScreen(
     // Header auto-hide (owner's ruling): while a song plays with no sheet or panel open, fade 3 s after the last touch.
     var chrome by remember { mutableStateOf(true) }
     var touches by remember { mutableIntStateOf(0) }
-    val canHide = playing && songShowing && !sheet && momentAt == null && panel == Panel.NONE && shown is Shown.Found
+    val canHide = playing && songShowing && !sheet && !songSheet && momentAt == null && panel == Panel.NONE && shown is Shown.Found
     LaunchedEffect(canHide, touches) {
         chrome = true
         if (canHide) { delay(Tunables.int(LyricsTuning.CHROME_HIDE_MS).toLong()); chrome = false }
@@ -395,14 +396,19 @@ private fun LyricsScreen(
 
     // One step back from a page: the system Back and the now-playing bar (Header with onBack) both use it.
     fun pageBack() { panel = panel.back(songFromLibrary) }
-    BackHandler(enabled = sheet || momentAt != null || panel != Panel.NONE) {
+    BackHandler(enabled = sheet || songSheet || momentAt != null || panel != Panel.NONE) {
         when {
             sheet -> sheet = false
+            songSheet -> songSheet = false
             momentAt != null -> momentAt = null
             else -> pageBack()
         }
     }
     val onBack: (() -> Unit)? = if (panel != Panel.NONE) ::pageBack else null
+    // This song: on the lyrics screen whenever a song's lyrics (or "No lyrics found") are showing (owner Q20).
+    val songButton: (() -> Unit)? = if (panel == Panel.NONE && songShowing && (shown is Shown.Found || shown is Shown.NotFound)) {
+        { songSheet = true }
+    } else null
 
     val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
     // The sheets sit outside the safe-area padding, so their dimming covers the whole screen, status bar included.
@@ -442,6 +448,7 @@ private fun LyricsScreen(
                     if (flexTop == null || barOnTop) Box(Modifier.fillMaxWidth().offset(y = chromeLift).graphicsLayer { alpha = chromeAlpha }
                         .onSizeChanged { headerPx = it.height }) {
                         Header(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause, onMore = { sheet = true }, onBack = onBack,
+                            onSong = songButton, unsure = (shown as? Shown.Found)?.unsure == true,
                             backTo = when (panel.back(songFromLibrary)) { Panel.SETTINGS -> "Settings"; Panel.LIBRARY -> "Library"; else -> "Lyrics" })
                     }
                     val pageTop = if (barOnTop) with(density) { headerPx.toDp() } else 0.dp
@@ -470,15 +477,21 @@ private fun LyricsScreen(
                                 onPick = { panel = Panel.PICKER }, onRetry = { reload++ }, onMoment = { momentAt = it; momentTrack = track })
                         }
                     }
-                    if (flexTop != null) FlexControls(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause) { sheet = true }
+                    if (flexTop != null) FlexControls(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause,
+                        onSong = songButton, unsure = (shown as? Shown.Found)?.unsure == true) { sheet = true }
                 }
             }
         }
-        MoreSheet(
-            sheet, shown, hasTrack = track != null && hasAccess, playerLabel = playerLabel?.takeIf { !inSplit },
-            onClose = { sheet = false }, onWrong = { panel = Panel.PICKER },
+        SongSheet(
+            songSheet, shown, onClose = { songSheet = false }, onWrong = { panel = Panel.PICKER },
             onNudge = { d -> val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch { shown = s.copy(offsetMs = repo.nudge(t, d)) } },
+            onClear = { val t = track; val s = shown
+                if (t != null && s is Shown.Found) scope.launch { repo.clearTiming(t); shown = s.copy(offsetMs = 0, anchors = emptyList()) } },
+        )
+        MoreSheet(
+            sheet, shown, hasTrack = track != null && hasAccess, playerLabel = playerLabel?.takeIf { !inSplit },
+            onClose = { sheet = false },
             onPlayer = onPlayer, onSettings = { openSettings(SettingsWayIn.MORE_SHEET) },
             onSongPage = {
                 val t = track
@@ -528,7 +541,7 @@ private fun Content(
             )
             is Shown.Found -> when {
                 s.lines.isEmpty() -> EmptyState(if (s.candidate.instrumental) "Instrumental" else "No words for this one", null, null, null, raven = false)
-                s.synced -> SyncedLyrics(s, np, onMoment, onPick)
+                s.synced -> SyncedLyrics(s, np, onMoment)
                 else -> PlainLyrics(s)
             }
         }

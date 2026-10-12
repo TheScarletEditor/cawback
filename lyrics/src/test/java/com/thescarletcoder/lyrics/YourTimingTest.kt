@@ -70,6 +70,15 @@ class YourTimingTest {
         assertEquals(-4_300L, YourTiming.offsetFromTap(30_000, 34_200, 300, 200))
     }
 
+    @Test fun theTimingLineSaysWhatIsSet() {   // wording approved by the owner (0.5.0)
+        assertEquals("Lyrics match the song's timing", timingLabel(0))
+        assertEquals("Lyrics earlier by 0.25s", timingLabel(250))
+        assertEquals("Lyrics later by 0.50s", timingLabel(-500))
+        assertEquals("Your timing: 1 line set", timingLabel(0, 1))
+        assertEquals("Your timing: 3 lines set", timingLabel(0, 3))
+        assertEquals("Lyrics earlier by 0.50s, 3 lines set", timingLabel(500, 3))
+    }
+
     @Test fun theSavedFormatKeepsAnchorsAndReadsOldEntries() {
         val c = Candidate(7, "Song", "Artist", "Album", 200.0, false, "words", "[00:10.00] line 0")
         val e = LyricsStore.Entry(c, pinned = true, offsetMs = 250, fetchedAt = 9, matchVersion = 1, unsure = false,

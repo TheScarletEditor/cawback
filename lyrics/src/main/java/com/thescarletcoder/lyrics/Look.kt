@@ -71,13 +71,19 @@ fun Washed(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, sm
 
 /** A round washed icon button with a drawn icon (never a font glyph). */
 @Composable
-fun IconButton(size: Dp, description: String, onClick: () -> Unit, draw: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit) {
+fun IconButton(size: Dp, description: String, onClick: () -> Unit, dot: Boolean = false, draw: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit) {
     val c = L.text
-    Box(
-        Modifier.minimumInteractiveComponentSize().size(size).clip(CircleShape).background(L.wash).border(1.dp, L.washEdge, CircleShape)
-            .clickable(onClickLabel = description, role = Role.Button, onClick = onClick).semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) { Canvas(Modifier.size(size * 0.45f)) { draw(c) } }
+    Box(Modifier.minimumInteractiveComponentSize()) {
+        Box(
+            Modifier.size(size).clip(CircleShape).background(L.wash).border(1.dp, L.washEdge, CircleShape)
+                .clickable(onClickLabel = description, role = Role.Button, onClick = onClick).semantics { contentDescription = description },
+            contentAlignment = Alignment.Center,
+        ) { Canvas(Modifier.size(size * 0.45f)) { draw(c) } }
+        // A quiet neutral dot (never scarlet: scarlet never means trouble), drawn over the button's corner.
+        if (dot) Canvas(Modifier.size(size).align(Alignment.Center)) {
+            drawCircle(c, radius = size.toPx() * 0.09f, center = Offset(this.size.width * 0.86f, this.size.height * 0.14f))
+        }
+    }
 }
 
 object Icons {
@@ -97,6 +103,15 @@ object Icons {
         drawPath(Path().apply { moveTo(w * 0.66f, h * 0.12f); lineTo(w * 0.28f, h * 0.5f); lineTo(w * 0.66f, h * 0.88f) }, c,
             style = androidx.compose.ui.graphics.drawscope.Stroke(w * 0.14f, cap = androidx.compose.ui.graphics.StrokeCap.Round,
                 join = androidx.compose.ui.graphics.StrokeJoin.Round))
+    }
+    /** This song (versions and timing): three slider lines with their knobs at different places. */
+    val tune: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit = { c ->
+        val w = size.width; val h = size.height
+        val stroke = w * 0.1f
+        listOf(0.2f to 0.68f, 0.5f to 0.32f, 0.8f to 0.58f).forEach { (y, knob) ->
+            drawLine(c, Offset(w * 0.06f, h * y), Offset(w * 0.94f, h * y), stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            drawCircle(c, w * 0.12f, Offset(w * knob, h * y))
+        }
     }
     val more: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit = { c ->
         val r = size.width * 0.1f

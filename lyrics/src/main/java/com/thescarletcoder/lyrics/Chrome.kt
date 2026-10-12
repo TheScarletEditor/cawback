@@ -34,6 +34,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,7 +59,10 @@ import com.thescarletcoder.scarlet.Tunables
  * a step, to the lyrics from any first-level page. With nothing playing it names where that is: "Back to [backTo]".
  */
 @Composable
-fun Header(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> Unit, onMore: () -> Unit, onBack: (() -> Unit)? = null, backTo: String = "Lyrics") {
+fun Header(
+    track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> Unit, onMore: () -> Unit, onBack: (() -> Unit)? = null,
+    backTo: String = "Lyrics", onSong: (() -> Unit)? = null, unsure: Boolean = false,
+) {
     val compact = LocalCompact.current
     val swap = Motion.duration(LocalContext.current, Tunables.int(LyricsTuning.SWAP_MS))
     Row(
@@ -95,20 +101,29 @@ fun Header(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> 
             }
         }
         Spacer(Modifier.width(10.dp))
-        if (track != null) {
-            IconButton(40.dp, if (playing) "Pause" else "Play", onPlayPause, if (playing) Icons.pause else Icons.play)
+        if (onSong != null) {
+            SongButton(40.dp, unsure, onSong)
             Spacer(Modifier.width(8.dp))
         }
-        IconButton(40.dp, "More", onMore, Icons.more)
+        if (track != null) {
+            IconButton(40.dp, if (playing) "Pause" else "Play", onPlayPause, draw = if (playing) Icons.pause else Icons.play)
+            Spacer(Modifier.width(8.dp))
+        }
+        IconButton(40.dp, "More", onMore, draw = Icons.more)
     }
 }
+
+/** This song (versions and timing), always there while a song's lyrics show (0.5.0, owner Q20); a dot when unsure (Q24). */
+@Composable
+fun SongButton(size: androidx.compose.ui.unit.Dp, unsure: Boolean, onClick: () -> Unit) =
+    IconButton(size, if (unsure) "This song: versions and timing. The timing may be off." else "This song: versions and timing", onClick, dot = unsure, draw = Icons.tune)
 
 /**
  * Flex mode (a flip phone half-folded on a table): below the fold, the song with its cover, and big play/pause and more
  * buttons that are easy to reach on the bottom half. Lyrics fill the top half.
  */
 @Composable
-fun FlexControls(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> Unit, onMore: () -> Unit) {
+fun FlexControls(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> Unit, onSong: (() -> Unit)? = null, unsure: Boolean = false, onMore: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
@@ -126,27 +141,27 @@ fun FlexControls(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: 
         }
         Spacer(Modifier.size(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (track != null) IconButton(64.dp, if (playing) "Pause" else "Play", onPlayPause, if (playing) Icons.pause else Icons.play)
-            IconButton(52.dp, "More", onMore, Icons.more)
+            if (onSong != null) SongButton(52.dp, unsure, onSong)
+            if (track != null) IconButton(64.dp, if (playing) "Pause" else "Play", onPlayPause, draw = if (playing) Icons.pause else Icons.play)
+            IconButton(52.dp, "More", onMore, draw = Icons.more)
         }
     }
 }
 
-/** Timing nudge in words: "Lyrics earlier by 0.25s". */
-fun timingLabel(offsetMs: Long): String = when {
-    offsetMs > 0 -> "Lyrics earlier by %.2fs".format(offsetMs / 1000.0)
-    offsetMs < 0 -> "Lyrics later by %.2fs".format(-offsetMs / 1000.0)
-    else -> "Lyrics match the song's timing"
+/** Timing in words: "Lyrics earlier by 0.25s"; with tapped lines (owner, 0.5.0) "Your timing: 3 lines set". */
+fun timingLabel(offsetMs: Long, anchors: Int = 0): String {
+    val lines = if (anchors == 1) "1 line set" else "$anchors lines set"
+    return when {
+        anchors > 0 && offsetMs == 0L -> "Your timing: $lines"
+        offsetMs > 0 -> "Lyrics earlier by %.2fs".format(offsetMs / 1000.0) + if (anchors > 0) ", $lines" else ""
+        offsetMs < 0 -> "Lyrics later by %.2fs".format(-offsetMs / 1000.0) + if (anchors > 0) ", $lines" else ""
+        else -> "Lyrics match the song's timing"
+    }
 }
 
-/** The More sheet (slides up with the NAV voice). Tapping outside it closes it. */
+/** A sheet that slides up with the NAV voice over a dimmed screen; tapping outside it closes it. */
 @Composable
-fun MoreSheet(
-    open: Boolean, shown: Shown?, hasTrack: Boolean, playerLabel: String?,
-    onClose: () -> Unit, onWrong: () -> Unit, onNudge: (Long) -> Unit, onPlayer: () -> Unit, onSettings: () -> Unit,
-    onSongPage: () -> Unit, onLibrary: () -> Unit,
-) {
-    val settings = LocalSettings.current
+private fun BottomSheet(open: Boolean, onClose: () -> Unit, content: @Composable () -> Unit) {
     val ms = Motion.duration(LocalContext.current, Motion.NAV_MS)
     AnimatedVisibility(open, enter = fadeIn(tween(ms, easing = Motion.NAV_EASE)), exit = fadeOut(tween(ms, easing = Motion.NAV_EASE))) {
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f))
@@ -165,18 +180,58 @@ fun MoreSheet(
                     .verticalScroll(rememberScrollState())
                     .navigationBarsPadding().padding(horizontal = 24.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                if (hasTrack && shown !is Shown.NoAccess) SheetRow("Other versions", "Find a synced or different version, or search by hand.") { onClose(); onWrong() }
-                if (shown is Shown.Found && shown.synced) {
-                    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                        Text("Timing", fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = L.text)
-                        Text(timingLabel(shown.offsetMs), fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Washed("Earlier", { onNudge(250) })
-                            Washed("Later", { onNudge(-250) })
-                        }
-                    }
+            ) { content() }
+        }
+    }
+}
+
+/**
+ * This song (0.5.0, owner Q20): other versions and the user's timing for the song playing. A note when Lyrics isn't
+ * sure of the timing (Q24). Line up now, Fix lines and Share come in later slices.
+ */
+@Composable
+fun SongSheet(
+    open: Boolean, shown: Shown?, onClose: () -> Unit, onWrong: () -> Unit, onNudge: (Long) -> Unit, onClear: () -> Unit,
+) {
+    var confirmClear by remember(open) { mutableStateOf(false) }
+    BottomSheet(open, onClose) {
+        Text("This song", fontFamily = Fraunces, fontSize = 22.sp, color = L.text, modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp))
+        val found = shown as? Shown.Found
+        if (found?.unsure == true) Text(
+            "The timing may be off: the versions on LRCLIB don't agree, or don't fit this song. Try another version or fix the timing.",
+            fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+        )
+        SheetRow("Other versions", "Find a synced or different version, or search by hand.") { onClose(); onWrong() }
+        if (found != null && found.synced) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 10.dp)) {
+                Text("Timing", fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = L.text)
+                Text(timingLabel(found.offsetMs, found.anchors.size), fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Washed("Earlier", { onNudge(250) })
+                    Washed("Later", { onNudge(-250) })
                 }
+                if (found.offsetMs != 0L || found.anchors.isNotEmpty()) {
+                    if (confirmClear) Column(Modifier.padding(top = 12.dp)) {
+                        Text("Clear your timing for this song? The version stays.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
+                        FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Washed("Clear", { confirmClear = false; onClear() })
+                            Washed("Cancel", { confirmClear = false })
+                        }
+                    } else Box(Modifier.padding(top = 12.dp)) { Washed("Clear my timing", { confirmClear = true }) }
+                }
+            }
+        }
+    }
+}
+
+/** The More sheet: the song's note and moments, the Library, history, your music app, Settings. */
+@Composable
+fun MoreSheet(
+    open: Boolean, shown: Shown?, hasTrack: Boolean, playerLabel: String?,
+    onClose: () -> Unit, onPlayer: () -> Unit, onSettings: () -> Unit, onSongPage: () -> Unit, onLibrary: () -> Unit,
+) {
+    val settings = LocalSettings.current
+    BottomSheet(open, onClose) {
                 if (hasTrack && shown !is Shown.NoAccess) SheetRow("Note and moments", "Your note on this song, and bookmarked times.") { onClose(); onSongPage() }
                 SheetRow("Library", null) { onClose(); onLibrary() }
                 // Pausing is on the lyrics screen, not buried in Settings (scope section 6).
@@ -197,8 +252,6 @@ fun MoreSheet(
                 }
                 if (playerLabel != null) SheetRow("Open $playerLabel", null) { onClose(); onPlayer() }
                 SheetRow("Settings", null) { onClose(); onSettings() }
-            }
-        }
     }
 }
 

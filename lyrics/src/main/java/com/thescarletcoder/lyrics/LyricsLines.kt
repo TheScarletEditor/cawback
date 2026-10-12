@@ -91,9 +91,8 @@ fun Modifier.edgeFade(top: () -> Float = { 1f }): Modifier = this
 @Composable
 /**
  * [onMoment]: a line was long-pressed; bookmark that time in the song (the Library; never the line's text).
- * [onPick]: "Try another version" on the end note (opens Other versions).
  */
-fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, onPick: () -> Unit = {}) {
+fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}) {
     val list = rememberLazyListState()
     val dragged by list.interactionSource.collectIsDraggedAsState()
     var pos by remember { mutableLongStateOf(0L) }
@@ -152,7 +151,7 @@ fun SyncedLyrics(s: Shown.Found, np: NowPlaying, onMoment: (Long) -> Unit = {}, 
             modifier = Modifier.fillMaxSize().edgeFade { topFade },
         ) {
             itemsIndexed(lines) { i, line ->
-                if (i == endRow) { EndNote(i == current, compact, onPick); return@itemsIndexed }
+                if (i == endRow) { EndNote(i == current, compact); return@itemsIndexed }
                 val gapEnd = if (line.text.isBlank()) lines.getOrNull(i + 1)?.timeMs else null
                 LyricRow(i, line, current, compact, gapEnd, offset, np, settings,
                     onLongPress = { line.timeMs?.let { onMoment((it - offset).coerceAtLeast(0)) } }) {
@@ -311,14 +310,13 @@ private fun GapDots(isCurrent: Boolean, start: Long, end: Long?, offsetMs: Long,
 
 /** After the last sung line: says the words have run out, with a way to another version. Fades in when it's reached. */
 @Composable
-private fun EndNote(isCurrent: Boolean, compact: Boolean, onPick: () -> Unit) {
+private fun EndNote(isCurrent: Boolean, compact: Boolean) {
     val context = LocalContext.current
     val alpha by animateFloatAsState(if (isCurrent) 1f else 0f, tween(Motion.duration(context, 520), easing = Motion.NAV_EASE), label = "end")
     Column(Modifier.fillMaxWidth().graphicsLayer { this.alpha = alpha }
         .padding(start = if (compact) 35.dp else 43.dp, end = 16.dp, top = 12.dp)) {
         Text("That's all the lyrics this version has.", fontFamily = Inter, fontSize = 17.sp, color = L.soft)
-        // Tappable only once it shows, so an unseen button can't catch a tap meant for a line above.
-        if (isCurrent) Box(Modifier.padding(top = 10.dp)) { Washed("Try another version", onPick, small = true) }
+        // Its button is gone (owner, 0.5.0 Q21): the This song button in the header stays reachable after the song ends.
     }
 }
 
