@@ -111,6 +111,12 @@ class MatchingTest {
         assertFalse(Matching.sameArtist("Tyler, the Creator", "Bonnie Tyler"))
         assertFalse(Matching.sameArtist("R.E.M.", "The Rembrandts"))
         assertFalse(Matching.sameArtist("TX2", "Rush"))
+        // Split words only as whole words.
+        assertEquals(setOf("featherstone"), Matching.names("Featherstone"))
+        assertEquals(setOf("ftisland"), Matching.names("FTISLAND"))
+        assertEquals(setOf("xecutioners"), Matching.names("The X-Ecutioners"))
+        assertEquals(setOf("marshmello", "anne-marie".filter { it.isLetterOrDigit() }), Matching.names("Marshmello x Anne-Marie"))
+        assertFalse(Matching.sameArtist("The Weeknd", "The X-Ecutioners"))   // no bare "the" left over to match
     }
 
     @Test fun anUnknownArtistGivesNoArtistNote() {

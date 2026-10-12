@@ -118,6 +118,7 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    | M22 | The order put the artist before fit, against the decision | Fitting, agreeing, same artist, then length |
    | M23 | "Showing now" could be cut off at the end of a long row | First in the row |
    | M24 | The sorting ran on the main thread, twice | Once, off the main thread |
+   | M25 | The credit split cut inside words ("Featherstone") and split "The X-Ecutioners", leaving a bare "the" that matched anything | Whole words only, " x " only between spaces, no bare "the"; re-review clean |
 
 6. **Fixes in the Library backup** (Q25). Format tests, restore of an old backup.
 7. **Share your fix** (Q23). Preview of exactly what's sent, Send, the publish flow. Tests on the payload builder; one real publish only with the owner's OK for that exact song.
