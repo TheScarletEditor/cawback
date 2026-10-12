@@ -105,6 +105,8 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    | M15 | The bar showed over Settings, Library and the other pages | Only on the lyrics |
    | M16 | In Flex mode the bar covered the controls below the fold | At the bottom of the lyrics area, above the fold |
    | M17 | A brief reload closed the bar | Closes only for words only, a miss or offline, or a song change |
+   | M18 | After a missed line the bar recomputed its line on every poll (drifting, possibly to a line already sung) | A missed line is replaced once by a new first target, then frozen again |
+   | M19 | The approved row text promised "the next line", but the bar waits 10 to 20 s for a safe one | Owner: "\"...the line shown\" (Recommended)": "Tap Now the moment you hear the line shown. The whole song moves." |
 
 5. **Fit in Other versions.** Each version shows how it fits the song, title-only results show their artist (Q26). Wording to the owner at the slice.
 6. **Fixes in the Library backup** (Q25). Format tests, restore of an old backup.

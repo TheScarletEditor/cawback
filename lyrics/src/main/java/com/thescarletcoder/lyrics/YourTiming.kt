@@ -78,9 +78,12 @@ object YourTiming {
     fun afterTap(timed: List<LyricLine>, tapped: Int): Int? =
         (tapped + 1 until timed.size).firstOrNull { timed[it].text.isNotBlank() && timed[it].timeMs != null }
 
-    /** The target stays until it's tapped, unless the lyrics put it more than [LIMIT_MS] behind: then it was missed. */
-    fun keepTarget(timed: List<LyricLine>, target: Int, positionMs: Long): Int? {
-        val t = timed.getOrNull(target)?.timeMs ?: return null
-        return if (t + LIMIT_MS < positionMs) nextLine(timed, positionMs - LIMIT_MS) else target
+    /**
+     * The target stays until it's tapped, unless the lyrics put it more than [LIMIT_MS] behind: by then it has been
+     * heard, however wrong the timing. A missed target is replaced by a new [firstTarget], with the same guarantee.
+     */
+    fun missed(timed: List<LyricLine>, target: Int, positionMs: Long): Boolean {
+        val t = timed.getOrNull(target)?.timeMs ?: return true
+        return t + LIMIT_MS < positionMs
     }
 }

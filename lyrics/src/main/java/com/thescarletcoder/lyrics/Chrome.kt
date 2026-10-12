@@ -221,7 +221,7 @@ fun SongSheet(
                     Washed("Later", { onNudge(-250) })
                 }
             }
-            SheetRow("Line up now", "Tap Now the moment you hear the next line. The whole song moves.") { onClose(); onFix(FixMode.LINE_UP) }
+            SheetRow("Line up now", "Tap Now the moment you hear the line shown. The whole song moves.") { onClose(); onFix(FixMode.LINE_UP) }
             SheetRow("Fix lines", "As the song plays, tap Now as each line starts. Lines you tap stay put; the rest follow.") { onClose(); onFix(FixMode.FIX) }
             Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
                 if (found.offsetMs != 0L || found.anchors.isNotEmpty()) {
@@ -256,7 +256,10 @@ fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outp
     LaunchedEffect(playing) {
         if (playing && !started) { target = YourTiming.firstTarget(timed, np.positionMs() + outputDelayMs); started = true }
     }
-    val next = target?.let { YourTiming.keepTarget(timed, it, pos + outputDelayMs) }
+    // A missed line is replaced once, by a new line that can't have been sung yet; the bar never drifts with the clock.
+    val missed = target?.let { YourTiming.missed(timed, it, pos + outputDelayMs) } == true
+    LaunchedEffect(missed) { if (missed) target = YourTiming.firstTarget(timed, np.positionMs() + outputDelayMs) }
+    val next = target.takeIf { !missed }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(L.surface)
             .clickable(remember { MutableInteractionSource() }, indication = null) { }

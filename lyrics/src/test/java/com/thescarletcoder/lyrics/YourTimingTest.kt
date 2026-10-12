@@ -3,6 +3,7 @@ package com.thescarletcoder.lyrics
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -86,9 +87,10 @@ class YourTimingTest {
         assertEquals(1, YourTiming.firstTarget(lines, 5_000))
         // Lyrics 3 s early: the target doesn't move on when the lyrics pass it; it stays until tapped.
         val early = YourTiming.apply(lines, 3_000, emptyList())
-        assertEquals(1, YourTiming.keepTarget(early, 1, 18_000))   // the lyrics passed line 1 at 0:17; it's heard at 0:20
-        // A target more than 10 s behind on the lyrics' clock was missed: the next line that can still come.
-        assertEquals(2, YourTiming.keepTarget(lines, 1, 31_000))   // line 2 (0:30) is only 1 s behind: it can still come
+        assertFalse(YourTiming.missed(early, 1, 18_000))   // the lyrics passed line 1 at 0:17; it's heard at 0:20
+        // More than 10 s behind on the lyrics' clock: missed (it has been heard by now, however wrong the timing).
+        assertTrue(YourTiming.missed(lines, 1, 31_000))
+        assertFalse(YourTiming.missed(lines, 1, 29_000))
         // After a tap, the next line with words.
         assertEquals(2, YourTiming.afterTap(lines, 1))
         assertEquals(null, YourTiming.afterTap(lines, 5))
