@@ -418,8 +418,8 @@ private fun LyricsScreen(
     // The sheet belongs to the song it was opened for: a new song, or nothing to show, closes it (a recreate doesn't).
     val songGone = songButton == null || song != sheetSong
     LaunchedEffect(songGone) { if (songGone) { songSheet = false; fixMode = FixMode.NONE } }
-    // Fixing needs synced lyrics on screen.
-    if (fixMode != FixMode.NONE && (shown as? Shown.Found)?.synced != true) fixMode = FixMode.NONE
+    // Fixing needs synced lyrics: words only, a miss or offline closes the bar (a brief reload doesn't).
+    LaunchedEffect(shown) { val s = shown; if (s != null && (s !is Shown.Found || !s.synced)) fixMode = FixMode.NONE }
 
     val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
     // The sheets sit outside the safe-area padding, so their dimming covers the whole screen, status bar included.
@@ -487,6 +487,25 @@ private fun LyricsScreen(
                             else -> Content(shown, finding, slow, np, onGrant, playerLabel, onPlayer, onChoosePlayer = { openSettings(SettingsWayIn.CHOOSE_MUSIC_APP) },
                                 onPick = { panel = Panel.PICKER }, onRetry = { reload++ }, onMoment = { momentAt = it; momentTrack = track })
                         }
+                        // Fixing the timing: at the bottom of the lyrics area, so in Flex mode it stays above the fold.
+                        val fixing = shown as? Shown.Found
+                        if (fixMode != FixMode.NONE && fixing != null && panel == Panel.NONE && songShowing && !songSheet && !sheet) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                            FixBar(fixMode, fixing, np, playing, settings.delayFor(output).toLong(),
+                                onNow = { lineMs, offsetMs -> val t = track
+                                    if (t != null) scope.launch {
+                                        if (fixMode == FixMode.LINE_UP) {
+                                            val base = repo.lineUp(t, lineMs, offsetMs)
+                                            val cur = shown
+                                            if (base != null && cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(offsetMs = base)
+                                            fixMode = FixMode.NONE
+                                        } else {
+                                            val anchors = repo.setAnchor(t, lineMs, offsetMs)
+                                            val cur = shown
+                                            if (cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(anchors = anchors)
+                                        }
+                                    } },
+                                onDone = { fixMode = FixMode.NONE })
+                        }
                     }
                     if (flexTop != null) FlexControls(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause,
                         onSong = songButton, unsure = (shown as? Shown.Found)?.unsure == true) { sheet = true }
@@ -511,24 +530,6 @@ private fun LyricsScreen(
                     if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = 0, anchors = emptyList())
                 } },
         )
-        val fixing = shown as? Shown.Found
-        if (fixMode != FixMode.NONE && fixing != null && !songSheet && !sheet) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-            FixBar(fixMode, fixing, np, playing, settings.delayFor(output).toLong(),
-                onNow = { lineMs, offsetMs -> val t = track
-                    if (t != null) scope.launch {
-                        if (fixMode == FixMode.LINE_UP) {
-                            val base = repo.lineUp(t, lineMs, offsetMs)
-                            val cur = shown
-                            if (base != null && cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(offsetMs = base)
-                            fixMode = FixMode.NONE
-                        } else {
-                            val anchors = repo.setAnchor(t, lineMs, offsetMs)
-                            val cur = shown
-                            if (cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(anchors = anchors)
-                        }
-                    } },
-                onDone = { fixMode = FixMode.NONE })
-        }
         MoreSheet(
             sheet, shown, hasTrack = track != null && hasAccess, playerLabel = playerLabel?.takeIf { !inSplit },
             onClose = { sheet = false },

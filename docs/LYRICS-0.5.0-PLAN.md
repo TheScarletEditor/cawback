@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.5.0 plan: your timing
 
-Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slices 1 to 3 built (3 waits for the owner's device check), slice 4 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
+Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slices 1 to 4 built (3 and 4 wait for the owner's device check), slice 5 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
 
 ## Why
 
@@ -97,6 +97,15 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    | M13 | The M9 fix dropped a second quick Earlier or Later (screen and saved timing apart) | Compares the version, not the screen state; re-review clean apart from a sheet that closes during the blank moment between songs (accepted) |
 
 4. **Line up now and Fix lines.** "Now" for the next line (Q19); Fix lines mode (Q22). Device test with a real song.
+   **Built 2026-10-11** (`1c53804` and the mini-audit fixes). Wording approved by the owner (both sheet rows; the bar's "Tap Now when you hear:", Now, Cancel, Done, "No more lines to fix.", "Play the song to fix its timing."). Reaction allowance 200 ms (Tuning, personal builds). `/finalize --slice`: one review agent checked the sums with numbers (with and without a headphone delay, with a base and anchors: correct), 4 findings fixed (M14 to M17). 95/95 unit tests, lint 0 errors, 49 older warnings. Device check by the owner.
+
+   | Id | Finding | Fix |
+   | --- | --- | --- |
+   | M14 | The bar's line moved on by the lyrics' own clock, so with early lyrics a tap pinned the wrong line | The line stays until tapped; the first one is at least 10 s ahead on the lyrics' clock (it can't have been sung yet, however wrong the timing); a line more than 10 s behind was missed and the next one that can still come takes its place |
+   | M15 | The bar showed over Settings, Library and the other pages | Only on the lyrics |
+   | M16 | In Flex mode the bar covered the controls below the fold | At the bottom of the lyrics area, above the fold |
+   | M17 | A brief reload closed the bar | Closes only for words only, a miss or offline, or a song change |
+
 5. **Fit in Other versions.** Each version shows how it fits the song, title-only results show their artist (Q26). Wording to the owner at the slice.
 6. **Fixes in the Library backup** (Q25). Format tests, restore of an old backup.
 7. **Share your fix** (Q23). Preview of exactly what's sent, Send, the publish flow. Tests on the payload builder; one real publish only with the owner's OK for that exact song.

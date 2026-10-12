@@ -81,6 +81,19 @@ class YourTimingTest {
         assertEquals(1, YourTiming.nextLine(late, 22_000))
     }
 
+    @Test fun theLineToTapStaysPutAndCantAlreadyHaveBeenSung() {
+        // At 0:05 the first target is at least 10 s ahead on the lyrics' clock: the line at 0:20.
+        assertEquals(1, YourTiming.firstTarget(lines, 5_000))
+        // Lyrics 3 s early: the target doesn't move on when the lyrics pass it; it stays until tapped.
+        val early = YourTiming.apply(lines, 3_000, emptyList())
+        assertEquals(1, YourTiming.keepTarget(early, 1, 18_000))   // the lyrics passed line 1 at 0:17; it's heard at 0:20
+        // A target more than 10 s behind on the lyrics' clock was missed: the next line that can still come.
+        assertEquals(2, YourTiming.keepTarget(lines, 1, 31_000))   // line 2 (0:30) is only 1 s behind: it can still come
+        // After a tap, the next line with words.
+        assertEquals(2, YourTiming.afterTap(lines, 1))
+        assertEquals(null, YourTiming.afterTap(lines, 5))
+    }
+
     @Test fun lineUpNowMovesTheWholeSongAndKeepsTheAnchorsShape() {
         assertEquals(-4_000L, YourTiming.baseFor(emptyList(), 30_000, -4_000))
         // With an anchor pulling 1 s further at that line, the base makes up the rest.

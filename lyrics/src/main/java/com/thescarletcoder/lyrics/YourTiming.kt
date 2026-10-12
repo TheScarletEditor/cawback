@@ -67,4 +67,20 @@ object YourTiming {
      */
     fun nextLine(timed: List<LyricLine>, positionMs: Long): Int? =
         timed.indices.firstOrNull { i -> timed[i].text.isNotBlank() && (timed[i].timeMs ?: return@firstOrNull false) > positionMs }
+
+    /**
+     * The first line to tap: one the lyrics put at least [LIMIT_MS] ahead. The timing is never off by more than that,
+     * so this line can't have been sung yet however wrong it is; the user waits for it and taps when it comes.
+     */
+    fun firstTarget(timed: List<LyricLine>, positionMs: Long): Int? = nextLine(timed, positionMs + LIMIT_MS)
+
+    /** After a tap on [tapped] (Fix lines): the next line with words. */
+    fun afterTap(timed: List<LyricLine>, tapped: Int): Int? =
+        (tapped + 1 until timed.size).firstOrNull { timed[it].text.isNotBlank() && timed[it].timeMs != null }
+
+    /** The target stays until it's tapped, unless the lyrics put it more than [LIMIT_MS] behind: then it was missed. */
+    fun keepTarget(timed: List<LyricLine>, target: Int, positionMs: Long): Int? {
+        val t = timed.getOrNull(target)?.timeMs ?: return null
+        return if (t + LIMIT_MS < positionMs) nextLine(timed, positionMs - LIMIT_MS) else target
+    }
 }

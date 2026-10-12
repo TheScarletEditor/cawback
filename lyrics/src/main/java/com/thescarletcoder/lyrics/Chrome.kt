@@ -242,22 +242,28 @@ fun SongSheet(
 enum class FixMode { NONE, LINE_UP, FIX }
 
 /**
- * The bar at the bottom of the lyrics while fixing the timing: the next line Lyrics expects, and Now. Line up now
- * takes one tap and closes; Fix lines stays until Done, moving on a line with each tap.
+ * The bar at the bottom of the lyrics while fixing the timing: a line to listen for, and Now. The line stays put until
+ * it's tapped (it never moves on by the lyrics' own clock, which is the one being fixed). Line up now takes one tap and
+ * closes; Fix lines moves on to the next line with each tap, until Done.
  */
 @Composable
 fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outputDelayMs: Long, onNow: (lineMs: Long, offsetMs: Long) -> Unit, onDone: () -> Unit) {
     var pos by remember { mutableLongStateOf(np.positionMs()) }
     LaunchedEffect(Unit) { while (true) { pos = np.positionMs(); kotlinx.coroutines.delay(100) } }
     val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
-    val next = YourTiming.nextLine(timed, pos + outputDelayMs)
+    var target by remember { mutableStateOf<Int?>(null) }
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(playing) {
+        if (playing && !started) { target = YourTiming.firstTarget(timed, np.positionMs() + outputDelayMs); started = true }
+    }
+    val next = target?.let { YourTiming.keepTarget(timed, it, pos + outputDelayMs) }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(L.surface)
             .clickable(remember { MutableInteractionSource() }, indication = null) { }
-            .navigationBarsPadding().padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
         when {
-            !playing -> Text("Play the song to fix its timing.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+            !playing || !started -> Text("Play the song to fix its timing.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
             next == null -> Text("No more lines to fix.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
             else -> {
                 Text("Tap Now when you hear:", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
@@ -266,10 +272,11 @@ fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outp
             }
         }
         FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (playing && next != null) Washed("Now", {
+            if (playing && started && next != null) Washed("Now", {
                 // The line's time in the record, not on screen: the move is worked out against the record's own timing.
                 val lineMs = s.lines[next].timeMs ?: return@Washed
                 onNow(lineMs, YourTiming.offsetFromTap(lineMs, np.positionMs(), outputDelayMs, Tunables.int(LyricsTuning.REACTION_MS).toLong()))
+                target = YourTiming.afterTap(timed, next)
             })
             Washed(if (mode == FixMode.LINE_UP && next != null) "Cancel" else "Done", onDone)
         }
