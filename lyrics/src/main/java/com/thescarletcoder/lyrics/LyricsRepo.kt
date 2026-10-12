@@ -138,7 +138,8 @@ class LyricsRepo(private val store: LyricsStore) {
 
     /** A tapped line (owner Q22): the line at [lineMs] moves [offsetMs] in all. Returns the anchors now saved. */
     suspend fun setAnchor(t: Track, lineMs: Long, offsetMs: Long): List<Anchor> = withContext(Dispatchers.IO) {
-        val e = store.load(t.key) ?: LyricsStore.Entry(null, false, 0, 0)
+        // Nothing saved for the song (cleared meanwhile): anchors without a version would be dropped on the next load.
+        val e = store.load(t.key)?.takeIf { it.candidate != null } ?: return@withContext emptyList()
         val anchors = YourTiming.withAnchor(e.anchors, e.offsetMs, lineMs, offsetMs)
         store.save(t.key, e.copy(anchors = anchors))
         anchors

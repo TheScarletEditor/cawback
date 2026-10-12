@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.5.0 plan: your timing
 
-Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slice 1 done, slice 2 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
+Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slices 1 and 2 done, slice 3 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
 
 ## Why
 
@@ -75,6 +75,15 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    | M5 | A tags-only record could beat real words | Real words first |
 
 2. **Your timing model.** Offset plus anchors per song in the cache entry (format version), the interpolation, reset on a new version (Q17), clear. JVM tests.
+   **Done 2026-10-11** (`11f18e2` and the mini-audit fixes). `/finalize --slice`: one review agent, no correctness bugs (the screen matches the old behaviour for a nudge alone: seek, moments, gap dots, end note, current line), 2 low findings fixed (M6, M7). 91/91 unit tests (YourTimingTest 9 new, one with the damaged-anchor check), lint 0 errors, 49 older warnings. Nothing visible yet: the buttons come in slices 3 and 4.
+
+   | Id | Finding | Fix |
+   | --- | --- | --- |
+   | M6 | A damaged anchors list in a cache file dropped the whole entry (pick and nudge) | A bad pair is skipped on its own; JVM test |
+   | M7 | A tap after the song's cache was cleared saved anchors that the next load drops | No-op without a saved version, as Clear my timing |
+
+   Notes for slices 3 and 4: the timing label (now the base nudge only) must say when anchors are set; taps must pass the line's time in the record (`s.lines[i]`), not the shifted time on screen.
+
 3. **The header icon and "This song" sheet.** Drawn icon (brand rule), unsure dot (Q24), the sheet with Other versions, Earlier and Later (moved from More), and the end note without its button (Q21). Emulator and device check.
 4. **Line up now and Fix lines.** "Now" for the next line (Q19); Fix lines mode (Q22). Device test with a real song.
 5. **Fit in Other versions.** Each version shows how it fits the song, title-only results show their artist (Q26). Wording to the owner at the slice.

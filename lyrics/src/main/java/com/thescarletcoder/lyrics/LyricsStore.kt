@@ -172,7 +172,11 @@ class LyricsStore(context: Context) {
             matchVersion = o.optInt("mv"),
             unsure = o.optBoolean("u"),
             anchors = o.optJSONArray("anchors")?.let { arr ->
-                (0 until arr.length()).mapNotNull { i -> arr.optJSONArray(i)?.takeIf { it.length() == 2 }?.let { Anchor(it.getLong(0), it.getLong(1)) } }
+                // A damaged pair is skipped on its own, so it can't cost the pick, the nudge or the other anchors.
+                (0 until arr.length()).mapNotNull { i ->
+                    arr.optJSONArray(i)?.takeIf { it.length() == 2 && it.opt(0) is Number && it.opt(1) is Number }
+                        ?.let { Anchor(it.getLong(0), it.getLong(1)) }
+                }
             }.orEmpty(),
         )
         private val HASH = Regex("[0-9a-f]{64}")   // a cache file's name: a SHA-256 in hex

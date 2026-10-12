@@ -79,5 +79,9 @@ class YourTimingTest {
         val old = JSONObject("""{"pinned":false,"offset":500,"at":3,"c":{"id":7,"track":"Song","artist":"Artist","album":"Album","duration":200.0,"instrumental":false,"plain":"words","synced":""}}""")
         val read = LyricsStore.decode(old)
         assertEquals(500L, read.offsetMs); assertEquals(0, read.matchVersion); assertEquals(emptyList<Anchor>(), read.anchors)
+        // A damaged anchor is skipped; the rest of the entry and the good anchors stay.
+        val damaged = LyricsStore.encode(e).put("anchors", org.json.JSONArray("[[\"x\",1],[90000,600],[5]]"))
+        val kept = LyricsStore.decode(damaged)
+        assertEquals(listOf(Anchor(90_000, 600)), kept.anchors); assertEquals(c, kept.candidate)
     }
 }
