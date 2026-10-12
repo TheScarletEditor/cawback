@@ -11,8 +11,8 @@ Mode: full. Public: yes.
 |---|---|---|---|
 | 0 | Preflight | done | Tree clean, one commit ahead of origin (the device-check note). Version: 0.5.0 as the owner chose in Q27 of the plan; versionCode 4 to 5. gh signed in; both devices connected; emulators scarlet_phone, scarlet_small, scarlet_tablet. |
 | 1 | Audit | done | Release manifest: same permissions as 0.4.1 (INTERNET and the dynamic-receiver permission); manifest source and dependencies unchanged since v0.4.1. 4 agents (decisions, hard rules, manifest and dependencies, data safety). 6 mechanical fixes (A1 to A6), 8 questions (Q1 to Q8) all answered and applied, plus the new wording approved word for word. Build, 114/114 unit tests, lint 0 errors, no em dashes, no real artist names left in the repo. |
-| 2 | Code review | running | 3 agents (data and matching; screens and the Android pass; security). 12 mechanical fixes (R1 to R12), 1 question (Q10, answered); re-reviews: 5 more (R14 to R18). Build, 115/115 unit tests, lint 0 errors. |
-| 3 | Cleanup | pending | |
+| 2 | Code review | done | 3 agents (data and matching; screens and the Android pass; security). 12 mechanical fixes (R1 to R12), 1 question (Q10, answered); three re-reviews: 5 more (R14 to R18), then clean. R13 dropped (owner's earlier choice). Android pass clean apart from R8: R8 rules, light and dark, touch targets, rotation and recreate. Build, 115/115 unit tests, lint 0 errors. |
+| 3 | Cleanup | running | |
 | 4 | QA | pending | |
 | 5 | Smoke test | pending | |
 | 6 | Ship | pending | |
