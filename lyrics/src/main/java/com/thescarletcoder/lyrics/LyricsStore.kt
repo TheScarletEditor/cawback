@@ -48,16 +48,29 @@ class LyricsStore(context: Context) {
     /** Saved but can't be read just now (a Keystore hiccup): nothing may be written over it. */
     class Busy : java.io.IOException()
 
+    /** What reading a file gave: its contents, never readable (may be deleted), or still failing after [GIVE_UP_MS]. */
+    private sealed class Read {
+        class Ok(val o: JSONObject) : Read()
+        object Never : Read()
+        object GaveUp : Read()
+    }
+
     /**
-     * Reads [f] (under [LOCK]): null when it can never be read. Throws [Busy] on an error that may pass; after
-     * [BUSY_TRIES] in a row for the same file it counts as never readable, so one bad file can't block its song or every
-     * backup for good.
+     * Reads [f] (under [LOCK]). Throws [Busy] on an error that may pass. A file still failing [GIVE_UP_MS] after its
+     * first failure (in this run) counts as unreadable, so one bad file can't block its song or every backup for good;
+     * it is never deleted for that, only written over by the next lookup, as before 0.5.0.
      */
-    private fun readOrBusy(f: File): JSONObject? = try {
-        read(f).also { busyTries.remove(f.name) }
-    } catch (_: Exception) {
-        if (busyTries.merge(f.name, 1, Int::plus)!! < BUSY_TRIES) throw Busy()
-        busyTries.remove(f.name); null
+    private fun readOrBusy(f: File): Read {
+        val o = try {
+            read(f)
+        } catch (_: Exception) {
+            val now = System.currentTimeMillis()
+            val first = failingSince.putIfAbsent(f.name, now) ?: now
+            if (now - first < GIVE_UP_MS) throw Busy()
+            return Read.GaveUp
+        }
+        failingSince.remove(f.name)
+        return if (o == null) Read.Never else Read.Ok(o)
     }
 
     /** null when nothing is saved. Throws [Busy] on a passing error, so a caller never mistakes it for nothing saved. */
@@ -65,8 +78,11 @@ class LyricsStore(context: Context) {
         val f = file(key)
         val o = synchronized(LOCK) {
             if (!f.exists()) return null
-            // A passing error: try again next time. Never readable: deleted.
-            readOrBusy(f) ?: run { f.delete(); return null }
+            when (val r = readOrBusy(f)) {
+                is Read.Ok -> r.o
+                Read.Never -> { f.delete(); return null }   // never readable: deleted
+                Read.GaveUp -> return null
+            }
         }
         return runCatching { decode(o) }.getOrNull()
     }
@@ -119,7 +135,7 @@ class LyricsStore(context: Context) {
     /** The user's timing and picks, for the Library backup (0.5.0, owner Q25): never lyric text. */
     /** Throws [Busy] when a file can't be read just now: a backup that would quietly leave timing out fails instead (R6). */
     fun fixes(): List<com.thescarletcoder.lyrics.library.TimingFix> = files().mapNotNull { f ->
-        val o = synchronized(LOCK) { readOrBusy(f) } ?: return@mapNotNull null
+        val o = (synchronized(LOCK) { readOrBusy(f) } as? Read.Ok)?.o ?: return@mapNotNull null
         // The song key, also for files saved before "s" existed, so Forget reaches a restored fix before it plays.
         val song = o.optString("s").ifBlank { null } ?: o.optJSONObject("c")?.let { SongKey.of(it.optString("track"), it.optString("artist")) }
         fixOf(f.name.removeSuffix(".json"), runCatching { decode(o) }.getOrNull() ?: return@mapNotNull null, song)
@@ -205,9 +221,9 @@ class LyricsStore(context: Context) {
         private const val KEPT = 2
         private const val FAILED = 3
 
-        /** Passing read errors in a row before a file counts as never readable. */
-        private const val BUSY_TRIES = 3
-        private val busyTries = java.util.concurrent.ConcurrentHashMap<String, Int>()
+        /** How long a file may keep failing to read before it counts as unreadable. */
+        private const val GIVE_UP_MS = 3_600_000L
+        private val failingSince = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
         /** Every read-modify-write of a cache file, across all instances (startup sealing runs beside lookups). */
         private val LOCK = Any()

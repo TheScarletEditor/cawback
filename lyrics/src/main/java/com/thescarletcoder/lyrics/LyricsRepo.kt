@@ -78,7 +78,8 @@ class LyricsRepo(private val store: LyricsStore) {
         }
     }
 
-    suspend fun load(t: Track): Shown = withContext(Dispatchers.IO) {
+    /** [retried]: read again once because the song changed while its lookup was out; this time nothing is saved. */
+    suspend fun load(t: Track, retried: Boolean = false): Shown = withContext(Dispatchers.IO) {
         // Saved but unreadable just now: shown as offline (tried again quietly), and nothing is written over it.
         var cached = try { store.load(t.key) } catch (_: LyricsStore.Busy) { return@withContext Shown.Offline }
         // A restored fix (0.5.0): fetch its version by id, with the user's timing on it.
@@ -119,8 +120,8 @@ class LyricsRepo(private val store: LyricsStore) {
                 tapped = same?.tapped ?: false, sentAt = same?.sentAt ?: 0,
             )
             // Saved only if nothing changed while the lookup was out (a nudge or pick then wins): one edit at a time.
-            val kept = edit { if (store.load(t.key) == cached) { store.save(t.key, e); true } else false }
-            if (kept != true) return@withContext load(t)
+            val kept = !retried && edit { if (store.load(t.key) == cached) { store.save(t.key, e); true } else false } == true
+            if (!kept && !retried) return@withContext load(t, retried = true)
             if (c == null) Shown.NotFound else found(c, false, offset, m.choice!!.unsure, anchors, e)
         } catch (_: IOException) {
             stale()   // an older match still shows while LRCLIB can't be reached; it's looked up again next time

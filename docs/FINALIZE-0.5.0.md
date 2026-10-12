@@ -11,7 +11,7 @@ Mode: full. Public: yes.
 |---|---|---|---|
 | 0 | Preflight | done | Tree clean, one commit ahead of origin (the device-check note). Version: 0.5.0 as the owner chose in Q27 of the plan; versionCode 4 to 5. gh signed in; both devices connected; emulators scarlet_phone, scarlet_small, scarlet_tablet. |
 | 1 | Audit | done | Release manifest: same permissions as 0.4.1 (INTERNET and the dynamic-receiver permission); manifest source and dependencies unchanged since v0.4.1. 4 agents (decisions, hard rules, manifest and dependencies, data safety). 6 mechanical fixes (A1 to A6), 8 questions (Q1 to Q8) all answered and applied, plus the new wording approved word for word. Build, 114/114 unit tests, lint 0 errors, no em dashes, no real artist names left in the repo. |
-| 2 | Code review | running | 3 agents (data and matching; screens and the Android pass; security). 12 mechanical fixes (R1 to R12), 1 question (Q10, answered); re-review: 4 more (R14 to R17). Build, 115/115 unit tests, lint 0 errors. |
+| 2 | Code review | running | 3 agents (data and matching; screens and the Android pass; security). 12 mechanical fixes (R1 to R12), 1 question (Q10, answered); re-reviews: 5 more (R14 to R18). Build, 115/115 unit tests, lint 0 errors. |
 | 3 | Cleanup | pending | |
 | 4 | QA | pending | |
 | 5 | Smoke test | pending | |
@@ -48,7 +48,8 @@ Mode: full. Public: yes.
 | R11 | Review | mechanical | LrcLib.kt requestChallenge | The challenge prefix wasn't checked before going into a header | 1 to 128 letters and digits, or the reply makes no sense | stage 2 |
 | R12 | Review | mechanical | LyricsActivity.kt share | verify() was never called before sending | Called before the publish | stage 2 |
 | R14 | Review | mechanical | LyricsRepo.kt load | (re-review) A lookup could save over a nudge made while it was out | Saved only if nothing changed meanwhile, as one edit; otherwise the song is read again | stage 2 |
-| R15 | Review | mechanical | LyricsStore.kt read | (re-review) A file failing the same way every time was "busy" forever: its song always offline, every backup failing | After 3 in a row it counts as never readable, as in 0.4.1 | stage 2 |
+| R15 | Review | mechanical | LyricsStore.kt read | (re-review) A file failing the same way every time was "busy" forever: its song always offline, every backup failing | Still failing an hour after its first failure, it counts as unreadable (never deleted for that; the next lookup writes over it, as in 0.4.1). A first try (3 failures in a row) could delete during a short outage: caught by the second re-review | stage 2 |
+| R18 | Review | mechanical | LyricsRepo.kt load | (second re-review) The re-read after a change could repeat without end if a save kept failing | Read again once; then shown without saving | stage 2 |
 | R16 | Review | mechanical | LyricsStore.kt restoreFix | (re-review) A file that can't be decoded counted as failed, so "Restore again" could never help | Kept, not failed | stage 2 |
 | R17 | Review | mechanical | LyricsActivity.kt picker | (re-review) A pick that couldn't be saved closed the list silently | The list stays open to try again | stage 2 |
 | R13 | Review | dropped | Panels.kt SharePanel | Suggested: cancel the send when its panel closes | The owner chose "In the background" (slice 7); R10's limit bounds it | |
