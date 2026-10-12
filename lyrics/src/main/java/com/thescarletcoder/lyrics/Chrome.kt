@@ -35,6 +35,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
@@ -198,6 +200,7 @@ private fun BottomSheet(open: Boolean, onClose: () -> Unit, content: @Composable
 @Composable
 fun SongSheet(
     open: Boolean, shown: Shown?, onClose: () -> Unit, onWrong: () -> Unit, onNudge: (Long) -> Unit, onClear: () -> Unit,
+    onFix: (FixMode) -> Unit,
 ) {
     // Reset with the song too, so a confirm left open can never clear the next song's timing.
     var confirmClear by remember(open, (shown as? Shown.Found)?.candidate?.id) { mutableStateOf(false) }
@@ -217,6 +220,10 @@ fun SongSheet(
                     Washed("Earlier", { onNudge(250) })
                     Washed("Later", { onNudge(-250) })
                 }
+            }
+            SheetRow("Line up now", "Tap Now the moment you hear the next line. The whole song moves.") { onClose(); onFix(FixMode.LINE_UP) }
+            SheetRow("Fix lines", "As the song plays, tap Now as each line starts. Lines you tap stay put; the rest follow.") { onClose(); onFix(FixMode.FIX) }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
                 if (found.offsetMs != 0L || found.anchors.isNotEmpty()) {
                     if (confirmClear) Column(Modifier.padding(top = 12.dp)) {
                         Text("Clear your timing for this song? The version stays.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
@@ -227,6 +234,44 @@ fun SongSheet(
                     } else Box(Modifier.padding(top = 12.dp)) { Washed("Clear my timing", { confirmClear = true }) }
                 }
             }
+        }
+    }
+}
+
+/** Which way of fixing the timing the bar is in (0.5.0, owner Q19, Q22). */
+enum class FixMode { NONE, LINE_UP, FIX }
+
+/**
+ * The bar at the bottom of the lyrics while fixing the timing: the next line Lyrics expects, and Now. Line up now
+ * takes one tap and closes; Fix lines stays until Done, moving on a line with each tap.
+ */
+@Composable
+fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outputDelayMs: Long, onNow: (lineMs: Long, offsetMs: Long) -> Unit, onDone: () -> Unit) {
+    var pos by remember { mutableLongStateOf(np.positionMs()) }
+    LaunchedEffect(Unit) { while (true) { pos = np.positionMs(); kotlinx.coroutines.delay(100) } }
+    val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
+    val next = YourTiming.nextLine(timed, pos + outputDelayMs)
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(L.surface)
+            .clickable(remember { MutableInteractionSource() }, indication = null) { }
+            .navigationBarsPadding().padding(horizontal = 24.dp, vertical = 16.dp),
+    ) {
+        when {
+            !playing -> Text("Play the song to fix its timing.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+            next == null -> Text("No more lines to fix.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+            else -> {
+                Text("Tap Now when you hear:", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
+                Text(s.lines[next].text, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 20.sp, color = L.text,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+        FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (playing && next != null) Washed("Now", {
+                // The line's time in the record, not on screen: the move is worked out against the record's own timing.
+                val lineMs = s.lines[next].timeMs ?: return@Washed
+                onNow(lineMs, YourTiming.offsetFromTap(lineMs, np.positionMs(), outputDelayMs, Tunables.int(LyricsTuning.REACTION_MS).toLong()))
+            })
+            Washed(if (mode == FixMode.LINE_UP && next != null) "Cancel" else "Done", onDone)
         }
     }
 }

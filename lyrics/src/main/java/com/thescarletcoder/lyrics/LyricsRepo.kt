@@ -145,6 +145,14 @@ class LyricsRepo(private val store: LyricsStore) {
         anchors
     }
 
+    /** Line up now (owner Q19): the base nudge that puts the line at [lineMs] where it was heard. Returns the new base. */
+    suspend fun lineUp(t: Track, lineMs: Long, offsetMs: Long): Long? = withContext(Dispatchers.IO) {
+        val e = store.load(t.key)?.takeIf { it.candidate != null } ?: return@withContext null
+        val base = YourTiming.baseFor(e.anchors, lineMs, offsetMs)
+        store.save(t.key, e.copy(offsetMs = base))
+        base
+    }
+
     /** "Clear my timing": no nudge and no anchors for this song; the version stays. */
     suspend fun clearTiming(t: Track) = withContext(Dispatchers.IO) {
         store.load(t.key)?.let { store.save(t.key, it.copy(offsetMs = 0, anchors = emptyList())) }

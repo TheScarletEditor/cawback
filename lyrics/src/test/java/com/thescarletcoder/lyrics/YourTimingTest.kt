@@ -70,6 +70,26 @@ class YourTimingTest {
         assertEquals(-4_300L, YourTiming.offsetFromTap(30_000, 34_200, 300, 200))
     }
 
+    @Test fun theNextLineIsTheOneTheLyricsHaventReached() {
+        val withGap = lines.take(3) + LyricLine(35_000, "") + lines.drop(3)   // a blank (instrumental) line in between
+        assertEquals(0, YourTiming.nextLine(withGap, 5_000))
+        assertEquals(1, YourTiming.nextLine(withGap, 10_000))   // line 0 has started: the next one
+        assertEquals(4, YourTiming.nextLine(withGap, 31_000))   // the blank line is skipped
+        assertEquals(null, YourTiming.nextLine(withGap, 60_000))   // nothing left
+        // Timing 4 s late: at 0:22 the lyrics think line 1 (0:20) is still 2 s away, so it's the one to tap.
+        val late = YourTiming.apply(lines, -4_000, emptyList())
+        assertEquals(1, YourTiming.nextLine(late, 22_000))
+    }
+
+    @Test fun lineUpNowMovesTheWholeSongAndKeepsTheAnchorsShape() {
+        assertEquals(-4_000L, YourTiming.baseFor(emptyList(), 30_000, -4_000))
+        // With an anchor pulling 1 s further at that line, the base makes up the rest.
+        val a = listOf(Anchor(30_000, 1_000))
+        val base = YourTiming.baseFor(a, 30_000, -4_000)
+        assertEquals(-5_000L, base)
+        assertEquals(-4_000L, YourTiming.offsetAt(base, a, 30_000))
+    }
+
     @Test fun theTimingLineSaysWhatIsSet() {   // wording approved by the owner (0.5.0)
         assertEquals("Lyrics match the song's timing", timingLabel(0))
         assertEquals("Lyrics earlier by 0.25s", timingLabel(250))

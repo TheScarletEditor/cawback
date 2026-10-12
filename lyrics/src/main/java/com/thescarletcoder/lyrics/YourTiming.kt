@@ -56,4 +56,15 @@ object YourTiming {
      */
     fun offsetFromTap(lineMs: Long, tapPositionMs: Long, outputDelayMs: Long, reactionMs: Long): Long =
         (lineMs - (tapPositionMs - reactionMs) - outputDelayMs).coerceIn(-LIMIT_MS, LIMIT_MS)
+
+    /** The base nudge that gives the line at [lineMs] a move of [offsetMs] in all, keeping the anchors' shape (Line up now). */
+    fun baseFor(anchors: List<Anchor>, lineMs: Long, offsetMs: Long): Long =
+        (offsetMs.coerceIn(-LIMIT_MS, LIMIT_MS) - deltaAt(anchors, lineMs)).coerceIn(-LIMIT_MS, LIMIT_MS)
+
+    /**
+     * The line to tap next: the first line with words that the lyrics, as timed now ([timed]), haven't reached at
+     * [positionMs]. If the timing is late it's the line being sung; if early, the coming one. Null when none is left.
+     */
+    fun nextLine(timed: List<LyricLine>, positionMs: Long): Int? =
+        timed.indices.firstOrNull { i -> timed[i].text.isNotBlank() && (timed[i].timeMs ?: return@firstOrNull false) > positionMs }
 }

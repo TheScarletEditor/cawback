@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -296,6 +297,7 @@ private fun LyricsScreen(
     var sheet by rememberSaveable { mutableStateOf(false) }
     var songSheet by rememberSaveable { mutableStateOf(false) }   // This song (0.5.0)
     var sheetSong by rememberSaveable { mutableStateOf<String?>(null) }   // the song it was opened for
+    var fixMode by rememberSaveable { mutableStateOf(FixMode.NONE) }   // Line up now or Fix lines (0.5.0)
     var reload by remember { mutableIntStateOf(0) }
     // The Library: which song's page is open, where Back goes from it, and the playing song's uid (moments, seeking).
     var songUid by rememberSaveable { mutableStateOf<String?>(null) }
@@ -378,7 +380,8 @@ private fun LyricsScreen(
     // Header auto-hide (owner's ruling): while a song plays with no sheet or panel open, fade 3 s after the last touch.
     var chrome by remember { mutableStateOf(true) }
     var touches by remember { mutableIntStateOf(0) }
-    val canHide = playing && songShowing && !sheet && !songSheet && momentAt == null && panel == Panel.NONE && shown is Shown.Found
+    // Not while fixing: a tap with the header hidden only brings it back, and would swallow a tap on Now.
+    val canHide = playing && songShowing && !sheet && !songSheet && fixMode == FixMode.NONE && momentAt == null && panel == Panel.NONE && shown is Shown.Found
     LaunchedEffect(canHide, touches) {
         chrome = true
         if (canHide) { delay(Tunables.int(LyricsTuning.CHROME_HIDE_MS).toLong()); chrome = false }
@@ -397,10 +400,11 @@ private fun LyricsScreen(
 
     // One step back from a page: the system Back and the now-playing bar (Header with onBack) both use it.
     fun pageBack() { panel = panel.back(songFromLibrary) }
-    BackHandler(enabled = sheet || songSheet || momentAt != null || panel != Panel.NONE) {
+    BackHandler(enabled = sheet || songSheet || fixMode != FixMode.NONE || momentAt != null || panel != Panel.NONE) {
         when {
             sheet -> sheet = false
             songSheet -> songSheet = false
+            fixMode != FixMode.NONE -> fixMode = FixMode.NONE
             momentAt != null -> momentAt = null
             else -> pageBack()
         }
@@ -413,7 +417,9 @@ private fun LyricsScreen(
     } else null
     // The sheet belongs to the song it was opened for: a new song, or nothing to show, closes it (a recreate doesn't).
     val songGone = songButton == null || song != sheetSong
-    LaunchedEffect(songGone) { if (songGone) songSheet = false }
+    LaunchedEffect(songGone) { if (songGone) { songSheet = false; fixMode = FixMode.NONE } }
+    // Fixing needs synced lyrics on screen.
+    if (fixMode != FixMode.NONE && (shown as? Shown.Found)?.synced != true) fixMode = FixMode.NONE
 
     val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
     // The sheets sit outside the safe-area padding, so their dimming covers the whole screen, status bar included.
@@ -497,6 +503,7 @@ private fun LyricsScreen(
                     val cur = shown
                     if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = next)
                 } },
+            onFix = { fixMode = it },
             onClear = { val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch {
                     repo.clearTiming(t)
@@ -504,6 +511,24 @@ private fun LyricsScreen(
                     if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = 0, anchors = emptyList())
                 } },
         )
+        val fixing = shown as? Shown.Found
+        if (fixMode != FixMode.NONE && fixing != null && !songSheet && !sheet) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            FixBar(fixMode, fixing, np, playing, settings.delayFor(output).toLong(),
+                onNow = { lineMs, offsetMs -> val t = track
+                    if (t != null) scope.launch {
+                        if (fixMode == FixMode.LINE_UP) {
+                            val base = repo.lineUp(t, lineMs, offsetMs)
+                            val cur = shown
+                            if (base != null && cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(offsetMs = base)
+                            fixMode = FixMode.NONE
+                        } else {
+                            val anchors = repo.setAnchor(t, lineMs, offsetMs)
+                            val cur = shown
+                            if (cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(anchors = anchors)
+                        }
+                    } },
+                onDone = { fixMode = FixMode.NONE })
+        }
         MoreSheet(
             sheet, shown, hasTrack = track != null && hasAccess, playerLabel = playerLabel?.takeIf { !inSplit },
             onClose = { sheet = false },

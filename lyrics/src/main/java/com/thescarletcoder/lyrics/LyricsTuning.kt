@@ -23,6 +23,8 @@ object LyricsTuning {
     const val SWAP_MS = "swap_ms"
     const val TINT_FADE_MS = "tint_fade_ms"
     const val LOADING_DELAY_MS = "loading_delay_ms"
+    /** Taken off a Line up now or Fix lines tap: people tap a little after they hear a line (0.5.0). */
+    const val REACTION_MS = "reaction_ms"
 
     /** Line alpha by distance from the current line: 1, 2, 3, then the floor (4 or more). */
     fun alphaName(dark: Boolean, step: Int) = "alpha_${if (dark) "dark" else "light"}_${if (step >= 4) "floor" else step.toString()}"
@@ -50,6 +52,7 @@ object LyricsTuning {
         Tunable(CHROME_FADE_MS, "Header", 420f, 0f, 1500f, 20f, isInt = true),
         Tunable(SWAP_MS, "Song changes", 220f, 0f, 800f, 10f, isInt = true),
         Tunable(LOADING_DELAY_MS, "Song changes", 250f, 0f, 1500f, 25f, isInt = true),
+        Tunable(REACTION_MS, "Fix timing", 200f, 0f, 600f, 20f, isInt = true),
     )
 
     /** A value's starting point, before any tuning on the device. */
