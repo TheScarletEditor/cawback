@@ -220,6 +220,10 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Text("Share your fix", fontFamily = Fraunces, fontSize = 28.sp, color = L.text)
         Text("This sends what's below to lrclib.net. It becomes the version everyone gets for this song.",
+            fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+        // What stays here, too (owner, finalize 0.5.0 S1).
+        Text("Not sent: who you are (Lyrics has no account), your Library, your listening history, notes and moments, or " +
+            "anything about other songs. As with every lookup, lrclib.net sees your internet address.",
             fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
         val dur = Math.round(body.optDouble("duration", 0.0)).toInt()
         listOf("Title" to body.optString("trackName"), "Artist" to body.optString("artistName"), "Album" to body.optString("albumName"),
