@@ -579,7 +579,7 @@ private fun SavedLyricsSettings(repo: LyricsRepo) {
         },
         fontFamily = Inter, fontSize = 17.sp, color = L.text,
     )
-    Text("Includes your \"Other versions\" picks and timing nudges.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
+    Text("Includes your \"Other versions\" picks and timing.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
     Box(Modifier.padding(top = 12.dp)) {
         ConfirmedWork(
             SettingsWork.SAVED, start = "Clear saved lyrics", confirm = "Clear",
