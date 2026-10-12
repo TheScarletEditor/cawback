@@ -131,7 +131,7 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    | M29 | A crafted backup could create a huge number of files or carry extreme values | At most 20,000 fixes, one per song, song keys capped, offsets and anchors clamped like the app's own |
    | M30 | A garbled reply for a restored version showed "can't reach LRCLIB" forever | Treated like a removed version: matched again |
    | M31 | Timing added to an older automatic match was dropped by the next re-match | The entry is marked current |
-   | M32 | A failed file replace still counted as restored | Counted only when the file is in place |
+   | M32 | A failed file replace still counted as restored, and (after that change) Reset all timing nudges could report success after a failed replace | Both count only a file in place; re-review clean |
    | L1 | Known limit, kept: a fix finds its song on another device only when the music app reports the same title, artist, album and length; with another app or album name it waits in a file that's never read (and still counts in "timing came back") | None now; a looser match would be its own decision |
 
 7. **Share your fix** (Q23). Preview of exactly what's sent, Send, the publish flow. Tests on the payload builder; one real publish only with the owner's OK for that exact song.

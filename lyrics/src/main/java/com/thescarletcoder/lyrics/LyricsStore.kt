@@ -70,7 +70,7 @@ class LyricsStore(context: Context) {
                 val o = try { read(f) } catch (_: Exception) { ok = false; null } ?: return@forEach
                 if (o.optLong("offset") == 0L && o.optJSONArray("anchors").let { it == null || it.length() == 0 }) return@forEach
                 o.put("offset", 0L).remove("anchors")
-                if (runCatching { write(f, o) }.isFailure) ok = false
+                if (!runCatching { write(f, o) }.getOrDefault(false)) ok = false   // a failed replace is a failure too
             }
         }
         return ok
