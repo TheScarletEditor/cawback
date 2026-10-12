@@ -35,7 +35,7 @@ Settings has four tabs: Lyrics, Player, Library and Privacy. Lyrics and Player s
 
 ## Privacy and permissions
 
-- **Internet, for one site only.** Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library, over HTTPS. That is the only place the app connects to. To find the words, it sends the song's title, artist, album and length, and anything you type into an "Other versions" search. As with any website, LRCLIB also sees your IP address.
+- **Internet, for one site only.** Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library, over HTTPS. That is the only place the app connects to. To find the words, it sends the song's title, artist, album and length, and anything you type into an "Other versions" search. Sharing a timing fix (This song > Share your fix) sends that song's title, artist, album, length and lyrics with your timing, only after you tap Send. As with any website, LRCLIB also sees your IP address.
 - **Notification access**, because Android requires it for an app to see what's playing. Lyrics sees only what's playing: the song's title, artist, album, length, position and cover art (the cover only tints the screen and is never saved). It never reads your notifications.
 - **Nothing from your Library leaves your device** unless you export it or make a backup, and then it goes only where you choose.
 - **Saved lyrics:** a small encrypted on-device cache keeps fetched lyrics (each with its song title and artist), your "Other versions" picks and timing nudges. It's excluded from backups. Settings > Privacy shows how many songs are saved and has "Clear saved lyrics".

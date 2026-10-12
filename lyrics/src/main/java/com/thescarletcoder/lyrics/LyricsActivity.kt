@@ -72,6 +72,7 @@ import com.thescarletcoder.scarlet.Tunables
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -251,7 +252,7 @@ class LyricsActivity : ComponentActivity() {
 }
 
 internal enum class Panel {
-    NONE, PICKER, SETTINGS, TUNING, LIBRARY, SONG, EXPORT;
+    NONE, PICKER, SETTINGS, TUNING, LIBRARY, SONG, EXPORT, SHARE;
 
     /** Where one step back goes (system Back and the now-playing bar). Pure, so it is unit tested. */
     fun back(songFromLibrary: Boolean): Panel = when {
@@ -332,7 +333,7 @@ private fun LyricsScreen(
             return@LaunchedEffect
         }
         if (shownFor == song to reloads && shown is Shown.Found) return@LaunchedEffect   // the same song came back
-        if (panel == Panel.PICKER) panel = Panel.NONE
+        if (panel == Panel.PICKER || panel == Panel.SHARE) panel = Panel.NONE   // they belong to the song that was playing
         finding = false; slow = false
         shown = null
         shownFor = null
@@ -478,6 +479,24 @@ private fun LyricsScreen(
                                 onExport = { panel = Panel.EXPORT },
                                 onSettings = { openSettings(SettingsWayIn.LIBRARY) })
                             panel == Panel.EXPORT -> ExportPanel()
+                            panel == Panel.SHARE && t != null && shown is Shown.Found -> {
+                                val s = shown as Shown.Found
+                                SharePanel(t, s, onSend = {
+                                    val body = ShareFix.body(t, s.candidate, YourTiming.apply(s.lines, s.offsetMs, s.anchors))
+                                    SettingsWork.runner.run(SettingsWork.SHARE) {
+                                        withContext(Dispatchers.Default) {
+                                            val (prefix, target) = withContext(Dispatchers.IO) { LrcLib.requestChallenge() }
+                                            val nonce = ProofOfWork.solve(prefix, target) { !isActive } ?: throw kotlinx.coroutines.CancellationException()
+                                            withContext(Dispatchers.IO) { LrcLib.publish("$prefix:$nonce", body) }
+                                        }
+                                        val at = System.currentTimeMillis()
+                                        repo.markSent(t, s.candidate.id, at)
+                                        val cur = shown
+                                        if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(sentAt = at)
+                                        WorkRunner.Result(true, "Sent. Thank you: LRCLIB has your timing for this song.")
+                                    }
+                                }, onCancelSend = { SettingsWork.runner.cancel(SettingsWork.SHARE) }, onClose = { panel = Panel.NONE })
+                            }
                             panel == Panel.SONG && (songUid != null || songPending != null) -> {
                                 val here = t != null && if (songUid != null) songUid == playingUid else songPending?.let { it.title == t.title && it.artist == t.artist } == true
                                 SongPage(songUid, songPending, position = if (here) np::positionMs else null, onSeek = if (here) np::seekTo else null,
@@ -523,6 +542,7 @@ private fun LyricsScreen(
                     if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = next)
                 } },
             onFix = { fixMode = it },
+            onShare = { SettingsWork.runner.clear(SettingsWork.SHARE); panel = Panel.SHARE },
             onClear = { val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch {
                     repo.clearTiming(t)

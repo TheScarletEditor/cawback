@@ -200,7 +200,7 @@ private fun BottomSheet(open: Boolean, onClose: () -> Unit, content: @Composable
 @Composable
 fun SongSheet(
     open: Boolean, shown: Shown?, onClose: () -> Unit, onWrong: () -> Unit, onNudge: (Long) -> Unit, onClear: () -> Unit,
-    onFix: (FixMode) -> Unit,
+    onFix: (FixMode) -> Unit, onShare: () -> Unit,
 ) {
     // Reset with the song too, so a confirm left open can never clear the next song's timing.
     var confirmClear by remember(open, (shown as? Shown.Found)?.candidate?.id) { mutableStateOf(false) }
@@ -223,6 +223,12 @@ fun SongSheet(
             }
             SheetRow("Line up now", "Tap Now the moment you hear the line shown. The whole song moves.") { onClose(); onFix(FixMode.LINE_UP) }
             SheetRow("Fix lines", "As the song plays, tap Now as each line starts. Lines you tap stay put; the rest follow.") { onClose(); onFix(FixMode.FIX) }
+            // Only timing lined up by ear goes to LRCLIB (owner, 0.5.0).
+            if (found.tapped) {
+                SheetRow("Share your fix", "Send your timing to LRCLIB so others get it too.") { onClose(); onShare() }
+                if (found.sentAt > 0) Text("Sent on " + java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault()).format(java.util.Date(found.sentAt)),
+                    fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(horizontal = 4.dp))
+            }
             Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
                 if (found.offsetMs != 0L || found.anchors.isNotEmpty()) {
                     if (confirmClear) Column(Modifier.padding(top = 12.dp)) {

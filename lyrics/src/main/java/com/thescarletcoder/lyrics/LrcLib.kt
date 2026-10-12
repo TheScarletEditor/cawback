@@ -54,18 +54,39 @@ object LrcLib {
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
-    private fun fetch(pathAndQuery: String): String {
+    /** Share your fix, step 1 (0.5.0): a challenge to solve on the device. Returns prefix and target. */
+    fun requestChallenge(): Pair<String, String> {
+        val o = JSONObject(send("POST", "/api/request-challenge", null, null))
+        return o.getString("prefix") to o.getString("target")
+    }
+
+    /** Share your fix, step 2: publish with the solved token ("prefix:nonce"). Only ever after the user tapped Send. */
+    fun publish(token: String, body: JSONObject) { send("POST", "/api/publish", body.toString(), token) }
+
+    private fun fetch(pathAndQuery: String): String = send("GET", pathAndQuery, null, null)
+
+    private fun send(method: String, pathAndQuery: String, body: String?, token: String?): String {
         val url = URL("https://$HOST$pathAndQuery")
         check(url.protocol == "https" && url.host == HOST)
         val c = url.openConnection() as HttpURLConnection
         try {
+            c.requestMethod = method
             c.connectTimeout = 8000
             c.readTimeout = 12000
             c.instanceFollowRedirects = false
             c.setRequestProperty("User-Agent", AGENT)
             c.setRequestProperty("Accept", "application/json")
+            token?.let { c.setRequestProperty("X-Publish-Token", it) }
+            if (body != null) {
+                c.doOutput = true
+                c.setRequestProperty("Content-Type", "application/json")
+                c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            } else if (method == "POST") {
+                c.doOutput = true
+                c.setFixedLengthStreamingMode(0)
+            }
             when (c.responseCode) {
-                200 -> return c.inputStream.bufferedReader().use { it.readText() }
+                200, 201 -> return c.inputStream.bufferedReader().use { it.readText() }
                 404 -> throw NotFound()
                 else -> throw IOException("LRCLIB answered ${c.responseCode}")
             }

@@ -37,6 +37,10 @@ class LyricsStore(context: Context) {
         val matchVersion: Int = 0, val unsure: Boolean = false, val anchors: List<Anchor> = emptyList(),
         /** A restored fix (0.5.0): the version to fetch by id the next time the song plays; no lyrics yet. */
         val pendingId: Long? = null,
+        /** The timing was lined up by ear (Line up now or Fix lines), so it can be shared (owner, 0.5.0). */
+        val tapped: Boolean = false,
+        /** When this timing was shared with LRCLIB (0: not shared, or changed since). */
+        val sentAt: Long = 0,
     )
 
     private fun file(key: String) = File(dir, "${hash(key)}.json")
@@ -69,7 +73,7 @@ class LyricsStore(context: Context) {
                 if (!f.exists()) return@forEach   // forgotten or cleared meanwhile: nothing to reset, not a failure
                 val o = try { read(f) } catch (_: Exception) { ok = false; null } ?: return@forEach
                 if (o.optLong("offset") == 0L && o.optJSONArray("anchors").let { it == null || it.length() == 0 }) return@forEach
-                o.put("offset", 0L).remove("anchors")
+                o.put("offset", 0L).remove("anchors"); o.remove("t"); o.remove("sent")
                 if (!runCatching { write(f, o) }.getOrDefault(false)) ok = false   // a failed replace is a failure too
             }
         }
@@ -174,6 +178,8 @@ class LyricsStore(context: Context) {
                 .put("pinned", e.pinned).put("offset", e.offsetMs).put("at", e.fetchedAt)
                 .put("mv", e.matchVersion).put("u", e.unsure)
             e.pendingId?.let { o.put("pid", it) }
+            if (e.tapped) o.put("t", true)
+            if (e.sentAt > 0) o.put("sent", e.sentAt)
             if (e.anchors.isNotEmpty()) o.put("anchors", JSONArray().apply { e.anchors.forEach { put(JSONArray().put(it.lineMs).put(it.deltaMs)) } })
             song?.let { o.put("s", it) }
             e.candidate?.let {
@@ -215,6 +221,8 @@ class LyricsStore(context: Context) {
             },
             pinned = o.optBoolean("pinned"),
             pendingId = if (o.has("pid")) o.optLong("pid") else null,
+            tapped = o.optBoolean("t"),
+            sentAt = o.optLong("sent"),
             offsetMs = o.optLong("offset"),
             fetchedAt = o.optLong("at"),
             matchVersion = o.optInt("mv"),

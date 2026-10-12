@@ -23,6 +23,7 @@ internal class WorkRunner(
 
     private val busy = HashSet<String>()
     private val results = HashMap<String, Result>()
+    private val jobs = HashMap<String, kotlinx.coroutines.Job>()
 
     @Synchronized fun busy(key: String) = key in busy
     @Synchronized fun anyBusy(keys: Collection<String>) = keys.any { it in busy }
@@ -36,15 +37,20 @@ internal class WorkRunner(
             results -= key; group.forEach { results -= it }
         }
         onChange(false)
-        scope.launch {
-            var result = Result(false, FAILED)
-            try { result = block() } catch (e: CancellationException) { throw e } catch (_: Exception) { } finally {
-                synchronized(this@WorkRunner) { busy -= key; results[key] = result }
+        val job = scope.launch {
+            var result: Result? = Result(false, FAILED)
+            try { result = block() } catch (e: CancellationException) { result = null; throw e } catch (_: Exception) { } finally {
+                // Cancelled by the user: no message, as if it never started.
+                synchronized(this@WorkRunner) { busy -= key; jobs -= key; result?.let { results[key] = it } }
                 onChange(true)
             }
         }
+        synchronized(this) { if (key in busy) jobs[key] = job }
         return true
     }
+
+    /** Stop the job under [key] (Share's Cancel); work that can't be undone halfway must not use this. */
+    fun cancel(key: String) { synchronized(this) { jobs[key] }?.cancel() }
 
     @Synchronized fun clear(key: String) { results -= key }
 
@@ -80,6 +86,7 @@ internal object SettingsWork {
     const val SAVED = "saved"
     const val BACKUP = "backup"
     const val RESTORE = "restore"
+    const val SHARE = "share"
 
     /** Work on the Library itself: one at a time, so a delete and a restore never race (owner: "One at a time"). */
     val LIBRARY = listOf(DELETE, BACKUP, RESTORE)

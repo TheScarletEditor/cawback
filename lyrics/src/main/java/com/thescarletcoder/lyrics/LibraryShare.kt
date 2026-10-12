@@ -463,7 +463,8 @@ fun OnThisDevice(repo: LyricsRepo, refresh: () -> Any?) {
     Item(
         "Sent to lrclib.net",
         "Only to look up words: the title, artist, album and length of the song playing, and what you type into an " +
-            "\"Other versions\" search. Nothing else, and to no one else.",
+            "\"Other versions\" search. When you share a fix, that song's details and lyrics with your timing, and only " +
+            "after you tap Send. Nothing else, and to no one else.",
     )
     Item(
         "Never kept",

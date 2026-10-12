@@ -105,7 +105,8 @@ fun Welcome(onGrant: () -> Unit) {
         Text(
             "It sees what's playing: the song's title, artist, album, length, position and cover (the cover only tints " +
                 "the screen and is never saved). To find the words, it sends the title, artist, album and length to " +
-                "lrclib.net, plus anything you type into a lyrics search. Nothing else leaves your device.",
+                "lrclib.net, plus anything you type into a lyrics search, and a timing fix only if you choose to share one. " +
+                "Nothing else leaves your device.",
             fontFamily = Inter, fontSize = 17.sp, color = L.soft, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 12.dp).widthIn(max = 480.dp),
         )
@@ -198,6 +199,48 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
                 }
             }
         }
+    }
+}
+
+/**
+ * Share your fix (0.5.0, owner Q23): exactly what goes to lrclib.net, and Send. Sending runs in the background and
+ * can be cancelled; nothing goes until Send is tapped.
+ */
+@Composable
+fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () -> Unit, onClose: () -> Unit) {
+    val runner = SettingsWork.runner
+    @Suppress("UNUSED_VARIABLE") val v = SettingsWork.version.intValue   // redraw when sending starts or ends
+    val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
+    val body = remember(s, t) { ShareFix.body(t, s.candidate, timed) }
+    val sending = runner.busy(SettingsWork.SHARE)
+    val done = runner.result(SettingsWork.SHARE)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Text("Share your fix", fontFamily = Fraunces, fontSize = 28.sp, color = L.text)
+        Text("This sends what's below to lrclib.net. It becomes the version everyone gets for this song.",
+            fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
+        val dur = body.optDouble("duration", 0.0).toInt()
+        listOf("Title" to body.optString("trackName"), "Artist" to body.optString("artistName"), "Album" to body.optString("albumName"),
+            "Length" to "%d:%02d".format(dur / 60, dur % 60)).forEach { (k, value) ->
+            Text("$k: $value", fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(vertical = 2.dp))
+        }
+        Box(Modifier.padding(vertical = 14.dp)) {
+            when {
+                sending -> Column {
+                    Text("Sending your fix to LRCLIB. This can take a minute or two.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
+                    Box(Modifier.padding(top = 10.dp)) { Washed("Cancel", onCancelSend) }
+                }
+                done != null && done.ok -> Text(done.text, fontFamily = Inter, fontSize = 16.sp, color = L.text)
+                else -> Column {
+                    if (done != null) Text(done.text, fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(bottom = 10.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Washed("Send", onSend)
+                        Washed("Cancel", onClose)
+                    }
+                }
+            }
+        }
+        Text(body.optString("syncedLyrics"), fontFamily = Inter, fontSize = 14.sp, lineHeight = 20.sp, color = L.soft)
+        Spacer(Modifier.height(24.dp))
     }
 }
 
