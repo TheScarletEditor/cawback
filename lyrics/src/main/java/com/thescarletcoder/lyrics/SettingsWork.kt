@@ -88,6 +88,9 @@ internal object SettingsWork {
     const val RESTORE = "restore"
     const val SHARE = "share"
 
+    /** The song (track key) the share job and its result belong to, so another song's page never shows them. */
+    @Volatile var sharing: String? = null
+
     /** Work on the Library itself: one at a time, so a delete and a restore never race (owner: "One at a time"). */
     val LIBRARY = listOf(DELETE, BACKUP, RESTORE)
     fun libraryBusy() = runner.anyBusy(LIBRARY)

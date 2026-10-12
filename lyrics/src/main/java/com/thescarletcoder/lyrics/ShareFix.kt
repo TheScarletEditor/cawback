@@ -54,8 +54,9 @@ object ProofOfWork {
 object ShareFix {
     /** "[01:02.35] words": the lines with their (user-timed) times; blank lines keep their time (instrumental gaps). */
     fun lrc(timed: List<LyricLine>): String = timed.filter { it.timeMs != null }.joinToString("\n") { l ->
-        val ms = l.timeMs!!.coerceAtLeast(0)
-        String.format(Locale.ROOT, "[%02d:%05.2f] %s", ms / 60_000, (ms % 60_000) / 1000.0, l.text).trimEnd()
+        // Whole hundredths first, so 59.995 s is [01:00.00], never [00:60.00].
+        val cs = (l.timeMs!!.coerceAtLeast(0) + 5) / 10
+        String.format(Locale.ROOT, "[%02d:%02d.%02d] %s", cs / 6000, (cs % 6000) / 100, cs % 100, l.text).trimEnd()
     }
 
     fun body(t: Track, c: Candidate, timed: List<LyricLine>): JSONObject = JSONObject()

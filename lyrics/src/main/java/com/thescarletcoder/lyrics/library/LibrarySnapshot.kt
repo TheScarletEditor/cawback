@@ -12,6 +12,8 @@ import java.util.UUID
  */
 data class TimingFix(
     val key: String, val versionId: Long, val pinned: Boolean, val offsetMs: Long, val anchors: List<Anchor>, val song: String? = null,
+    /** Lined up by ear (Line up now or Fix lines), so it can still be shared after a restore. */
+    val tapped: Boolean = false,
 )
 
 /**
@@ -49,7 +51,7 @@ data class LibrarySnapshot(
         .put("fixes", JSONArray(fixes.map { f ->
             JSONObject().put("key", f.key).put("id", f.versionId).put("pinned", f.pinned).put("offset", f.offsetMs)
                 .put("anchors", JSONArray(f.anchors.map { JSONArray().put(it.lineMs).put(it.deltaMs) }))
-                .apply { f.song?.let { put("song", it) } }
+                .apply { f.song?.let { put("song", it) }; if (f.tapped) put("tapped", true) }
         }))
 
     companion object {
@@ -94,7 +96,7 @@ data class LibrarySnapshot(
                                     ?.let { Anchor(it.getLong(0), it.getLong(1).coerceIn(-2 * LIMIT, 2 * LIMIT)) }?.takeIf { it.lineMs in 0..86_400_000L }
                             }.distinctBy { it.lineMs }.sortedBy { it.lineMs }
                             TimingFix(key, f.getLong("id"), f.optBoolean("pinned"), f.optLong("offset").coerceIn(-LIMIT, LIMIT), anchors,
-                                f.optString("song").ifBlank { null }?.take(MAX_SONG_KEY))
+                                f.optString("song").ifBlank { null }?.take(MAX_SONG_KEY), f.optBoolean("tapped"))
                         }.getOrNull()
                     }.distinctBy { it.key }
                 }.orEmpty(),

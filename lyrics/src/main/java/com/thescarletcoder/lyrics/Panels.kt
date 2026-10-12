@@ -212,8 +212,10 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
     @Suppress("UNUSED_VARIABLE") val v = SettingsWork.version.intValue   // redraw when sending starts or ends
     val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
     val body = remember(s, t) { ShareFix.body(t, s.candidate, timed) }
-    val sending = runner.busy(SettingsWork.SHARE)
-    val done = runner.result(SettingsWork.SHARE)
+    val mine = SettingsWork.sharing == t.key
+    val sending = runner.busy(SettingsWork.SHARE) && mine
+    val other = runner.busy(SettingsWork.SHARE) && !mine
+    val done = runner.result(SettingsWork.SHARE)?.takeIf { mine }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Text("Share your fix", fontFamily = Fraunces, fontSize = 28.sp, color = L.text)
         Text("This sends what's below to lrclib.net. It becomes the version everyone gets for this song.",
@@ -225,6 +227,7 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
         }
         Box(Modifier.padding(vertical = 14.dp)) {
             when {
+                other -> Text("Still sending your fix for another song. Try again when it's done.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
                 sending -> Column {
                     Text("Sending your fix to LRCLIB. This can take a minute or two.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
                     Box(Modifier.padding(top = 10.dp)) { Washed("Cancel", onCancelSend) }

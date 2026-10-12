@@ -14,7 +14,7 @@ import java.io.ByteArrayOutputStream
 /** The user's timing in the Library backup (0.5.0, owner Q25 and the slice 6 answers). Synthetic data only. */
 class TimingFixTest {
     private val key = "a".repeat(64)
-    private val fix = TimingFix(key, versionId = 42, pinned = true, offsetMs = 250, anchors = listOf(Anchor(30_000, -400)), song = "song|artist")
+    private val fix = TimingFix(key, versionId = 42, pinned = true, offsetMs = 250, anchors = listOf(Anchor(30_000, -400)), song = "song|artist", tapped = true)
     private val c42 = Candidate(42, "Song", "Artist", "Album", 200.0, false, "words", "[00:10.00] line 0")
 
     @Test fun aBackupCarriesTheFixesAndNoLyrics() {
@@ -59,7 +59,7 @@ class TimingFixTest {
     @Test fun onlyRealFixesAreBackedUp() {
         val plain = LyricsStore.Entry(c42, pinned = false, offsetMs = 0, fetchedAt = 1)
         assertNull(LyricsStore.fixOf(key, plain, null))   // an automatic match with no timing isn't a fix
-        assertEquals(fix.copy(song = null), LyricsStore.fixOf(key, plain.copy(pinned = true, offsetMs = 250, anchors = fix.anchors), null))
+        assertEquals(fix.copy(song = null), LyricsStore.fixOf(key, plain.copy(pinned = true, offsetMs = 250, anchors = fix.anchors, tapped = true), null))
     }
 
     @Test fun theDevicesOwnTimingWins() {

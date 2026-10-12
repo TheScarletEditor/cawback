@@ -54,6 +54,8 @@ class ShareFixTest {
 
     @Test fun anInstrumentalGapKeepsItsTime() {
         assertEquals("[01:02.35] words\n[01:30.00]", ShareFix.lrc(listOf(LyricLine(62_350, "words"), LyricLine(90_000, ""), LyricLine(null, "untimed"))))
+        // Rounding never makes a 60th second.
+        assertEquals("[01:00.00] x\n[00:59.99] y", ShareFix.lrc(listOf(LyricLine(59_995, "x"), LyricLine(59_994, "y"))))
     }
 
     @Test fun tappedAndSentAreSaved() {

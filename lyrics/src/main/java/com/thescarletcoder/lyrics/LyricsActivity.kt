@@ -483,16 +483,22 @@ private fun LyricsScreen(
                                 val s = shown as Shown.Found
                                 SharePanel(t, s, onSend = {
                                     val body = ShareFix.body(t, s.candidate, YourTiming.apply(s.lines, s.offsetMs, s.anchors))
+                                    SettingsWork.sharing = t.key   // the result belongs to this song
                                     SettingsWork.runner.run(SettingsWork.SHARE) {
-                                        withContext(Dispatchers.Default) {
+                                        val token = withContext(Dispatchers.Default) {
                                             val (prefix, target) = withContext(Dispatchers.IO) { LrcLib.requestChallenge() }
                                             val nonce = ProofOfWork.solve(prefix, target) { !isActive } ?: throw kotlinx.coroutines.CancellationException()
-                                            withContext(Dispatchers.IO) { LrcLib.publish("$prefix:$nonce", body) }
+                                            "$prefix:$nonce"
                                         }
-                                        val at = System.currentTimeMillis()
-                                        repo.markSent(t, s.candidate.id, at)
-                                        val cur = shown
-                                        if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(sentAt = at)
+                                        // Once the publish starts it finishes and is recorded, even if Cancel comes now:
+                                        // a send that went out must never look like it didn't.
+                                        withContext(kotlinx.coroutines.NonCancellable) {
+                                            withContext(Dispatchers.IO) { LrcLib.publish(token, body) }
+                                            val at = System.currentTimeMillis()
+                                            repo.markSent(t, s.candidate.id, at)
+                                            val cur = shown
+                                            if (cur is Shown.Found && cur.candidate.id == s.candidate.id && track?.key == t.key) shown = cur.copy(sentAt = at)
+                                        }
                                         WorkRunner.Result(true, "Sent. Thank you: LRCLIB has your timing for this song.")
                                     }
                                 }, onCancelSend = { SettingsWork.runner.cancel(SettingsWork.SHARE) }, onClose = { panel = Panel.NONE })
@@ -515,12 +521,12 @@ private fun LyricsScreen(
                                         if (fixMode == FixMode.LINE_UP) {
                                             val base = repo.lineUp(t, lineMs, offsetMs)
                                             val cur = shown
-                                            if (base != null && cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(offsetMs = base)
+                                            if (base != null && cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(offsetMs = base, tapped = true, sentAt = 0)
                                             fixMode = FixMode.NONE
                                         } else {
                                             val anchors = repo.setAnchor(t, lineMs, offsetMs)
                                             val cur = shown
-                                            if (cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(anchors = anchors)
+                                            if (cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(anchors = anchors, tapped = true, sentAt = 0)
                                         }
                                     } },
                                 onDone = { fixMode = FixMode.NONE })
@@ -539,7 +545,7 @@ private fun LyricsScreen(
                 if (t != null && s is Shown.Found) scope.launch {
                     val next = repo.nudge(t, d)
                     val cur = shown
-                    if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = next)
+                    if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = next, sentAt = 0)
                 } },
             onFix = { fixMode = it },
             onShare = { SettingsWork.runner.clear(SettingsWork.SHARE); panel = Panel.SHARE },
@@ -547,7 +553,7 @@ private fun LyricsScreen(
                 if (t != null && s is Shown.Found) scope.launch {
                     repo.clearTiming(t)
                     val cur = shown
-                    if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = 0, anchors = emptyList())
+                    if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0)
                 } },
         )
         MoreSheet(

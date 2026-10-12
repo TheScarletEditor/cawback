@@ -72,7 +72,7 @@ class LyricsStore(context: Context) {
             synchronized(LOCK) {
                 if (!f.exists()) return@forEach   // forgotten or cleared meanwhile: nothing to reset, not a failure
                 val o = try { read(f) } catch (_: Exception) { ok = false; null } ?: return@forEach
-                if (o.optLong("offset") == 0L && o.optJSONArray("anchors").let { it == null || it.length() == 0 }) return@forEach
+                if (o.optLong("offset") == 0L && o.optJSONArray("anchors").let { it == null || it.length() == 0 } && !o.optBoolean("t")) return@forEach
                 o.put("offset", 0L).remove("anchors"); o.remove("t"); o.remove("sent")
                 if (!runCatching { write(f, o) }.getOrDefault(false)) ok = false   // a failed replace is a failure too
             }
@@ -195,7 +195,7 @@ class LyricsStore(context: Context) {
         fun fixOf(key: String, e: Entry, song: String?): com.thescarletcoder.lyrics.library.TimingFix? {
             val id = e.candidate?.id ?: e.pendingId ?: return null
             if (!e.pinned && e.offsetMs == 0L && e.anchors.isEmpty()) return null
-            return com.thescarletcoder.lyrics.library.TimingFix(key, id, e.pinned, e.offsetMs, e.anchors, song)
+            return com.thescarletcoder.lyrics.library.TimingFix(key, id, e.pinned, e.offsetMs, e.anchors, song, e.tapped)
         }
 
         /**
@@ -206,8 +206,9 @@ class LyricsStore(context: Context) {
             if (existing != null && (existing.pinned || existing.offsetMs != 0L || existing.anchors.isNotEmpty() || existing.pendingId != null)) return null
             // Marked current, so the next play doesn't match again and drop the timing.
             if (existing?.candidate?.id == fix.versionId) return existing!!.copy(
-                pinned = fix.pinned || existing.pinned, offsetMs = fix.offsetMs, anchors = fix.anchors, matchVersion = LyricsRepo.MATCHING)
-            return Entry(null, fix.pinned, fix.offsetMs, 0, anchors = fix.anchors, pendingId = fix.versionId)
+                pinned = fix.pinned || existing.pinned, offsetMs = fix.offsetMs, anchors = fix.anchors, matchVersion = LyricsRepo.MATCHING,
+                tapped = fix.tapped)
+            return Entry(null, fix.pinned, fix.offsetMs, 0, anchors = fix.anchors, pendingId = fix.versionId, tapped = fix.tapped)
         }
 
         /** An entry as read; entries from before 0.5.0 have no matching version and no anchors. */

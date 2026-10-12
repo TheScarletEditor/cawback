@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.5.0 plan: your timing
 
-Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slices 1 to 6 built (3 to 6 wait for the owner's device check), slice 7 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
+Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; all seven slices built; device checks by the owner, one real share with the owner's OK, then /finalize 0.5.0.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
 
 ## Why
 
@@ -135,6 +135,19 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    | L1 | Known limit, kept: a fix finds its song on another device only when the music app reports the same title, artist, album and length; with another app or album name it waits in a file that's never read (and still counts in "timing came back") | None now; a looser match would be its own decision |
 
 7. **Share your fix** (Q23). Preview of exactly what's sent, Send, the publish flow. Tests on the payload builder; one real publish only with the owner's OK for that exact song.
+
+   **Built 2026-10-11** (`873296e` and the mini-audit fixes). Checked against LRCLIB's own server code (MIT, github tranxuanthang/lrclib): a challenge, a proof of work (SHA-256 of prefix + nonce at most the target, byte by byte), then `POST /api/publish` with `X-Publish-Token: prefix:nonce`; no account; a publish becomes the track's latest lyrics for everyone. Owner: "Yes, publish it (Recommended)"; "In the background (Recommended)"; "Only after Fix lines or Line up now (Recommended)"; all wording approved (the share page, sending, done, "Sent on", the other-song line, and the three privacy texts). `/finalize --slice`: one review agent (correctness and security: host lock, proof of work, nothing sent before Send, preview equals what's sent, privacy text accurate), 8 findings fixed (M33 to M40). 112/112 unit tests, lint 0 errors. No real publish yet: one, for a song the owner names, with the owner's OK.
+
+   | Id | Finding | Fix |
+   | --- | --- | --- |
+   | M33 | After Line up now or Fix lines the Share row didn't appear until the song reloaded | The screen's copy updates at once |
+   | M34 | Clear my timing left the Share row (sending the record's own timing as "your fix"); a nudge left "Sent on" | Both reset on screen too |
+   | M35 | 59.995 s was written as [00:60.00] in what's published | Whole hundredths first |
+   | M36 | Cancel during the publish itself could hide a send that went out | Once the publish starts it finishes and is recorded |
+   | M37 | Another song's Share page showed (and could cancel) a send in progress | The send belongs to its song; others say "Still sending your fix for another song. Try again when it's done." |
+   | M38 | A restored fix lost its "lined up by ear" mark | Carried in the backup |
+   | M39 | Reset all timing nudges kept a stale mark after a Line up at exactly 0 | Reset too |
+   | M40 | "Only to look up words:" no longer fit the text | "To look up words:" (owner) |
 
 Then `/finalize 0.5.0`. Device tests include both songs from 2026-10-11 (held privately).
 
