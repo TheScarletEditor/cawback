@@ -12,8 +12,8 @@ Mode: full. Public: yes.
 | 0 | Preflight | done | Tree clean, one commit ahead of origin (the device-check note). Version: 0.5.0 as the owner chose in Q27 of the plan; versionCode 4 to 5. gh signed in; both devices connected; emulators scarlet_phone, scarlet_small, scarlet_tablet. |
 | 1 | Audit | done | Release manifest: same permissions as 0.4.1 (INTERNET and the dynamic-receiver permission); manifest source and dependencies unchanged since v0.4.1. 4 agents (decisions, hard rules, manifest and dependencies, data safety). 6 mechanical fixes (A1 to A6), 8 questions (Q1 to Q8) all answered and applied, plus the new wording approved word for word. Build, 114/114 unit tests, lint 0 errors, no em dashes, no real artist names left in the repo. |
 | 2 | Code review | done | 3 agents (data and matching; screens and the Android pass; security). 12 mechanical fixes (R1 to R12), 1 question (Q10, answered); three re-reviews: 5 more (R14 to R18), then clean. R13 dropped (owner's earlier choice). Android pass clean apart from R8: R8 rules, light and dark, touch targets, rotation and recreate. Build, 115/115 unit tests, lint 0 errors. |
-| 3 | Cleanup | running | |
-| 4 | QA | pending | |
+| 3 | Cleanup | done | simplify (4 agents: reuse, simplification, efficiency, altitude) and own checks: no TODOs, no commented-out code, TUNING off in release, no em dashes, licenses unchanged (no new dependencies), nothing unused. 8 applied (C1 to C8), larger changes skipped (C9 to C11), release notes drafted (C12, Q11). Build, release build, 115/115 unit tests, lint 0 errors. |
+| 4 | QA | running | |
 | 5 | Smoke test | pending | |
 | 6 | Ship | pending | |
 | 7 | Wrap-up | pending | |
@@ -52,6 +52,18 @@ Mode: full. Public: yes.
 | R18 | Review | mechanical | LyricsRepo.kt load | (second re-review) The re-read after a change could repeat without end if a save kept failing | Read again once; then shown without saving | stage 2 |
 | R16 | Review | mechanical | LyricsStore.kt restoreFix | (re-review) A file that can't be decoded counted as failed, so "Restore again" could never help | Kept, not failed | stage 2 |
 | R17 | Review | mechanical | LyricsActivity.kt picker | (re-review) A pick that couldn't be saved closed the list silently | The list stays open to try again | stage 2 |
+| C1 | Cleanup | mechanical | LyricsStore.kt, LibraryShare.kt | Fully qualified TimingFix and LibrarySnapshot names | Imports | stage 3 |
+| C2 | Cleanup | mechanical | LyricsStore.kt forgetSong, fixes | The song-key fallback written twice | One `songOf` | stage 3 |
+| C3 | Cleanup | mechanical | LyricsActivity.kt | The same-version screen update written four times | One `updateIf` | stage 3 |
+| C4 | Cleanup | mechanical | LyricsRepo.kt, Panels.kt | Song length in seconds worked out by hand in three places | `Track.seconds()` | stage 3 |
+| C5 | Cleanup | mechanical | LrcLib.kt choose, fitOf | Each record's lyrics parsed again for every comparison | Parsed once per lookup; one fit rule | stage 3 |
+| C6 | Cleanup | mechanical | LyricsStore.kt, SettingsWork.kt, LyricsRepo.kt | Stacked or stale comments (a title-only fallback that's gone) | Merged and updated | stage 3 |
+| C7 | Cleanup | mechanical | Panels.kt SharePanel | `busy` read twice | Once | stage 3 |
+| C8 | Cleanup | mechanical | LyricsActivity.kt share | The app-level send job held the whole song's lyrics | Keeps only the version id and timing it checks | stage 3 |
+| C9 | Cleanup | skipped | LyricsActivity.kt, LyricsRepo.kt, SettingsWork.kt | Altitude: the share steps in the screen, `sharing` beside the runner, overlay booleans, edits returning the new entry | Larger restructuring this late; proposed for a later release | |
+| C10 | Cleanup | skipped | LyricsStore.kt, LibrarySnapshot.kt, Look.kt | Shared anchor JSON and HASH helpers, a BodyText composable, `clock`/plural reuse | Small gains across older code; proposed for later | |
+| C11 | Cleanup | skipped | LyricsRepo.kt lookup, YourTiming.kt, Chrome.kt FixBar | Efficiency: parallel lookups, per-line anchor sort, FixBar recomposing 10 times a second | Would change timing of work; measured cost small; proposed for later | |
+| C12 | Cleanup | question | docs/release-0.5.0/RELEASE-NOTES.md | Release notes draft | Q11: approved | stage 3 |
 | R13 | Review | dropped | Panels.kt SharePanel | Suggested: cancel the send when its panel closes | The owner chose "In the background" (slice 7); R10's limit bounds it | |
 | A14 | Audit | question | git history (public) | Commits already pushed hold the real credits from A2 | Q8: history left as is | |
 
@@ -70,6 +82,7 @@ All asked and answered 2026-10-12.
 | Q7 | A13: README What it does | "Yes, as written (Recommended)" | Four bullets: This song and timing, matching and the dot, Other versions, Share your fix |
 | Q8 | A14: real credits in pushed history | "Leave history (Recommended)" | Fixed going forward only |
 | Q10 | R6: a busy key store during a backup or restore | "Fail and say so (Recommended)" | Backup fails with its usual "The backup didn't finish. Nothing was changed."; restore adds "Some of your timing couldn't be restored. Restore again to bring it back." |
+| Q11 | C12: the 0.5.0 release notes draft | "Yes, as written (Recommended)" | Used for the GitHub release |
 | Q9 | The new text from Q2, Q4 and the README, word for word | "Yes, as written (Recommended)" | As shown |
 
 ## Ship

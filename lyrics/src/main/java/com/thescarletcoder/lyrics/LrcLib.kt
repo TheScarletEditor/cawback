@@ -151,7 +151,7 @@ object Matching {
         return cands.associate { c ->
             val mine = t.getValue(c.id)
             c.id to Fit(
-                fits = mine.isEmpty() || durationSec == null || durationSec <= 0 || mine.last() <= durationSec + FIT_MARGIN_SEC,
+                fits = fits(mine, durationSec),
                 agreeing = if (mine.isEmpty()) 0 else cands.count { o -> o.id != c.id && agree(mine, t.getValue(o.id)) },
                 otherArtist = artistKnown && knownArtist(c.artist) && !sameArtist(songArtist, c.artist),
             )
@@ -187,10 +187,10 @@ object Matching {
     fun times(c: Candidate): List<Double> = c.synced?.let { s -> Lrc.parseSynced(s).mapNotNull { it.timeMs?.div(1000.0) } }.orEmpty()
 
     /** False when the record's lyrics run past the end of the song: its timing belongs to a longer cut. */
-    fun fits(c: Candidate, durationSec: Double?): Boolean {
-        val t = times(c)
-        return durationSec == null || durationSec <= 0 || t.isEmpty() || t.last() <= durationSec + FIT_MARGIN_SEC
-    }
+    fun fits(c: Candidate, durationSec: Double?): Boolean = fits(times(c), durationSec)
+
+    private fun fits(t: List<Double>, durationSec: Double?) =
+        durationSec == null || durationSec <= 0 || t.isEmpty() || t.last() <= durationSec + FIT_MARGIN_SEC
 
     fun agree(a: List<Double>, b: List<Double>): Boolean =
         a.isNotEmpty() && a.size == b.size && a.indices.count { abs(a[it] - b[it]) <= AGREE_WITHIN_SEC } >= AGREE_SHARE * a.size
@@ -209,8 +209,10 @@ object Matching {
             .filter { it.synced != null || it.plain != null || it.instrumental }
             .filter { !known || gap(it) <= 10 }
         if (near.isEmpty()) return null
+        val parsed = near.associate { it.id to times(it) }   // each record's lines parsed once
+        fun times(c: Candidate) = parsed.getValue(c.id)
         val synced = near.filter { times(it).isNotEmpty() }
-        val fitting = synced.filter { fits(it, durationSec) }
+        val fitting = synced.filter { fits(times(it), durationSec) }
         if (fitting.isNotEmpty()) {
             val groups = mutableListOf<MutableList<Candidate>>()
             fitting.forEach { c ->

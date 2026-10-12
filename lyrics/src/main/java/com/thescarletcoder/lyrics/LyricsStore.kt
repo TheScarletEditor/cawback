@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.thescarletcoder.lyrics.library.SongKey
+import com.thescarletcoder.lyrics.library.TimingFix
 import org.json.JSONException
 import org.json.JSONArray
 import org.json.JSONObject
@@ -125,30 +126,33 @@ class LyricsStore(context: Context) {
         files().forEach { f ->
             synchronized(LOCK) {
                 val o = runCatching { read(f) }.getOrNull() ?: return@forEach
-                val s = o.optString("s").ifBlank { null }
-                    ?: o.optJSONObject("c")?.let { SongKey.of(it.optString("track"), it.optString("artist")) }
-                if (s == songKey) f.delete()
+                if (songOf(o) == songKey) f.delete()
             }
         }
     }
 
-    /** The user's timing and picks, for the Library backup (0.5.0, owner Q25): never lyric text. */
-    /** Throws [Busy] when a file can't be read just now: a backup that would quietly leave timing out fails instead (R6). */
-    fun fixes(): List<com.thescarletcoder.lyrics.library.TimingFix> = files().mapNotNull { f ->
+    /** The song a saved file belongs to: "s", or for files saved before "s" existed, the saved version's title and artist. */
+    private fun songOf(o: JSONObject): String? =
+        o.optString("s").ifBlank { null } ?: o.optJSONObject("c")?.let { SongKey.of(it.optString("track"), it.optString("artist")) }
+
+    /**
+     * The user's timing and picks, for the Library backup (0.5.0, owner Q25): never lyric text. Each carries its song,
+     * so Forget reaches a restored fix before it plays. Throws [Busy] when a file can't be read just now: a backup that
+     * would quietly leave timing out fails instead (R6).
+     */
+    fun fixes(): List<TimingFix> = files().mapNotNull { f ->
         val o = (synchronized(LOCK) { readOrBusy(f) } as? Read.Ok)?.o ?: return@mapNotNull null
-        // The song key, also for files saved before "s" existed, so Forget reaches a restored fix before it plays.
-        val song = o.optString("s").ifBlank { null } ?: o.optJSONObject("c")?.let { SongKey.of(it.optString("track"), it.optString("artist")) }
-        fixOf(f.name.removeSuffix(".json"), runCatching { decode(o) }.getOrNull() ?: return@mapNotNull null, song)
+        fixOf(f.name.removeSuffix(".json"), runCatching { decode(o) }.getOrNull() ?: return@mapNotNull null, songOf(o))
     }
+
+    data class FixesRestored(val now: Int, val later: Int, val failed: Int)
 
     /**
      * Restored fixes (owner: the device's own timing or pick wins). A fix for a version this device already has is
-     * applied at once; otherwise the song fetches it by id on its next play. Returns how many were applied now and how
+     * applied at once; otherwise the song fetches it by id on its next play. Counts how many were applied now and how
      * many wait for their song to play (finalize 0.5.0 Q4: counted apart), and how many couldn't be written (R6).
      */
-    data class FixesRestored(val now: Int, val later: Int, val failed: Int)
-
-    fun restoreFixes(fixes: List<com.thescarletcoder.lyrics.library.TimingFix>): FixesRestored {
+    fun restoreFixes(fixes: List<TimingFix>): FixesRestored {
         var now = 0
         var later = 0
         var failed = 0
@@ -157,7 +161,7 @@ class LyricsStore(context: Context) {
     }
 
     /** [NOW]: applied; [LATER]: waits for its song to play; [KEPT]: this device's own wins; [FAILED]: not written. */
-    private fun restoreFix(fix: com.thescarletcoder.lyrics.library.TimingFix): Int {
+    private fun restoreFix(fix: TimingFix): Int {
         if (!HASH.matches(fix.key)) return KEPT
         val f = File(dir, "${fix.key}.json")
         synchronized(LOCK) {
@@ -248,17 +252,17 @@ class LyricsStore(context: Context) {
         }
 
         /** A fix worth keeping: a version with a pick, a nudge or tapped lines. */
-        fun fixOf(key: String, e: Entry, song: String?): com.thescarletcoder.lyrics.library.TimingFix? {
+        fun fixOf(key: String, e: Entry, song: String?): TimingFix? {
             val id = e.candidate?.id ?: e.pendingId ?: return null
             if (!e.pinned && e.offsetMs == 0L && e.anchors.isEmpty()) return null
-            return com.thescarletcoder.lyrics.library.TimingFix(key, id, e.pinned, e.offsetMs, e.anchors, song, e.tapped)
+            return TimingFix(key, id, e.pinned, e.offsetMs, e.anchors, song, e.tapped)
         }
 
         /**
          * What a restored [fix] makes of this device's entry (owner: the device's wins): null to leave it. Same version
          * and no timing here: the timing is added. Otherwise, with nothing of the user's here: the version to fetch.
          */
-        fun merged(existing: Entry?, fix: com.thescarletcoder.lyrics.library.TimingFix): Entry? {
+        fun merged(existing: Entry?, fix: TimingFix): Entry? {
             if (existing != null && (existing.pinned || existing.offsetMs != 0L || existing.anchors.isNotEmpty() || existing.pendingId != null)) return null
             // Marked current, so the next play doesn't match again and drop the timing.
             if (existing?.candidate?.id == fix.versionId) return existing!!.copy(

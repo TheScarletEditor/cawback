@@ -43,10 +43,10 @@ internal class WorkRunner(
             var result: Result? = null
             var failed = false
             try { result = block() } catch (e: CancellationException) { throw e } catch (_: Exception) { failed = true } finally {
-                // Cancelled by the user: no message, as if it never started.
                 synchronized(this@WorkRunner) {
                     busy -= key; jobs -= key
-                    // A settled result wins over a later failure or Cancel; otherwise Cancel leaves no message.
+                    // A settled result wins over a later failure or Cancel; otherwise a Cancel by the user leaves no
+                    // message, as if it never started.
                     (result ?: settled[key] ?: if (failed) Result(false, FAILED) else null)?.let { results[key] = it }
                     settled -= key
                 }

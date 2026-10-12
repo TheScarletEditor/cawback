@@ -152,7 +152,7 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
                 // Nothing for title + artist? Try the title alone: some songs are filed under a label or composer.
                 if (r.isEmpty()) r = repo.searchTitle(Matching.cleanTitle(t.title))
                 // Best fit first (owner, 0.5.0), worked out off the main thread.
-                val fits = withContext(Dispatchers.Default) { Matching.bestFirst(r, t.durationMs?.let { it / 1000.0 }, t.artist) }
+                val fits = withContext(Dispatchers.Default) { Matching.bestFirst(r, t.seconds(), t.artist) }
                 fit = fits.fit
                 results = fits.ordered
                 status = if (r.isEmpty()) "Nothing found. Try fewer words." else null
@@ -213,8 +213,9 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
     val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
     val body = remember(s, t) { ShareFix.body(t, s.candidate, timed) }
     val mine = SettingsWork.sharing == t.key
-    val sending = runner.busy(SettingsWork.SHARE) && mine
-    val other = runner.busy(SettingsWork.SHARE) && !mine
+    val busy = runner.busy(SettingsWork.SHARE)
+    val sending = busy && mine
+    val other = busy && !mine
     val done = runner.result(SettingsWork.SHARE)?.takeIf { mine }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
         Text("Share your fix", fontFamily = Fraunces, fontSize = 28.sp, color = L.text)

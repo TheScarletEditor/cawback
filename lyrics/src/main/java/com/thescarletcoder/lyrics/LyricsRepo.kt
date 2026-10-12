@@ -55,8 +55,6 @@ class LyricsRepo(private val store: LyricsStore) {
         fun pickUnsure(pinned: Boolean, unsure: Boolean, c: Candidate, durationSec: Double?) =
             if (pinned) !Matching.fits(c, durationSec) else unsure
 
-        private fun Track.seconds() = durationMs?.let { it / 1000.0 }
-
         /** Waits before the second and third tries. */
         val RETRY_DELAYS_MS = listOf(1_500L, 4_000L)
 
@@ -101,7 +99,7 @@ class LyricsRepo(private val store: LyricsStore) {
         }
         if (cached != null) {
             if (cached.candidate != null && isCurrent(cached)) return@withContext found(cached.candidate, cached.pinned, cached.offsetMs, cached.unsure, cached.anchors, cached, t.seconds())
-            // A remembered miss counts only if it was found with today's matching rules (title-only fallback added).
+            // A remembered miss counts only if it was found with today's matching rules.
             if (cached.candidate == null && System.currentTimeMillis() - cached.fetchedAt < retryMissAfterMs && cached.fetchedAt > MATCHING_CHANGED_AT) return@withContext Shown.NotFound
         }
         val old = cached?.candidate
@@ -139,7 +137,7 @@ class LyricsRepo(private val store: LyricsStore) {
      * with the same title is not shown automatically (owner Q26); "Other versions" still lists those.
      */
     private fun lookup(t: Track): Lookup {
-        val dur = t.durationMs?.let { it / 1000.0 }
+        val dur = t.seconds()
         val clean = Matching.cleanTitle(t.title)
         val artist = t.artist.split(",", " & ", " feat", " ft.").first().trim()
         val hit = exact { LrcLib.get(t.title, t.artist, t.album, dur) } ?: exact { LrcLib.get(clean, artist, null, dur) }
@@ -242,3 +240,6 @@ class LyricsRepo(private val store: LyricsStore) {
             tapped = entry?.tapped ?: false, sentAt = entry?.sentAt ?: 0)
     }
 }
+
+/** The song's length in seconds, as LRCLIB counts it. */
+internal fun Track.seconds() = durationMs?.let { it / 1000.0 }

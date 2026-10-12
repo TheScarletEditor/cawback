@@ -280,6 +280,11 @@ private fun LyricsScreen(
 
     // null = nothing yet for this song (the old lyrics have faded out; "Finding lyrics..." only if it takes a while).
     var shown by remember { mutableStateOf<Shown?>(null) }
+    // Applied to what shows now, and only if it's still the same version: a song that changed meanwhile keeps its own.
+    fun updateIf(versionId: Long, f: (Shown.Found) -> Shown) {
+        val cur = shown
+        if (cur is Shown.Found && cur.candidate.id == versionId) shown = f(cur)
+    }
     var finding by remember { mutableStateOf(false) }
     var slow by remember { mutableStateOf(false) }
     // Saveable: a font size or keyboard change recreates the activity, and the open page should survive it.
@@ -485,6 +490,9 @@ private fun LyricsScreen(
                                     val body = ShareFix.body(t, s.candidate, YourTiming.apply(s.lines, s.offsetMs, s.anchors))
                                     if (SettingsWork.runner.busy(SettingsWork.SHARE)) return@SharePanel
                                     SettingsWork.sharing = t.key   // the result belongs to this song
+                                    val versionId = s.candidate.id
+                                    val sentOffset = s.offsetMs
+                                    val sentAnchors = s.anchors
                                     SettingsWork.runner.run(SettingsWork.SHARE) {
                                         val sent = WorkRunner.Result(true, "Sent. Thank you: LRCLIB has your timing for this song.")
                                         val token = withContext(Dispatchers.Default) {
@@ -501,7 +509,7 @@ private fun LyricsScreen(
                                             SettingsWork.runner.settle(SettingsWork.SHARE, sent)
                                             val at = System.currentTimeMillis()
                                             // "Sent on" only for the timing that was sent; the screen (even a recreated one) reads it again.
-                                            if (repo.markSent(t, s.candidate.id, s.offsetMs, s.anchors, at)) SettingsWork.lyricsChanged()
+                                            if (repo.markSent(t, versionId, sentOffset, sentAnchors, at)) SettingsWork.lyricsChanged()
                                         }
                                         sent
                                     }
@@ -525,12 +533,10 @@ private fun LyricsScreen(
                                         if (fixMode == FixMode.LINE_UP) {
                                             fixMode = FixMode.NONE   // closes the bar at once: one Now per Line up
                                             val base = repo.lineUp(t, lineMs, offsetMs)
-                                            val cur = shown
-                                            if (base != null && cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(offsetMs = base, tapped = true, sentAt = 0)
+                                            if (base != null) updateIf(fixing.candidate.id) { it.copy(offsetMs = base, tapped = true, sentAt = 0) }
                                         } else {
                                             val anchors = repo.setAnchor(t, lineMs, offsetMs)
-                                            val cur = shown
-                                            if (anchors != null && cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(anchors = anchors, tapped = true, sentAt = 0)
+                                            if (anchors != null) updateIf(fixing.candidate.id) { it.copy(anchors = anchors, tapped = true, sentAt = 0) }
                                         }
                                     } },
                                 onDone = { fixMode = FixMode.NONE })
@@ -548,16 +554,13 @@ private fun LyricsScreen(
             onNudge = { d -> val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch {
                     val next = repo.nudge(t, d)
-                    val cur = shown
-                    if (next != null && cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = next, sentAt = 0)
+                    if (next != null) updateIf(s.candidate.id) { it.copy(offsetMs = next, sentAt = 0) }
                 } },
             onFix = { fixMode = it },
             onShare = { SettingsWork.runner.clear(SettingsWork.SHARE); panel = Panel.SHARE },
             onClear = { val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch {
-                    val cleared = repo.clearTiming(t)
-                    val cur = shown
-                    if (cleared && cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0)
+                    if (repo.clearTiming(t)) updateIf(s.candidate.id) { it.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0) }
                 } },
         )
         MoreSheet(

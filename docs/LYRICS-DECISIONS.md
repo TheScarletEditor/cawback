@@ -12,6 +12,9 @@ Against `docs/LYRICS-0.6.0-PLAN.md` (draft). Asked in the planning chat: version
 | Q29 | Light theme visuals: pastel versions or dark only | "pastel for light theme" | Every visual has a pastel light version; the lens keeps the light readability limit. | Readability harness, both themes. |
 | Q30 | First wave, and the rest of the list | "yes to the rest" | Wave 1: Still, Drift (default), Spiral, Ink, Random. Tunnel, Aurora, Starfield, Lava later. The extras and guardrails in the plan are confirmed slice by slice. | Per slice. |
 | Q31 | Speed control | "the speed should be tied to the song, no?" | No Speed setting. Speed follows a beat worked out from the lyric timestamps; line spacing is only the fallback. The plan's tempo section is rewritten. | JVM tests on the estimate; real-record check. |
+| Q32 | A per-song "Tap the beat" | "Letting people tap their own tempo is such an elegant solution ... lets do it" | Tap the beat, ÷2, ×2 and Automatic in the This song sheet; the user's beat wins over the estimate; saved per song and in the backup. | JVM tests on the tap model; device test tapping along to a real song. |
+| Q33 | Tapped tempo in the Library export | "Yes add to the export" | An indented Tempo line in the text export, a bpm column in CSV, an export option. | JVM tests on both formats. |
+| Q34 | Estimates in the export, and when a tapped beat is final | "yes confident guesses marked estimated, which leaves once the user marks their tapped beat finalized. We dont want mis-taps to get codified with no recourse" | Confident estimates and drafts export as "about N BPM (estimated)"; Lock it in makes a beat final; uneven taps change nothing; a locked beat can always be changed (back to draft) or undone; only locked beats carry to other recordings. | JVM tests on states, Undo and export labels. |
 
 ## 2026-10-11 (the owner, 0.5.0 "your timing")
 
