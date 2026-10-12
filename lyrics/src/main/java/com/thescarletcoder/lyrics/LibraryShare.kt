@@ -296,7 +296,7 @@ fun LibraryBackupSection() {
                 runCatching {
                     withContext(Dispatchers.IO) {
                         // Encrypt fully first, then write, so a failure never leaves a broken backup file behind.
-                        val snap = LibraryRepo(app).snapshot()
+                        val snap = LibraryRepo(app).snapshot().copy(fixes = LyricsStore(app).fixes())   // timing too (owner Q25)
                         val bytes = ByteArrayOutputStream().also { LibraryBackup.write(it, snap, p) }.toByteArray()
                         try {
                             app.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
@@ -306,7 +306,8 @@ fun LibraryBackupSection() {
                         }
                         snap
                     }
-                }.fold({ WorkRunner.Result(true, "Backed up ${count(it.songs.size, "song")} and ${count(it.plays.size, "play")}. Keep the passphrase somewhere safe: without it this backup can't be opened.") },
+                }.fold({ val timing = if (it.fixes.isEmpty()) "" else ", and your timing for ${count(it.fixes.size, "song")}"
+                    WorkRunner.Result(true, "Backed up ${count(it.songs.size, "song")} and ${count(it.plays.size, "play")}$timing. Keep the passphrase somewhere safe: without it this backup can't be opened.") },
                     { e -> WorkRunner.Result(false, if (e is LibraryKey.Gone) KEY_GONE else "The backup didn't finish. Nothing was changed.") })
             } finally { p.fill(' ') }
         }
@@ -321,7 +322,7 @@ fun LibraryBackupSection() {
     }
 
     Text(
-        "A backup holds your whole Library (never any lyrics), locked with a passphrase you choose. It's the only way to " +
+        "A backup holds your whole Library (never any lyrics), locked with a passphrase you choose, with your timing fixes and picks. It's the only way to " +
             "keep your Library when you change phones or reinstall. Restoring adds the backup to what's here; nothing here is lost.",
         fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(bottom = 10.dp),
     )
@@ -354,10 +355,13 @@ fun LibraryBackupSection() {
                             runCatching {
                                 withContext(Dispatchers.IO) {
                                     val snap = app.contentResolver.openInputStream(uri)!!.use { LibraryBackup.read(it, p) }
-                                    LibraryRepo(app).restore(snap)
+                                    LibraryRepo(app).restore(snap) to LyricsStore(app).restoreFixes(snap.fixes)
                                 }
                             }.fold(
-                                { r -> forget(); mode = null; restoreFrom = null; WorkRunner.Result(true, "Restored. Your Library now has ${count(r.songsAfter, "song")} (was ${r.songsBefore}) and ${count(r.playsAfter, "play")} (was ${r.playsBefore}).") },
+                                { (r, timing) -> forget(); mode = null; restoreFrom = null
+                                    if (timing > 0) SettingsWork.lyricsChanged()   // a song showing now picks its timing up
+                                    val back = if (timing > 0) " Your timing came back for ${count(timing, "song")}." else ""
+                                    WorkRunner.Result(true, "Restored. Your Library now has ${count(r.songsAfter, "song")} (was ${r.songsBefore}) and ${count(r.playsAfter, "play")} (was ${r.playsBefore}).$back") },
                                 { e ->
                                     WorkRunner.Result(false, when (e) {
                                         is LibraryKey.Gone -> KEY_GONE

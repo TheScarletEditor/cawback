@@ -63,7 +63,25 @@ class LyricsRepo(private val store: LyricsStore) {
     }
 
     suspend fun load(t: Track): Shown = withContext(Dispatchers.IO) {
-        val cached = store.load(t.key)
+        var cached = store.load(t.key)
+        // A restored fix (0.5.0): fetch its version by id, with the user's timing on it.
+        val pid = cached?.pendingId
+        if (cached != null && cached.candidate == null && pid != null) {
+            try {
+                val c = withRetries(RETRY_DELAYS_MS) { LrcLib.byId(pid) }
+                val e = cached.copy(candidate = c, pendingId = null, fetchedAt = System.currentTimeMillis(), matchVersion = MATCHING)
+                store.save(t.key, e)
+                return@withContext found(c, e.pinned, e.offsetMs, anchors = e.anchors)
+            } catch (_: LrcLib.NotFound) {
+                // The version is gone from LRCLIB: match again; its timing belonged to it (owner: drop the fix).
+                cached = LyricsStore.Entry(null, false, 0, 0)
+                store.save(t.key, cached)
+            } catch (_: IOException) {
+                return@withContext Shown.Offline   // fetched next time
+            } catch (_: org.json.JSONException) {
+                return@withContext Shown.Offline
+            }
+        }
         if (cached != null) {
             if (cached.candidate != null && isCurrent(cached)) return@withContext found(cached.candidate, cached.pinned, cached.offsetMs, cached.unsure, cached.anchors)
             // A remembered miss counts only if it was found with today's matching rules (title-only fallback added).

@@ -1,8 +1,18 @@
 package com.thescarletcoder.lyrics.library
 
+import com.thescarletcoder.lyrics.Anchor
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+
+/**
+ * The user's timing for one song, as a backup carries it (0.5.0, owner Q25): which cache entry ([key], the same hash
+ * the Library keeps for "Forget this song"), which version ([versionId], an LRCLIB id), whether it was picked by hand,
+ * the nudge and the tapped lines. Never lyric text: a restored fix fetches its version again by id.
+ */
+data class TimingFix(
+    val key: String, val versionId: Long, val pinned: Boolean, val offsetMs: Long, val anchors: List<Anchor>, val song: String? = null,
+)
 
 /**
  * The whole Library as plain data: what a backup holds, and what the Command link will carry between devices.
@@ -15,6 +25,7 @@ data class LibrarySnapshot(
     val noteHistory: List<NoteHistory> = emptyList(),
     val tombstones: List<Tombstone> = emptyList(),
     val tracks: List<SongTrack> = emptyList(),
+    val fixes: List<TimingFix> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("schema", SCHEMA)
@@ -35,9 +46,17 @@ data class LibrarySnapshot(
         }))
         .put("tombstones", JSONArray(tombstones.map { JSONObject().put("uid", it.uid).put("kind", it.kind).put("deletedAt", it.deletedAt) }))
         .put("tracks", JSONArray(tracks.map { JSONObject().put("songUid", it.songUid).put("trackKey", it.trackKey) }))
+        .put("fixes", JSONArray(fixes.map { f ->
+            JSONObject().put("key", f.key).put("id", f.versionId).put("pinned", f.pinned).put("offset", f.offsetMs)
+                .put("anchors", JSONArray(f.anchors.map { JSONArray().put(it.lineMs).put(it.deltaMs) }))
+                .apply { f.song?.let { put("song", it) } }
+        }))
 
     companion object {
-        const val SCHEMA = 1
+        /** 2: 0.5.0, with the user's timing fixes. 0.4.x refuses it as newer; schema 1 backups still read here. */
+        const val SCHEMA = 2
+        private val HASH = Regex("[0-9a-f]{64}")
+        private const val MAX_ANCHORS = 2_000
 
         private fun JSONObject.list(name: String) = optJSONArray(name)?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.orEmpty()
 
@@ -56,6 +75,17 @@ data class LibrarySnapshot(
                 noteHistory = o.list("noteHistory").map { NoteHistory(it.getString("uid"), it.getString("songUid"), it.getString("text"), it.getLong("replacedAt")) },
                 tombstones = o.list("tombstones").map { Tombstone(it.getString("uid"), it.getString("kind"), it.getLong("deletedAt")) },
                 tracks = o.list("tracks").map { SongTrack(it.getString("songUid"), it.getString("trackKey")) },
+                // A fix that doesn't look right is left out on its own; it never costs the Library.
+                fixes = o.list("fixes").mapNotNull { f ->
+                    runCatching {
+                        val key = f.getString("key").takeIf { HASH.matches(it) } ?: return@runCatching null
+                        val a = f.optJSONArray("anchors")
+                        val anchors = if (a == null) emptyList() else (0 until minOf(a.length(), MAX_ANCHORS)).mapNotNull { i ->
+                            a.optJSONArray(i)?.takeIf { it.length() == 2 && it.opt(0) is Number && it.opt(1) is Number }?.let { Anchor(it.getLong(0), it.getLong(1)) }
+                        }
+                        TimingFix(key, f.getLong("id"), f.optBoolean("pinned"), f.optLong("offset"), anchors, f.optString("song").ifBlank { null })
+                    }.getOrNull()
+                },
             )
         }
     }

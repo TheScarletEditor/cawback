@@ -35,6 +35,8 @@ class LyricsStore(context: Context) {
     data class Entry(
         val candidate: Candidate?, val pinned: Boolean, val offsetMs: Long, val fetchedAt: Long,
         val matchVersion: Int = 0, val unsure: Boolean = false, val anchors: List<Anchor> = emptyList(),
+        /** A restored fix (0.5.0): the version to fetch by id the next time the song plays; no lyrics yet. */
+        val pendingId: Long? = null,
     )
 
     private fun file(key: String) = File(dir, "${hash(key)}.json")
@@ -94,6 +96,27 @@ class LyricsStore(context: Context) {
         }
     }
 
+    /** The user's timing and picks, for the Library backup (0.5.0, owner Q25): never lyric text. */
+    fun fixes(): List<com.thescarletcoder.lyrics.library.TimingFix> = files().mapNotNull { f ->
+        val o = synchronized(LOCK) { runCatching { read(f) }.getOrNull() } ?: return@mapNotNull null
+        fixOf(f.name.removeSuffix(".json"), runCatching { decode(o) }.getOrNull() ?: return@mapNotNull null, o.optString("s").ifBlank { null })
+    }
+
+    /**
+     * Restored fixes (owner: the device's own timing or pick wins). Returns how many songs got their timing back. A
+     * fix for a version this device already has is applied at once; otherwise the song fetches it by id on its next play.
+     */
+    fun restoreFixes(fixes: List<com.thescarletcoder.lyrics.library.TimingFix>): Int = fixes.count { fix ->
+        if (!HASH.matches(fix.key)) return@count false
+        val f = File(dir, "${fix.key}.json")
+        synchronized(LOCK) {
+            val existing = if (f.exists()) runCatching { read(f) }.getOrNull() else null
+            val next = merged(existing?.let { runCatching { decode(it) }.getOrNull() }, fix) ?: return@synchronized false
+            val o = encode(next, existing?.optString("s")?.ifBlank { null } ?: fix.song)
+            runCatching { write(f, o) }.isSuccess
+        }
+    }
+
     /** Encrypts the plain files 0.2.0 left. Run when Lyrics starts, off the main thread. */
     fun sealOldFiles() {
         files().forEach { f ->
@@ -146,6 +169,7 @@ class LyricsStore(context: Context) {
             val o = JSONObject()
                 .put("pinned", e.pinned).put("offset", e.offsetMs).put("at", e.fetchedAt)
                 .put("mv", e.matchVersion).put("u", e.unsure)
+            e.pendingId?.let { o.put("pid", it) }
             if (e.anchors.isNotEmpty()) o.put("anchors", JSONArray().apply { e.anchors.forEach { put(JSONArray().put(it.lineMs).put(it.deltaMs)) } })
             song?.let { o.put("s", it) }
             e.candidate?.let {
@@ -155,6 +179,23 @@ class LyricsStore(context: Context) {
                     .put("plain", it.plain ?: "").put("synced", it.synced ?: ""))
             }
             return o
+        }
+
+        /** A fix worth keeping: a version with a pick, a nudge or tapped lines. */
+        fun fixOf(key: String, e: Entry, song: String?): com.thescarletcoder.lyrics.library.TimingFix? {
+            val id = e.candidate?.id ?: e.pendingId ?: return null
+            if (!e.pinned && e.offsetMs == 0L && e.anchors.isEmpty()) return null
+            return com.thescarletcoder.lyrics.library.TimingFix(key, id, e.pinned, e.offsetMs, e.anchors, song)
+        }
+
+        /**
+         * What a restored [fix] makes of this device's entry (owner: the device's wins): null to leave it. Same version
+         * and no timing here: the timing is added. Otherwise, with nothing of the user's here: the version to fetch.
+         */
+        fun merged(existing: Entry?, fix: com.thescarletcoder.lyrics.library.TimingFix): Entry? {
+            if (existing != null && (existing.pinned || existing.offsetMs != 0L || existing.anchors.isNotEmpty() || existing.pendingId != null)) return null
+            if (existing?.candidate?.id == fix.versionId) return existing!!.copy(pinned = fix.pinned || existing.pinned, offsetMs = fix.offsetMs, anchors = fix.anchors)
+            return Entry(null, fix.pinned, fix.offsetMs, 0, anchors = fix.anchors, pendingId = fix.versionId)
         }
 
         /** An entry as read; entries from before 0.5.0 have no matching version and no anchors. */
@@ -167,6 +208,7 @@ class LyricsStore(context: Context) {
                 )
             },
             pinned = o.optBoolean("pinned"),
+            pendingId = if (o.has("pid")) o.optLong("pid") else null,
             offsetMs = o.optLong("offset"),
             fetchedAt = o.optLong("at"),
             matchVersion = o.optInt("mv"),
