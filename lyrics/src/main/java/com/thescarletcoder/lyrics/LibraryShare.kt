@@ -355,7 +355,8 @@ fun LibraryBackupSection() {
                             runCatching {
                                 withContext(Dispatchers.IO) {
                                     val snap = app.contentResolver.openInputStream(uri)!!.use { LibraryBackup.read(it, p) }
-                                    LibraryRepo(app).restore(snap) to LyricsStore(app).restoreFixes(snap.fixes)
+                                    val r = LibraryRepo(app).restore(snap)
+                                    r to LyricsStore(app).restoreFixes(com.thescarletcoder.lyrics.library.LibrarySnapshot.toRestore(snap.fixes, r.forgotten))
                                 }
                             }.fold(
                                 { (r, timing) -> forget(); mode = null; restoreFrom = null

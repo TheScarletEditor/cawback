@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.5.0 plan: your timing
 
-Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slices 1 to 5 built (3 to 5 wait for the owner's device check), slice 6 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
+Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the owner said "build as planned"; slices 1 to 6 built (3 to 6 wait for the owner's device check), slice 7 next.** Lines marked **proposed** are Claude's and are confirmed or changed at the slice that builds them. This plan replaces the earlier 0.4.2 plan (Q27: the release is 0.5.0).
 
 ## Why
 
@@ -121,6 +121,19 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    | M25 | The credit split cut inside words ("Featherstone") and split "The X-Ecutioners", leaving a bare "the" that matched anything | Whole words only, " x " only between spaces, no bare "the"; re-review clean |
 
 6. **Fixes in the Library backup** (Q25). Format tests, restore of an old backup.
+   **Built 2026-10-11** (`252a14a` and the mini-audit fixes). Owner: the device's own timing or pick wins ("The device's (Recommended)"); wording as approved; a version gone from LRCLIB is matched again and its fix dropped ("Match again, drop the fix (Recommended)"). `/finalize --slice`: one review agent (correctness and security), 7 findings fixed (M26 to M32) and one known limit (L1). 105/105 unit tests, lint 0 errors.
+
+   | Id | Finding | Fix |
+   | --- | --- | --- |
+   | M26 | Restoring over a file that couldn't be read just then (a busy key store) overwrote the device's own pick | Such a file is kept; only one that can never be read counts as nothing here |
+   | M27 | A fix could bring back the cached lyrics file of a song forgotten here or in the backup | Fixes for songs the restore forgot are left out |
+   | M28 | One malformed entry in a backup's fixes failed the whole restore | Left out on its own |
+   | M29 | A crafted backup could create a huge number of files or carry extreme values | At most 20,000 fixes, one per song, song keys capped, offsets and anchors clamped like the app's own |
+   | M30 | A garbled reply for a restored version showed "can't reach LRCLIB" forever | Treated like a removed version: matched again |
+   | M31 | Timing added to an older automatic match was dropped by the next re-match | The entry is marked current |
+   | M32 | A failed file replace still counted as restored | Counted only when the file is in place |
+   | L1 | Known limit, kept: a fix finds its song on another device only when the music app reports the same title, artist, album and length; with another app or album name it waits in a file that's never read (and still counts in "timing came back") | None now; a looser match would be its own decision |
+
 7. **Share your fix** (Q23). Preview of exactly what's sent, Send, the publish flow. Tests on the payload builder; one real publish only with the owner's OK for that exact song.
 
 Then `/finalize 0.5.0`. Device tests include both songs from 2026-10-11 (held privately).

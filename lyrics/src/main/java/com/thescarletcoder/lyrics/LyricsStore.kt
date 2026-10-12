@@ -110,10 +110,13 @@ class LyricsStore(context: Context) {
         if (!HASH.matches(fix.key)) return@count false
         val f = File(dir, "${fix.key}.json")
         synchronized(LOCK) {
-            val existing = if (f.exists()) runCatching { read(f) }.getOrNull() else null
-            val next = merged(existing?.let { runCatching { decode(it) }.getOrNull() }, fix) ?: return@synchronized false
+            // A file here that can't be read just now (a busy key store) or decoded is kept: it may hold the user's own
+            // pick and timing, which win. Only a file that can never be read (read gives null) counts as nothing here.
+            val existing = if (f.exists()) runCatching { read(f) }.getOrElse { return@synchronized false } else null
+            val mine = existing?.let { runCatching { decode(it) }.getOrElse { return@synchronized false } }
+            val next = merged(mine, fix) ?: return@synchronized false
             val o = encode(next, existing?.optString("s")?.ifBlank { null } ?: fix.song)
-            runCatching { write(f, o) }.isSuccess
+            runCatching { write(f, o) }.getOrDefault(false)
         }
     }
 
@@ -154,10 +157,11 @@ class LyricsStore(context: Context) {
         return try { JSONObject(text) } catch (_: JSONException) { null }
     }
 
-    private fun write(f: File, o: JSONObject) {
+    /** False when the new file couldn't take the old one's place. */
+    private fun write(f: File, o: JSONObject): Boolean {
         val tmp = File(dir, f.name + ".tmp")
         tmp.writeBytes(CacheCipher.seal(o.toString()))
-        tmp.renameTo(f)
+        return tmp.renameTo(f)
     }
 
     companion object {
@@ -194,7 +198,9 @@ class LyricsStore(context: Context) {
          */
         fun merged(existing: Entry?, fix: com.thescarletcoder.lyrics.library.TimingFix): Entry? {
             if (existing != null && (existing.pinned || existing.offsetMs != 0L || existing.anchors.isNotEmpty() || existing.pendingId != null)) return null
-            if (existing?.candidate?.id == fix.versionId) return existing!!.copy(pinned = fix.pinned || existing.pinned, offsetMs = fix.offsetMs, anchors = fix.anchors)
+            // Marked current, so the next play doesn't match again and drop the timing.
+            if (existing?.candidate?.id == fix.versionId) return existing!!.copy(
+                pinned = fix.pinned || existing.pinned, offsetMs = fix.offsetMs, anchors = fix.anchors, matchVersion = LyricsRepo.MATCHING)
             return Entry(null, fix.pinned, fix.offsetMs, 0, anchors = fix.anchors, pendingId = fix.versionId)
         }
 

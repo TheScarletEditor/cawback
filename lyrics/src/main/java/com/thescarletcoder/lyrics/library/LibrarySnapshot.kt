@@ -57,6 +57,12 @@ data class LibrarySnapshot(
         const val SCHEMA = 2
         private val HASH = Regex("[0-9a-f]{64}")
         private const val MAX_ANCHORS = 2_000
+        private const val MAX_FIXES = 20_000
+        private const val MAX_SONG_KEY = 1_024
+        private const val LIMIT = com.thescarletcoder.lyrics.YourTiming.LIMIT_MS
+
+        /** The fixes to restore: none for a song the restore forgot (here or in the backup). */
+        fun toRestore(fixes: List<TimingFix>, forgotten: Set<String>) = fixes.filter { it.key !in forgotten }
 
         private fun JSONObject.list(name: String) = optJSONArray(name)?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.orEmpty()
 
@@ -76,16 +82,22 @@ data class LibrarySnapshot(
                 tombstones = o.list("tombstones").map { Tombstone(it.getString("uid"), it.getString("kind"), it.getLong("deletedAt")) },
                 tracks = o.list("tracks").map { SongTrack(it.getString("songUid"), it.getString("trackKey")) },
                 // A fix that doesn't look right is left out on its own; it never costs the Library.
-                fixes = o.list("fixes").mapNotNull { f ->
-                    runCatching {
-                        val key = f.getString("key").takeIf { HASH.matches(it) } ?: return@runCatching null
-                        val a = f.optJSONArray("anchors")
-                        val anchors = if (a == null) emptyList() else (0 until minOf(a.length(), MAX_ANCHORS)).mapNotNull { i ->
-                            a.optJSONArray(i)?.takeIf { it.length() == 2 && it.opt(0) is Number && it.opt(1) is Number }?.let { Anchor(it.getLong(0), it.getLong(1)) }
-                        }
-                        TimingFix(key, f.getLong("id"), f.optBoolean("pinned"), f.optLong("offset"), anchors, f.optString("song").ifBlank { null })
-                    }.getOrNull()
-                },
+                // Capped and clamped like the app's own values; one fix per song.
+                fixes = o.optJSONArray("fixes")?.let { arr ->
+                    (0 until minOf(arr.length(), MAX_FIXES)).mapNotNull { i ->
+                        val f = arr.optJSONObject(i) ?: return@mapNotNull null
+                        runCatching {
+                            val key = f.getString("key").takeIf { HASH.matches(it) } ?: return@runCatching null
+                            val a = f.optJSONArray("anchors")
+                            val anchors = if (a == null) emptyList() else (0 until minOf(a.length(), MAX_ANCHORS)).mapNotNull { j ->
+                                a.optJSONArray(j)?.takeIf { it.length() == 2 && it.opt(0) is Number && it.opt(1) is Number }
+                                    ?.let { Anchor(it.getLong(0), it.getLong(1).coerceIn(-2 * LIMIT, 2 * LIMIT)) }?.takeIf { it.lineMs in 0..86_400_000L }
+                            }.distinctBy { it.lineMs }.sortedBy { it.lineMs }
+                            TimingFix(key, f.getLong("id"), f.optBoolean("pinned"), f.optLong("offset").coerceIn(-LIMIT, LIMIT), anchors,
+                                f.optString("song").ifBlank { null }?.take(MAX_SONG_KEY))
+                        }.getOrNull()
+                    }.distinctBy { it.key }
+                }.orEmpty(),
             )
         }
     }

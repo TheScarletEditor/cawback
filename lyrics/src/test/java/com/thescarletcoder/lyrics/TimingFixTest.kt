@@ -37,6 +37,25 @@ class TimingFixTest {
         assertEquals(listOf(fix), LibrarySnapshot.fromJson(json).fixes)
     }
 
+    @Test fun aCraftedBackupIsCappedAndClamped() {
+        val json = LibrarySnapshot().toJson()
+        val arr = org.json.JSONArray()
+        arr.put("not an object")   // skipped on its own, not the whole restore
+        arr.put(JSONObject().put("key", key).put("id", 1).put("offset", Long.MAX_VALUE)
+            .put("anchors", org.json.JSONArray().put(org.json.JSONArray().put(5_000).put(Long.MIN_VALUE)).put(org.json.JSONArray().put(-1).put(0))))
+        arr.put(JSONObject().put("key", key).put("id", 2))   // a second fix for the same song is dropped
+        json.put("fixes", arr)
+        val f = LibrarySnapshot.fromJson(json).fixes.single()
+        assertEquals(1L, f.versionId)
+        assertEquals(YourTiming.LIMIT_MS, f.offsetMs)
+        assertEquals(listOf(Anchor(5_000, -2 * YourTiming.LIMIT_MS)), f.anchors)   // clamped; a negative line time left out
+    }
+
+    @Test fun aForgottenSongGetsNoFixBack() {
+        val other = fix.copy(key = "b".repeat(64))
+        assertEquals(listOf(other), LibrarySnapshot.toRestore(listOf(fix, other), forgotten = setOf(key)))
+    }
+
     @Test fun onlyRealFixesAreBackedUp() {
         val plain = LyricsStore.Entry(c42, pinned = false, offsetMs = 0, fetchedAt = 1)
         assertNull(LyricsStore.fixOf(key, plain, null))   // an automatic match with no timing isn't a fix
@@ -50,6 +69,7 @@ class TimingFixTest {
         // The same version here with no timing: the timing is added at once.
         val same = LyricsStore.merged(mine.copy(offsetMs = 0), fix)!!
         assertEquals(c42, same.candidate); assertEquals(250L, same.offsetMs); assertEquals(fix.anchors, same.anchors)
+        assertTrue(LyricsRepo.isCurrent(same))   // not matched again on the next play
         // Another version or nothing here: the version is fetched by id on the next play.
         val other = LyricsStore.merged(mine.copy(offsetMs = 0, candidate = c42.copy(id = 7)), fix)!!
         assertEquals(42L, other.pendingId); assertNull(other.candidate); assertTrue(other.pinned)

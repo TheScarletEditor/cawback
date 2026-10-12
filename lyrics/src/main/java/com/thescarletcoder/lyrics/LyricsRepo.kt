@@ -72,14 +72,13 @@ class LyricsRepo(private val store: LyricsStore) {
                 val e = cached.copy(candidate = c, pendingId = null, fetchedAt = System.currentTimeMillis(), matchVersion = MATCHING)
                 store.save(t.key, e)
                 return@withContext found(c, e.pinned, e.offsetMs, anchors = e.anchors)
-            } catch (_: LrcLib.NotFound) {
-                // The version is gone from LRCLIB: match again; its timing belonged to it (owner: drop the fix).
+            } catch (e: Exception) {
+                if (e is IOException && e !is LrcLib.NotFound) return@withContext Shown.Offline   // fetched next time
+                if (e !is LrcLib.NotFound && e !is org.json.JSONException) throw e
+                // The version is gone from LRCLIB (or its reply makes no sense): match again; its timing belonged to
+                // it (owner: drop the fix).
                 cached = LyricsStore.Entry(null, false, 0, 0)
                 store.save(t.key, cached)
-            } catch (_: IOException) {
-                return@withContext Shown.Offline   // fetched next time
-            } catch (_: org.json.JSONException) {
-                return@withContext Shown.Offline
             }
         }
         if (cached != null) {

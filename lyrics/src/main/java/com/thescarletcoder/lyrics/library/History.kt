@@ -222,7 +222,8 @@ class LibraryRepo(context: Context) {
         LibrarySnapshot(dao.allSongs(), dao.allPlays(), dao.allMoments(), dao.allNoteHistory(), dao.allTombstones(), dao.allTracks())
     }
 
-    data class Restored(val songsBefore: Int, val songsAfter: Int, val playsBefore: Int, val playsAfter: Int)
+    /** [forgotten]: the track keys of songs the merged Library doesn't have (forgotten here or in the backup). */
+    data class Restored(val songsBefore: Int, val songsAfter: Int, val playsBefore: Int, val playsAfter: Int, val forgotten: Set<String> = emptySet())
 
     /**
      * Restore a backup by merging it into this Library (LibraryMerge: plays add up, newest note wins and the older
@@ -245,7 +246,9 @@ class LibraryRepo(context: Context) {
         // Songs the backup says were forgotten: their cached lyrics go too.
         val keep = merged.tracks.map { it.trackKey }.toHashSet()
         LyricsStore(app).forgetHashed(before.tracks.map { it.trackKey }.filter { it !in keep }.distinct())
-        return Restored(before.songs.size, merged.songs.size, before.plays.size, merged.plays.size)
+        // Also the backup's own forgotten songs, so a timing fix can't bring their cached lyrics file back.
+        val forgotten = (before.tracks + incoming.tracks).map { it.trackKey }.filter { it !in keep }.toSet()
+        return Restored(before.songs.size, merged.songs.size, before.plays.size, merged.plays.size, forgotten)
     }
 
     /** Drops plays older than the "keep plays for" setting. Run when Lyrics starts. */
