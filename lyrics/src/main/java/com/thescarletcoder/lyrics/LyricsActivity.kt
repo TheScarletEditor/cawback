@@ -483,8 +483,10 @@ private fun LyricsScreen(
                                 val s = shown as Shown.Found
                                 SharePanel(t, s, onSend = {
                                     val body = ShareFix.body(t, s.candidate, YourTiming.apply(s.lines, s.offsetMs, s.anchors))
+                                    if (SettingsWork.runner.busy(SettingsWork.SHARE)) return@SharePanel
                                     SettingsWork.sharing = t.key   // the result belongs to this song
                                     SettingsWork.runner.run(SettingsWork.SHARE) {
+                                        val sent = WorkRunner.Result(true, "Sent. Thank you: LRCLIB has your timing for this song.")
                                         val token = withContext(Dispatchers.Default) {
                                             val (prefix, target) = withContext(Dispatchers.IO) { LrcLib.requestChallenge() }
                                             val nonce = ProofOfWork.solve(prefix, target) { !isActive } ?: throw kotlinx.coroutines.CancellationException()
@@ -496,10 +498,11 @@ private fun LyricsScreen(
                                             withContext(Dispatchers.IO) { LrcLib.publish(token, body) }
                                             val at = System.currentTimeMillis()
                                             repo.markSent(t, s.candidate.id, at)
+                                            SettingsWork.runner.settle(SettingsWork.SHARE, sent)
                                             val cur = shown
                                             if (cur is Shown.Found && cur.candidate.id == s.candidate.id && track?.key == t.key) shown = cur.copy(sentAt = at)
                                         }
-                                        WorkRunner.Result(true, "Sent. Thank you: LRCLIB has your timing for this song.")
+                                        sent
                                     }
                                 }, onCancelSend = { SettingsWork.runner.cancel(SettingsWork.SHARE) }, onClose = { panel = Panel.NONE })
                             }

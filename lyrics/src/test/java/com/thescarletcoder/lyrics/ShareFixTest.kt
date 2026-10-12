@@ -75,4 +75,17 @@ class ShareFixTest {
         assertNull(runner.result("share"))   // not "That didn't finish": the user stopped it
         app.cancel()
     }
+
+    @Test fun aSendThatWentOutStillSaysSoAfterCancel() = runBlocking {
+        val app = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val runner = WorkRunner(app)
+        val settled = CompletableDeferred<Unit>()
+        val sent = WorkRunner.Result(true, "Sent.")
+        assertTrue(runner.run("share") { runner.settle("share", sent); settled.complete(Unit); delay(60_000); sent })
+        settled.await()
+        runner.cancel("share")
+        withTimeout(5_000) { while (runner.busy("share")) delay(5) }
+        assertEquals(sent, runner.result("share"))
+        app.cancel()
+    }
 }

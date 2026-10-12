@@ -24,6 +24,7 @@ internal class WorkRunner(
     private val busy = HashSet<String>()
     private val results = HashMap<String, Result>()
     private val jobs = HashMap<String, kotlinx.coroutines.Job>()
+    private val settled = HashMap<String, Result>()
 
     @Synchronized fun busy(key: String) = key in busy
     @Synchronized fun anyBusy(keys: Collection<String>) = keys.any { it in busy }
@@ -34,6 +35,7 @@ internal class WorkRunner(
         synchronized(this) {
             if (key in busy || group.any { it in busy }) return false
             busy += key
+            settled -= key
             results -= key; group.forEach { results -= it }
         }
         onChange(false)
@@ -41,13 +43,23 @@ internal class WorkRunner(
             var result: Result? = Result(false, FAILED)
             try { result = block() } catch (e: CancellationException) { result = null; throw e } catch (_: Exception) { } finally {
                 // Cancelled by the user: no message, as if it never started.
-                synchronized(this@WorkRunner) { busy -= key; jobs -= key; result?.let { results[key] = it } }
+                synchronized(this@WorkRunner) {
+                    busy -= key; jobs -= key
+                    (result ?: settled.remove(key))?.let { results[key] = it }
+                    settled -= key
+                }
                 onChange(true)
             }
         }
         synchronized(this) { if (key in busy) jobs[key] = job }
         return true
     }
+
+    /**
+     * The job's result is now certain (the work can't be undone): it shows even if Cancel comes before the job ends.
+     * Called from inside the job.
+     */
+    @Synchronized fun settle(key: String, result: Result) { if (key in busy) settled[key] = result }
 
     /** Stop the job under [key] (Share's Cancel); work that can't be undone halfway must not use this. */
     fun cancel(key: String) { synchronized(this) { jobs[key] }?.cancel() }
