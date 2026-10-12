@@ -2,6 +2,16 @@
 
 Against `docs/LYRICS-0.4.1-PLAN.md`. Newest first. scarlet-hq mirrors these (hq-log). Decisions before 0.4.1 live in scarlet-hq (D-001 to D-043) and `docs/FINALIZE-0.4.0.md`.
 
+## 2026-10-12 (the owner, 0.6.0 visuals)
+
+Against `docs/LYRICS-0.6.0-PLAN.md` (draft). Asked in the planning chat: version, light theme visuals, and the first wave (Still, Drift, Spiral, Ink, Random, the rest later). The owner: ".6, pastel for light theme, and yes to the rest".
+
+| # | Question | Answer (word for word) | Effect | Check |
+| --- | --- | --- | --- | --- |
+| Q28 | Version for visuals | ".6" | Visuals ship as 0.6.0, after 0.5.0. | build.gradle at /finalize. |
+| Q29 | Light theme visuals: pastel versions or dark only | "pastel for light theme" | Every visual has a pastel light version; the lens keeps the light readability limit. | Readability harness, both themes. |
+| Q30 | First wave, and the rest of the list | "yes to the rest" | Wave 1: Still, Drift (default), Spiral, Ink, Random. Tunnel, Aurora, Starfield, Lava later. The extras and guardrails in the plan are confirmed slice by slice. | Per slice. |
+
 ## 2026-10-11 (the owner, 0.5.0 "your timing")
 
 Against `docs/LYRICS-0.5.0-PLAN.md`. The owner: "yeah, build as planned, make your timing wins".

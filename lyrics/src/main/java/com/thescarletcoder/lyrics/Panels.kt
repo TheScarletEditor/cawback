@@ -220,7 +220,7 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
         Text("Share your fix", fontFamily = Fraunces, fontSize = 28.sp, color = L.text)
         Text("This sends what's below to lrclib.net. It becomes the version everyone gets for this song.",
             fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
-        val dur = body.optDouble("duration", 0.0).toInt()
+        val dur = Math.round(body.optDouble("duration", 0.0)).toInt()
         listOf("Title" to body.optString("trackName"), "Artist" to body.optString("artistName"), "Album" to body.optString("albumName"),
             "Length" to "%d:%02d".format(dur / 60, dur % 60)).forEach { (k, value) ->
             Text("$k: $value", fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(vertical = 2.dp))
@@ -242,7 +242,11 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
                 }
             }
         }
+        // Both texts that are sent (finalize 0.5.0 Q2: the preview shows exactly what's sent).
+        Text("Timed lyrics", fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(bottom = 4.dp))
         Text(body.optString("syncedLyrics"), fontFamily = Inter, fontSize = 14.sp, lineHeight = 20.sp, color = L.soft)
+        Text("Plain lyrics", fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(top = 18.dp, bottom = 4.dp))
+        Text(body.optString("plainLyrics"), fontFamily = Inter, fontSize = 14.sp, lineHeight = 20.sp, color = L.soft)
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -406,8 +410,8 @@ private fun TimingSettings(repo: LyricsRepo, output: Output) {
     }
     Box(Modifier.padding(top = 14.dp)) {
         ConfirmedWork(
-            SettingsWork.NUDGES, start = "Reset all timing nudges", confirm = "Reset",
-            question = "Reset the timing nudges on every song? Lyrics you picked by hand stay.",
+            SettingsWork.NUDGES, start = "Reset all timing", confirm = "Reset",
+            question = "Reset the timing on every song, nudges and fixed lines? Lyrics you picked by hand stay.",
         ) {
             val ok = repo.resetNudges(); SettingsWork.lyricsChanged()
             WorkRunner.Result(ok, if (ok) "Every song is back to its own timing." else WorkRunner.FAILED)   // never "done" after a partial failure

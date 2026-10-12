@@ -360,8 +360,11 @@ fun LibraryBackupSection() {
                                 }
                             }.fold(
                                 { (r, timing) -> forget(); mode = null; restoreFrom = null
-                                    if (timing > 0) SettingsWork.lyricsChanged()   // a song showing now picks its timing up
-                                    val back = if (timing > 0) " Your timing came back for ${count(timing, "song")}." else ""
+                                    val (now, later) = timing
+                                    if (now + later > 0) SettingsWork.lyricsChanged()   // a song showing now picks its timing up
+                                    // Counted apart (finalize 0.5.0 Q4): the rest arrive only when their song plays.
+                                    val back = (if (now > 0) " Your timing came back for ${count(now, "song")}." else "") +
+                                        (if (later > 0) " ${if (now > 0) "$later more" else count(later, "song")} come back when they next play." else "")
                                     WorkRunner.Result(true, "Restored. Your Library now has ${count(r.songsAfter, "song")} (was ${r.songsBefore}) and ${count(r.playsAfter, "play")} (was ${r.playsBefore}).$back") },
                                 { e ->
                                     WorkRunner.Result(false, when (e) {
@@ -437,7 +440,7 @@ fun OnThisDevice(repo: LyricsRepo, refresh: () -> Any?) {
         "Saved lyrics: " + n(f.cached, "song"),
         "Lyrics already fetched, so a song you've played before shows up at once and works offline, with your " +
             "\"Other versions\" picks and timing nudges. Each one includes the song's title and artist. Encrypted on this device; " +
-            "goes nowhere, and Android's backups are switched off for Lyrics.",
+            "Android's backups are switched off for Lyrics; your picks and timing go into a Library backup only if you make one.",
     )
     val lib = f.library
     Item(

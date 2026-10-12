@@ -308,7 +308,7 @@ private fun GapDots(isCurrent: Boolean, start: Long, end: Long?, offsetMs: Long,
     }
 }
 
-/** After the last sung line: says the words have run out, with a way to another version. Fades in when it's reached. */
+/** After the last sung line: says the words have run out. Fades in when it's reached. */
 @Composable
 private fun EndNote(isCurrent: Boolean, compact: Boolean) {
     val context = LocalContext.current

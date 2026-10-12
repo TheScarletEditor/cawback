@@ -121,20 +121,20 @@ object Matching {
      */
     data class Fit(val fits: Boolean, val agreeing: Int, val otherArtist: Boolean)
 
-    // Whole words only ("Featherstone" isn't split); " x " only between spaces, so "The X-Ecutioners" stays one name.
+    // Whole words only ("Featherstone" isn't split); " x " only between spaces, so "The Q-Tones" stays one name.
     private val creditSplit = Regex("""\s*(?:,|&|/|;|\+|×|、|＆|\bfeat(?:\.|\b)|\bft(?:\.|\b)|\bfeaturing\b|\bwith\b|\bvs(?:\.|\b)|(?<=\s)x(?=\s))\s*""", RegexOption.IGNORE_CASE)
     private val unknownArtists = setOf("", "unknown", "unknownartist", "variousartists", "various")
 
-    /** One name as compared: lower case, "$" as "s" (Ke$ha), no leading "the", letters and digits only (any script). */
+    /** One name as compared: lower case, "$" as "s" (Te$sa), no leading "the", letters and digits only (any script). */
     private fun norm(s: String) = s.lowercase().replace('$', 's').trim().removePrefix("the ").filter { it.isLetterOrDigit() }
 
-    /** The names in a credit ("Pitbull feat. Kesha", "Mike Shinoda/X-Ecutioners"), each as compared. */
+    /** The names in a credit ("Bolt feat. Tessa", "Alex Rowe/Q-Tones"), each as compared. */
     fun names(credit: String): Set<String> = credit.split(creditSplit).map { norm(it) }.filter { it.isNotEmpty() && it != "the" }.toSet()
 
     /** False when the credit says nothing about who it is (blank, "<unknown>", "Various Artists"). */
     fun knownArtist(credit: String) = norm(credit) !in unknownArtists && names(credit).isNotEmpty()
 
-    /** True when the two credits share a whole name ("X-Ecutioners, Mike Shinoda" and "The X-Ecutioners" do). */
+    /** True when the two credits share a whole name ("Q-Tones, Alex Rowe" and "The Q-Tones" do). */
     fun sameArtist(songArtist: String, candidate: String): Boolean = names(songArtist).intersect(names(candidate)).isNotEmpty()
 
     /** How each version fits; [ordered] is the list best fit first (owner, 0.5.0). Work it out off the main thread. */

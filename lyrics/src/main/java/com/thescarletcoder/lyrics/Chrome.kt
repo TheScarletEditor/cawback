@@ -56,7 +56,8 @@ import com.thescarletcoder.scarlet.Motion
 import com.thescarletcoder.scarlet.Tunables
 
 /**
- * Header: album thumbnail (only with art), title in Fraunces, artist, a drawn play/pause and a drawn "more".
+ * Header: album thumbnail (only with art), title in Fraunces, artist, This song (versions and timing) while lyrics show,
+ * a drawn play/pause and a drawn "more".
  * The six text chips are gone; everything else lives in the More sheet.
  * With [onBack] (a page is open) it's the now-playing bar: a back arrow before the song, and tapping either goes back
  * a step, to the lyrics from any first-level page. With nothing playing it names where that is: "Back to [backTo]".
@@ -195,7 +196,7 @@ private fun BottomSheet(open: Boolean, onClose: () -> Unit, content: @Composable
 
 /**
  * This song (0.5.0, owner Q20): other versions and the user's timing for the song playing. A note when Lyrics isn't
- * sure of the timing (Q24). Line up now, Fix lines and Share come in later slices.
+ * sure of the timing (Q24). Line up now, Fix lines and Share your fix.
  */
 @Composable
 fun SongSheet(

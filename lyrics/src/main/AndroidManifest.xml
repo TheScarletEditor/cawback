@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Network for one host only: lrclib.net (lyrics lookups). Scarlet Command itself stays offline. -->
+    <!-- Network for one host only: lrclib.net (lyrics lookups, and sharing a timing fix only after the user taps Send). Nothing else goes online. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- To list your music apps (Settings, Your music app) and open the one you chose alongside. Not a permission:

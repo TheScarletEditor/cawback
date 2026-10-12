@@ -6,7 +6,7 @@ Status: **answers recorded 2026-10-11 (Q15 to Q27 in `LYRICS-DECISIONS.md`); the
 
 Lyrics and timing come from LRCLIB, a volunteer database: anyone can upload, nobody checks. Two checks on 2026-10-11 showed what that means:
 
-1. **A mistimed upload won.** For one song, the first lookup (`/api/get` with the player's exact title, artist, album and length) returned a lone record that is 3.5 to 4.7 s late in the first minute and about 4.5 s early after that. About 20 other records share one timing, and the owner's ears matched it at 0:06, 1:10, 2:00 and 3:00. A nudge moves every line by the same amount, so it couldn't fix the lone record; and the nudge belongs to the song, so it followed the owner to every other version, which then looked wrong too. For the same song, nearly every record filed under the radio edit's length carries the album version's timing.
+1. **A mistimed upload won.** For one song, the first lookup (`/api/get` with the player's exact title, artist, album and length) returned a lone record several seconds off. A large group of other records shared one timing, and it matched the song by ear. A nudge moves every line by the same amount, so it couldn't fix the lone record; and the nudge belongs to the song, so it followed the owner to every other version, which then looked wrong too. For the same song, nearly every record filed under the radio edit's length carries the album version's timing.
 2. **Another artist's lyrics.** For a brand-new release with no lyrics on LRCLIB, the title-only fallback (any artist, length within 10 s) showed a different band's song with the same title.
 
 Official, licensed lyrics would need a commercial agreement, an API key a public app can't hide, and sending every play to that company; Spotify's own lyrics can't be reached without reverse engineering. So 0.5.0 makes Lyrics careful about what it shows, makes the user's own timing win, and lets users give fixes back to LRCLIB.
@@ -113,12 +113,12 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
 
    | Id | Finding | Fix |
    | --- | --- | --- |
-   | M20 | "different artist" for the same artists credited another way (slashes, reordered, "Feat.", "Ke$ha"), and false matches by substring ("Earth, Wind & Fire" and "Arcade Fire") | Both credits split the same way; whole names compared; JVM tests for each case |
+   | M20 | "different artist" for the same artists credited another way (slashes, reordered, "Feat.", a "$" for an "s"), and false matches by substring (one band's last word inside another's name) | Both credits split the same way; whole names compared; JVM tests for each case |
    | M21 | Every row said "different artist" when the song's artist is blank, unknown or "Various Artists" | No artist note then |
    | M22 | The order put the artist before fit, against the decision | Fitting, agreeing, same artist, then length |
    | M23 | "Showing now" could be cut off at the end of a long row | First in the row |
    | M24 | The sorting ran on the main thread, twice | Once, off the main thread |
-   | M25 | The credit split cut inside words ("Featherstone") and split "The X-Ecutioners", leaving a bare "the" that matched anything | Whole words only, " x " only between spaces, no bare "the"; re-review clean |
+   | M25 | The credit split cut inside words ("Featherstone") and split a hyphenated band name starting with "The", leaving a bare "the" that matched anything | Whole words only, " x " only between spaces, no bare "the"; re-review clean |
 
 6. **Fixes in the Library backup** (Q25). Format tests, restore of an old backup.
    **Built 2026-10-11** (`252a14a` and the mini-audit fixes). Owner: the device's own timing or pick wins ("The device's (Recommended)"); wording as approved; a version gone from LRCLIB is matched again and its fix dropped ("Match again, drop the fix (Recommended)"). `/finalize --slice`: one review agent (correctness and security), 7 findings fixed (M26 to M32) and one known limit (L1). 105/105 unit tests, lint 0 errors.

@@ -7,8 +7,10 @@ Android 14 or newer. Free, open source, no ads, no tracking, no account.
 ## What it does
 
 - Follows the song playing in your music app and highlights the line being sung. Tap a line to jump the song there.
-- Timing a little off? Nudge it earlier or later, and it remembers for that song.
-- "Other versions" lets you pick a synced or different version, and it sticks to that track.
+- Timing a little off? Open This song (the icon at the top) to nudge it earlier or later, tap Line up now as the next line is sung, or fix lines one by one with Fix lines. Your timing stays with that version.
+- Lyrics picks the timing most uploads agree on and never shows another artist's song on its own. A dot on This song means it isn't sure.
+- "Other versions" lists every version, best fit first, and your pick sticks to that track.
+- Fixed the timing? Share your fix sends it to LRCLIB, the open lyrics database, so everyone gets it. Nothing is sent until you tap Send.
 - Works in split screen next to your music app. Open it while your music app is playing and the app comes up beside it (unless the screen is already split).
 - If the connection drops, it tries again quietly and the lyrics appear once you're back online.
 - Light and dark (or following the system). While a song plays, a little of its album cover tints the background, taken from the art your music app already shares with Android. Art is never downloaded, and the tint is never saved.
@@ -31,14 +33,14 @@ Settings has four tabs: Lyrics, Player, Library and Privacy. Lyrics and Player s
 - **Moments.** Long-press a lyric line to bookmark that moment in the song. It saves the time and an optional label, never the words.
 - **You stay in charge.** Pause history for an hour or until you turn it back on, keep plays forever, for a year or for 90 days, forget one song, delete your history, or delete the whole Library.
 - **Export.** Library > Export makes plain text (with an optional note explaining the format, for pasting into an AI) or CSV. It goes only where you share or save it, and never includes lyrics.
-- **Backup.** Settings > Library > Library backup puts your whole Library in one file, locked with a passphrase you choose (Argon2id and AES-256-GCM). Restoring adds the backup to what's on the device. It's the only way to keep your Library when you change phones, since Android's own backups are switched off for Lyrics. Don't lose the passphrase: without it the file can't be opened.
+- **Backup.** Settings > Library > Library backup puts your whole Library in one file, locked with a passphrase you choose (Argon2id and AES-256-GCM). Restoring adds the backup to what's on the device. It's the only way to keep your Library when you change phones, since Android's own backups are switched off for Lyrics. It includes your timing fixes and picks, never lyric text. Don't lose the passphrase: without it the file can't be opened.
 
 ## Privacy and permissions
 
 - **Internet, for one site only.** Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library, over HTTPS. That is the only place the app connects to. To find the words, it sends the song's title, artist, album and length, and anything you type into an "Other versions" search. Sharing a timing fix (This song > Share your fix) sends that song's title, artist, album, length and lyrics with your timing, only after you tap Send. As with any website, LRCLIB also sees your IP address.
 - **Notification access**, because Android requires it for an app to see what's playing. Lyrics sees only what's playing: the song's title, artist, album, length, position and cover art (the cover only tints the screen and is never saved). It never reads your notifications.
 - **Nothing from your Library leaves your device** unless you export it or make a backup, and then it goes only where you choose.
-- **Saved lyrics:** a small encrypted on-device cache keeps fetched lyrics (each with its song title and artist), your "Other versions" picks and timing nudges. It's excluded from backups. Settings > Privacy shows how many songs are saved and has "Clear saved lyrics".
+- **Saved lyrics:** a small encrypted on-device cache keeps fetched lyrics (each with its song title and artist), your "Other versions" picks and timing. It's excluded from Android's backups; your picks and timing are also in a Library backup if you make one. Settings > Privacy shows how many songs are saved and has "Clear saved lyrics".
 - **Settings > Privacy > What's on this device** shows exactly what Lyrics keeps, with real counts, and what it sends to lrclib.net.
 - The full privacy policy is at [thescarletcoder.com/privacy](https://thescarletcoder.com/privacy).
 

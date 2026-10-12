@@ -63,7 +63,7 @@ class LyricsStore(context: Context) {
     }
 
     /**
-     * Settings: "Reset all timing nudges". Every song's offset back to 0; lyrics and picks stay. False if any file
+     * Settings: "Reset all timing". Every song's nudge and fixed lines back to 0; lyrics and picks stay. False if any file
      * couldn't be read or written this time (a file that can never be read has no nudge to reset and doesn't count).
      */
     fun resetOffsets(): Boolean {
@@ -103,24 +103,35 @@ class LyricsStore(context: Context) {
     /** The user's timing and picks, for the Library backup (0.5.0, owner Q25): never lyric text. */
     fun fixes(): List<com.thescarletcoder.lyrics.library.TimingFix> = files().mapNotNull { f ->
         val o = synchronized(LOCK) { runCatching { read(f) }.getOrNull() } ?: return@mapNotNull null
-        fixOf(f.name.removeSuffix(".json"), runCatching { decode(o) }.getOrNull() ?: return@mapNotNull null, o.optString("s").ifBlank { null })
+        // The song key, also for files saved before "s" existed, so Forget reaches a restored fix before it plays.
+        val song = o.optString("s").ifBlank { null } ?: o.optJSONObject("c")?.let { SongKey.of(it.optString("track"), it.optString("artist")) }
+        fixOf(f.name.removeSuffix(".json"), runCatching { decode(o) }.getOrNull() ?: return@mapNotNull null, song)
     }
 
     /**
-     * Restored fixes (owner: the device's own timing or pick wins). Returns how many songs got their timing back. A
-     * fix for a version this device already has is applied at once; otherwise the song fetches it by id on its next play.
+     * Restored fixes (owner: the device's own timing or pick wins). A fix for a version this device already has is
+     * applied at once; otherwise the song fetches it by id on its next play. Returns how many were applied now and how
+     * many wait for their song to play (finalize 0.5.0 Q4: counted apart).
      */
-    fun restoreFixes(fixes: List<com.thescarletcoder.lyrics.library.TimingFix>): Int = fixes.count { fix ->
-        if (!HASH.matches(fix.key)) return@count false
+    fun restoreFixes(fixes: List<com.thescarletcoder.lyrics.library.TimingFix>): Pair<Int, Int> {
+        var now = 0
+        var later = 0
+        fixes.forEach { fix -> when (restoreFix(fix)) { true -> now++; false -> later++; null -> {} } }
+        return now to later
+    }
+
+    /** True: applied now; false: waits for its song to play; null: nothing written. */
+    private fun restoreFix(fix: com.thescarletcoder.lyrics.library.TimingFix): Boolean? {
+        if (!HASH.matches(fix.key)) return null
         val f = File(dir, "${fix.key}.json")
         synchronized(LOCK) {
             // A file here that can't be read just now (a busy key store) or decoded is kept: it may hold the user's own
             // pick and timing, which win. Only a file that can never be read (read gives null) counts as nothing here.
-            val existing = if (f.exists()) runCatching { read(f) }.getOrElse { return@synchronized false } else null
-            val mine = existing?.let { runCatching { decode(it) }.getOrElse { return@synchronized false } }
-            val next = merged(mine, fix) ?: return@synchronized false
+            val existing = if (f.exists()) runCatching { read(f) }.getOrElse { return null } else null
+            val mine = existing?.let { runCatching { decode(it) }.getOrElse { return null } }
+            val next = merged(mine, fix) ?: return null
             val o = encode(next, existing?.optString("s")?.ifBlank { null } ?: fix.song)
-            runCatching { write(f, o) }.getOrDefault(false)
+            return if (runCatching { write(f, o) }.getOrDefault(false)) next.candidate != null else null
         }
     }
 
