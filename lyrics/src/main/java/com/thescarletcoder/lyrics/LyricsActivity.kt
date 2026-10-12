@@ -472,7 +472,7 @@ private fun LyricsScreen(
                                 output = output, onFollowChanged = onFollowChanged, onPinShortcut = onPinShortcut,
                                 onTuning = { panel = Panel.TUNING }, tab = settingsTab, onTab = { settingsTab = it })
                             panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
-                                onPick = { c -> scope.launch { repo.pin(t, c)?.let { shown = it }; panel = Panel.NONE } },
+                                onPick = { c -> scope.launch { repo.pin(t, c)?.let { shown = it; panel = Panel.NONE } } },   // not saved: the list stays to try again
                                 onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } })
                             panel == Panel.LIBRARY -> LibraryPanel(
                                 onSong = { songUid = it; songPending = null; songFromLibrary = true; panel = Panel.SONG },

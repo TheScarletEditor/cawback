@@ -48,13 +48,25 @@ class LyricsStore(context: Context) {
     /** Saved but can't be read just now (a Keystore hiccup): nothing may be written over it. */
     class Busy : java.io.IOException()
 
+    /**
+     * Reads [f] (under [LOCK]): null when it can never be read. Throws [Busy] on an error that may pass; after
+     * [BUSY_TRIES] in a row for the same file it counts as never readable, so one bad file can't block its song or every
+     * backup for good.
+     */
+    private fun readOrBusy(f: File): JSONObject? = try {
+        read(f).also { busyTries.remove(f.name) }
+    } catch (_: Exception) {
+        if (busyTries.merge(f.name, 1, Int::plus)!! < BUSY_TRIES) throw Busy()
+        busyTries.remove(f.name); null
+    }
+
     /** null when nothing is saved. Throws [Busy] on a passing error, so a caller never mistakes it for nothing saved. */
     fun load(key: String): Entry? {
         val f = file(key)
         val o = synchronized(LOCK) {
             if (!f.exists()) return null
             // A passing error: try again next time. Never readable: deleted.
-            runCatching { read(f) }.getOrElse { throw Busy() } ?: run { f.delete(); return null }
+            readOrBusy(f) ?: run { f.delete(); return null }
         }
         return runCatching { decode(o) }.getOrNull()
     }
@@ -107,7 +119,7 @@ class LyricsStore(context: Context) {
     /** The user's timing and picks, for the Library backup (0.5.0, owner Q25): never lyric text. */
     /** Throws [Busy] when a file can't be read just now: a backup that would quietly leave timing out fails instead (R6). */
     fun fixes(): List<com.thescarletcoder.lyrics.library.TimingFix> = files().mapNotNull { f ->
-        val o = synchronized(LOCK) { runCatching { read(f) }.getOrElse { throw Busy() } } ?: return@mapNotNull null
+        val o = synchronized(LOCK) { readOrBusy(f) } ?: return@mapNotNull null
         // The song key, also for files saved before "s" existed, so Forget reaches a restored fix before it plays.
         val song = o.optString("s").ifBlank { null } ?: o.optJSONObject("c")?.let { SongKey.of(it.optString("track"), it.optString("artist")) }
         fixOf(f.name.removeSuffix(".json"), runCatching { decode(o) }.getOrNull() ?: return@mapNotNull null, song)
@@ -136,7 +148,7 @@ class LyricsStore(context: Context) {
             // A file here that can't be read just now (a busy key store) or decoded is kept: it may hold the user's own
             // pick and timing, which win. Only a file that can never be read (read gives null) counts as nothing here.
             val existing = if (f.exists()) runCatching { read(f) }.getOrElse { return FAILED } else null
-            val mine = existing?.let { runCatching { decode(it) }.getOrElse { return FAILED } }
+            val mine = existing?.let { runCatching { decode(it) }.getOrElse { return KEPT } }
             val next = merged(mine, fix) ?: return KEPT
             val o = encode(next, existing?.optString("s")?.ifBlank { null } ?: fix.song)
             return if (!runCatching { write(f, o) }.getOrDefault(false)) FAILED else if (next.candidate != null) NOW else LATER
@@ -192,6 +204,10 @@ class LyricsStore(context: Context) {
         private const val LATER = 1
         private const val KEPT = 2
         private const val FAILED = 3
+
+        /** Passing read errors in a row before a file counts as never readable. */
+        private const val BUSY_TRIES = 3
+        private val busyTries = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
         /** Every read-modify-write of a cache file, across all instances (startup sealing runs beside lookups). */
         private val LOCK = Any()

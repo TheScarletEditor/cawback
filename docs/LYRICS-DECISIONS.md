@@ -11,6 +11,7 @@ Against `docs/LYRICS-0.6.0-PLAN.md` (draft). Asked in the planning chat: version
 | Q28 | Version for visuals | ".6" | Visuals ship as 0.6.0, after 0.5.0. | build.gradle at /finalize. |
 | Q29 | Light theme visuals: pastel versions or dark only | "pastel for light theme" | Every visual has a pastel light version; the lens keeps the light readability limit. | Readability harness, both themes. |
 | Q30 | First wave, and the rest of the list | "yes to the rest" | Wave 1: Still, Drift (default), Spiral, Ink, Random. Tunnel, Aurora, Starfield, Lava later. The extras and guardrails in the plan are confirmed slice by slice. | Per slice. |
+| Q31 | Speed control | "the speed should be tied to the song, no?" | No Speed setting. Speed follows a beat worked out from the lyric timestamps; line spacing is only the fallback. The plan's tempo section is rewritten. | JVM tests on the estimate; real-record check. |
 
 ## 2026-10-11 (the owner, 0.5.0 "your timing")
 

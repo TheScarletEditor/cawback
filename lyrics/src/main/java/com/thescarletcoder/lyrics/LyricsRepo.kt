@@ -118,7 +118,9 @@ class LyricsRepo(private val store: LyricsStore) {
                 matchVersion = if (m.complete) MATCHING else 0, unsure = m.choice?.unsure ?: false, anchors = anchors,
                 tapped = same?.tapped ?: false, sentAt = same?.sentAt ?: 0,
             )
-            store.save(t.key, e)
+            // Saved only if nothing changed while the lookup was out (a nudge or pick then wins): one edit at a time.
+            val kept = edit { if (store.load(t.key) == cached) { store.save(t.key, e); true } else false }
+            if (kept != true) return@withContext load(t)
             if (c == null) Shown.NotFound else found(c, false, offset, m.choice!!.unsure, anchors, e)
         } catch (_: IOException) {
             stale()   // an older match still shows while LRCLIB can't be reached; it's looked up again next time
