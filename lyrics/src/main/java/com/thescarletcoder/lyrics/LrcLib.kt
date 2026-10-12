@@ -94,6 +94,43 @@ object Matching {
     /** "Song - Remastered 2011" -> "Song". Keeps "(Live)" etc., which change the lyrics. */
     fun cleanTitle(t: String) = t.replace(dashSuffix, "").replace(feat, "").trim()
 
+    /**
+     * How a version fits the song, for "Other versions" (0.5.0): [fits] false when a synced version's lyrics run past the
+     * end; [agreeing] how many other versions on the list share its timing; [otherArtist] when the artist isn't the song's.
+     */
+    data class Fit(val fits: Boolean, val agreeing: Int, val otherArtist: Boolean)
+
+    private fun norm(s: String) = s.lowercase().removePrefix("the ").filter { it.isLetterOrDigit() }
+
+    /** True when [candidate] names one of the song's artists ("X-Ecutioners, Mike Shinoda" matches "The X-Ecutioners"). */
+    fun sameArtist(songArtist: String, candidate: String): Boolean {
+        val c = norm(candidate)
+        if (c.isEmpty()) return false
+        return songArtist.split(",", "&", " feat", " ft.", " with ", " x ").map { norm(it.trim()) }.filter { it.isNotEmpty() }
+            .any { it == c || (it.length >= 3 && c.contains(it)) || (c.length >= 3 && it.contains(c)) }
+    }
+
+    fun fitOf(cands: List<Candidate>, durationSec: Double?, songArtist: String): Map<Long, Fit> {
+        val t = cands.associate { it.id to times(it) }
+        return cands.associate { c ->
+            val mine = t.getValue(c.id)
+            c.id to Fit(
+                fits = fits(c, durationSec),
+                agreeing = if (mine.isEmpty()) 0 else cands.count { o -> o.id != c.id && agree(mine, t.getValue(o.id)) },
+                otherArtist = !sameArtist(songArtist, c.artist),
+            )
+        }
+    }
+
+    /** Best fit first (owner, 0.5.0): the song's artist, then synced and fitting, words only, synced too long; then agreement, length. */
+    fun bestFirst(cands: List<Candidate>, durationSec: Double?, songArtist: String): List<Candidate> {
+        val f = fitOf(cands, durationSec, songArtist)
+        fun kind(c: Candidate) = when { times(c).isEmpty() -> 1; f.getValue(c.id).fits -> 0; else -> 2 }
+        val known = durationSec != null && durationSec > 0
+        return cands.sortedWith(compareBy<Candidate>({ f.getValue(it.id).otherArtist }, { kind(it) }, { -f.getValue(it.id).agreeing },
+            { if (known) abs(it.durationSec - durationSec!!) else 0.0 }))
+    }
+
     /** What Lyrics chose for a song, and whether it's unsure of the timing (the records disagree, or none fits). */
     data class Choice(val candidate: Candidate, val unsure: Boolean)
 

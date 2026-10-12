@@ -78,6 +78,32 @@ class MatchingTest {
         assertEquals(2L, Matching.choose(null, listOf(tagsOnly, rec(2, 250.0, null)), 248.0)!!.candidate.id)
     }
 
+    @Test fun otherVersionsShowHowEachOneFits() {
+        val cands = listOf(
+            rec(1, 248.0, lone),
+            rec(2, 249.0, good), rec(3, 249.0, good),
+            rec(4, 213.0, good).copy(artist = "Someone Else"),
+            rec(5, 213.0, good),
+        )
+        val f = Matching.fitOf(cands, 213.0, "Artist, Guest")
+        assertTrue(f.getValue(1).fits.not())          // runs past the end of a 3:33 song
+        assertEquals(3, f.getValue(2).agreeing)       // 2, 3, 4 and 5 share a timing: 3 others each
+        assertEquals(0, f.getValue(1).agreeing)
+        assertTrue(f.getValue(4).otherArtist)
+        assertFalse(f.getValue(2).otherArtist)
+        // Best fit first: the song's artist before another's; then fitting synced, words only, too long.
+        val words = rec(6, 213.0, null)
+        val order = Matching.bestFirst(cands + words, 248.0, "Artist").map { it.id }
+        assertEquals(4L, order.last())                // another artist goes last
+        assertEquals(listOf(2L, 3L, 5L), order.take(3))   // the three that fit 4:08 and agree
+    }
+
+    @Test fun sameArtistMatchesCreditsAndThe() {
+        assertTrue(Matching.sameArtist("X-Ecutioners, Mike Shinoda, Mr. Hahn", "The X-Ecutioners"))
+        assertTrue(Matching.sameArtist("Pitbull, Kesha", "Kesha"))
+        assertFalse(Matching.sameArtist("TX2", "Rush"))
+    }
+
     @Test fun nothingCloseIsNoMatch() {
         assertNull(Matching.choose(null, listOf(rec(1, 300.0, good)), 248.0))
         assertNull(Matching.choose(null, emptyList(), 248.0))
