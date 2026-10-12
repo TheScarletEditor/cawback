@@ -10,13 +10,24 @@ import java.util.Locale
  * costs CPU time on purpose (spam protection), so it runs off the main thread and can be cancelled. Pure.
  */
 object ProofOfWork {
-    fun solve(prefix: String, targetHex: String, cancelled: () -> Boolean = { false }): String? {
+    /** Harder than this (leading zero bits) is not a real LRCLIB challenge: refused rather than run for hours. */
+    const val MAX_ZERO_BITS = 32
+
+    /** How long the device works on one challenge before giving up. */
+    const val MAX_MS = 180_000L
+
+    fun solve(
+        prefix: String, targetHex: String, cancelled: () -> Boolean = { false },
+        now: () -> Long = System::currentTimeMillis,
+    ): String? {
         val target = hex(targetHex) ?: return null
+        if (zeroBits(target) > MAX_ZERO_BITS) return null
+        val until = now() + MAX_MS
         val md = MessageDigest.getInstance("SHA-256")
         val p = prefix.toByteArray(Charsets.UTF_8)
         var n = 0L
         while (true) {
-            if (n and 0xFFF == 0L && cancelled()) return null
+            if (n and 0xFFF == 0L && (cancelled() || now() > until)) return null
             md.reset(); md.update(p)
             val nonce = n.toString()
             if (atMost(md.digest(nonce.toByteArray(Charsets.UTF_8)), target)) return nonce
@@ -39,6 +50,16 @@ object ProofOfWork {
             if (h > t) return false
         }
         return true
+    }
+
+    fun zeroBits(target: ByteArray): Int {
+        var bits = 0
+        for (b in target) {
+            val v = b.toInt() and 0xFF
+            if (v == 0) { bits += 8; continue }
+            return bits + Integer.numberOfLeadingZeros(v) - 24
+        }
+        return bits
     }
 
     private fun hex(s: String): ByteArray? {

@@ -45,12 +45,16 @@ class LyricsStore(context: Context) {
 
     private fun file(key: String) = File(dir, "${hash(key)}.json")
 
+    /** Saved but can't be read just now (a Keystore hiccup): nothing may be written over it. */
+    class Busy : java.io.IOException()
+
+    /** null when nothing is saved. Throws [Busy] on a passing error, so a caller never mistakes it for nothing saved. */
     fun load(key: String): Entry? {
         val f = file(key)
         val o = synchronized(LOCK) {
             if (!f.exists()) return null
             // A passing error: try again next time. Never readable: deleted.
-            runCatching { read(f) }.getOrElse { return null } ?: run { f.delete(); return null }
+            runCatching { read(f) }.getOrElse { throw Busy() } ?: run { f.delete(); return null }
         }
         return runCatching { decode(o) }.getOrNull()
     }
@@ -101,8 +105,9 @@ class LyricsStore(context: Context) {
     }
 
     /** The user's timing and picks, for the Library backup (0.5.0, owner Q25): never lyric text. */
+    /** Throws [Busy] when a file can't be read just now: a backup that would quietly leave timing out fails instead (R6). */
     fun fixes(): List<com.thescarletcoder.lyrics.library.TimingFix> = files().mapNotNull { f ->
-        val o = synchronized(LOCK) { runCatching { read(f) }.getOrNull() } ?: return@mapNotNull null
+        val o = synchronized(LOCK) { runCatching { read(f) }.getOrElse { throw Busy() } } ?: return@mapNotNull null
         // The song key, also for files saved before "s" existed, so Forget reaches a restored fix before it plays.
         val song = o.optString("s").ifBlank { null } ?: o.optJSONObject("c")?.let { SongKey.of(it.optString("track"), it.optString("artist")) }
         fixOf(f.name.removeSuffix(".json"), runCatching { decode(o) }.getOrNull() ?: return@mapNotNull null, song)
@@ -111,27 +116,30 @@ class LyricsStore(context: Context) {
     /**
      * Restored fixes (owner: the device's own timing or pick wins). A fix for a version this device already has is
      * applied at once; otherwise the song fetches it by id on its next play. Returns how many were applied now and how
-     * many wait for their song to play (finalize 0.5.0 Q4: counted apart).
+     * many wait for their song to play (finalize 0.5.0 Q4: counted apart), and how many couldn't be written (R6).
      */
-    fun restoreFixes(fixes: List<com.thescarletcoder.lyrics.library.TimingFix>): Pair<Int, Int> {
+    data class FixesRestored(val now: Int, val later: Int, val failed: Int)
+
+    fun restoreFixes(fixes: List<com.thescarletcoder.lyrics.library.TimingFix>): FixesRestored {
         var now = 0
         var later = 0
-        fixes.forEach { fix -> when (restoreFix(fix)) { true -> now++; false -> later++; null -> {} } }
-        return now to later
+        var failed = 0
+        fixes.forEach { fix -> when (restoreFix(fix)) { NOW -> now++; LATER -> later++; FAILED -> failed++ } }
+        return FixesRestored(now, later, failed)
     }
 
-    /** True: applied now; false: waits for its song to play; null: nothing written. */
-    private fun restoreFix(fix: com.thescarletcoder.lyrics.library.TimingFix): Boolean? {
-        if (!HASH.matches(fix.key)) return null
+    /** [NOW]: applied; [LATER]: waits for its song to play; [KEPT]: this device's own wins; [FAILED]: not written. */
+    private fun restoreFix(fix: com.thescarletcoder.lyrics.library.TimingFix): Int {
+        if (!HASH.matches(fix.key)) return KEPT
         val f = File(dir, "${fix.key}.json")
         synchronized(LOCK) {
             // A file here that can't be read just now (a busy key store) or decoded is kept: it may hold the user's own
             // pick and timing, which win. Only a file that can never be read (read gives null) counts as nothing here.
-            val existing = if (f.exists()) runCatching { read(f) }.getOrElse { return null } else null
-            val mine = existing?.let { runCatching { decode(it) }.getOrElse { return null } }
-            val next = merged(mine, fix) ?: return null
+            val existing = if (f.exists()) runCatching { read(f) }.getOrElse { return FAILED } else null
+            val mine = existing?.let { runCatching { decode(it) }.getOrElse { return FAILED } }
+            val next = merged(mine, fix) ?: return KEPT
             val o = encode(next, existing?.optString("s")?.ifBlank { null } ?: fix.song)
-            return if (runCatching { write(f, o) }.getOrDefault(false)) next.candidate != null else null
+            return if (!runCatching { write(f, o) }.getOrDefault(false)) FAILED else if (next.candidate != null) NOW else LATER
         }
     }
 
@@ -180,6 +188,11 @@ class LyricsStore(context: Context) {
     }
 
     companion object {
+        private const val NOW = 0
+        private const val LATER = 1
+        private const val KEPT = 2
+        private const val FAILED = 3
+
         /** Every read-modify-write of a cache file, across all instances (startup sealing runs beside lookups). */
         private val LOCK = Any()
 

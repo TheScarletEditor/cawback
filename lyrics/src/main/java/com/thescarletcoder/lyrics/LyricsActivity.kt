@@ -472,7 +472,7 @@ private fun LyricsScreen(
                                 output = output, onFollowChanged = onFollowChanged, onPinShortcut = onPinShortcut,
                                 onTuning = { panel = Panel.TUNING }, tab = settingsTab, onTab = { settingsTab = it })
                             panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
-                                onPick = { c -> scope.launch { shown = repo.pin(t, c); panel = Panel.NONE } },
+                                onPick = { c -> scope.launch { repo.pin(t, c)?.let { shown = it }; panel = Panel.NONE } },
                                 onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } })
                             panel == Panel.LIBRARY -> LibraryPanel(
                                 onSong = { songUid = it; songPending = null; songFromLibrary = true; panel = Panel.SONG },
@@ -489,7 +489,9 @@ private fun LyricsScreen(
                                         val sent = WorkRunner.Result(true, "Sent. Thank you: LRCLIB has your timing for this song.")
                                         val token = withContext(Dispatchers.Default) {
                                             val (prefix, target) = withContext(Dispatchers.IO) { LrcLib.requestChallenge() }
-                                            val nonce = ProofOfWork.solve(prefix, target) { !isActive } ?: throw kotlinx.coroutines.CancellationException()
+                                            val nonce = ProofOfWork.solve(prefix, target, cancelled = { !isActive })
+                                                ?: if (!isActive) throw kotlinx.coroutines.CancellationException() else error("challenge")   // too hard or too long: "That didn't finish"
+                                            check(ProofOfWork.verify(prefix, target, nonce))   // a last look before sending
                                             "$prefix:$nonce"
                                         }
                                         // Once the publish starts it finishes and is recorded, even if Cancel comes now:
@@ -498,9 +500,8 @@ private fun LyricsScreen(
                                             withContext(Dispatchers.IO) { LrcLib.publish(token, body) }
                                             SettingsWork.runner.settle(SettingsWork.SHARE, sent)
                                             val at = System.currentTimeMillis()
-                                            repo.markSent(t, s.candidate.id, at)
-                                            val cur = shown
-                                            if (cur is Shown.Found && cur.candidate.id == s.candidate.id && track?.key == t.key) shown = cur.copy(sentAt = at)
+                                            // "Sent on" only for the timing that was sent; the screen (even a recreated one) reads it again.
+                                            if (repo.markSent(t, s.candidate.id, s.offsetMs, s.anchors, at)) SettingsWork.lyricsChanged()
                                         }
                                         sent
                                     }
@@ -522,14 +523,14 @@ private fun LyricsScreen(
                                 onNow = { lineMs, offsetMs -> val t = track
                                     if (t != null) scope.launch {
                                         if (fixMode == FixMode.LINE_UP) {
+                                            fixMode = FixMode.NONE   // closes the bar at once: one Now per Line up
                                             val base = repo.lineUp(t, lineMs, offsetMs)
                                             val cur = shown
                                             if (base != null && cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(offsetMs = base, tapped = true, sentAt = 0)
-                                            fixMode = FixMode.NONE
                                         } else {
                                             val anchors = repo.setAnchor(t, lineMs, offsetMs)
                                             val cur = shown
-                                            if (cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(anchors = anchors, tapped = true, sentAt = 0)
+                                            if (anchors != null && cur is Shown.Found && cur.candidate.id == fixing.candidate.id) shown = cur.copy(anchors = anchors, tapped = true, sentAt = 0)
                                         }
                                     } },
                                 onDone = { fixMode = FixMode.NONE })
@@ -548,15 +549,15 @@ private fun LyricsScreen(
                 if (t != null && s is Shown.Found) scope.launch {
                     val next = repo.nudge(t, d)
                     val cur = shown
-                    if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = next, sentAt = 0)
+                    if (next != null && cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = next, sentAt = 0)
                 } },
             onFix = { fixMode = it },
             onShare = { SettingsWork.runner.clear(SettingsWork.SHARE); panel = Panel.SHARE },
             onClear = { val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch {
-                    repo.clearTiming(t)
+                    val cleared = repo.clearTiming(t)
                     val cur = shown
-                    if (cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0)
+                    if (cleared && cur is Shown.Found && cur.candidate.id == s.candidate.id) shown = cur.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0)
                 } },
         )
         MoreSheet(

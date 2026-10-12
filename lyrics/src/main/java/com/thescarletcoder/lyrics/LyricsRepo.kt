@@ -2,6 +2,7 @@ package com.thescarletcoder.lyrics
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
@@ -78,7 +79,8 @@ class LyricsRepo(private val store: LyricsStore) {
     }
 
     suspend fun load(t: Track): Shown = withContext(Dispatchers.IO) {
-        var cached = store.load(t.key)
+        // Saved but unreadable just now: shown as offline (tried again quietly), and nothing is written over it.
+        var cached = try { store.load(t.key) } catch (_: LyricsStore.Busy) { return@withContext Shown.Offline }
         // A restored fix (0.5.0): fetch its version by id, with the user's timing on it.
         val pid = cached?.pendingId
         if (cached != null && cached.candidate == null && pid != null) {
@@ -88,10 +90,10 @@ class LyricsRepo(private val store: LyricsStore) {
                 store.save(t.key, e)
                 return@withContext found(c, e.pinned, e.offsetMs, anchors = e.anchors, entry = e, durationSec = t.seconds())
             } catch (e: Exception) {
-                if (e is IOException && e !is LrcLib.NotFound) return@withContext Shown.Offline   // fetched next time
-                if (e !is LrcLib.NotFound && e !is org.json.JSONException) throw e
-                // The version is gone from LRCLIB (or its reply makes no sense): match again; its timing belonged to
-                // it (owner: drop the fix).
+                // A reply that makes no sense is treated like no connection: the fix waits for the next play.
+                if ((e is IOException && e !is LrcLib.NotFound) || e is org.json.JSONException) return@withContext Shown.Offline
+                if (e !is LrcLib.NotFound) throw e
+                // The version is gone from LRCLIB: match again; its timing belonged to it (owner: drop the fix).
                 cached = LyricsStore.Entry(null, false, 0, 0)
                 store.save(t.key, cached)
             }
@@ -151,8 +153,17 @@ class LyricsRepo(private val store: LyricsStore) {
     private inline fun exact(block: () -> Candidate): Candidate? =
         try { block().takeIf { it.synced != null || it.plain != null || it.instrumental } } catch (_: LrcLib.NotFound) { null }
 
+    /**
+     * The user's changes read and then write the song's entry: one at a time, so quick taps all count (M13), and never
+     * over an entry that can't be read just now (null: nothing changed).
+     */
+    private val edits = kotlinx.coroutines.sync.Mutex()
+    private suspend fun <T> edit(block: () -> T): T? = withContext(Dispatchers.IO) {
+        edits.withLock { try { block() } catch (_: LyricsStore.Busy) { null } }
+    }
+
     /** "Other versions": the user's pick sticks to this track; a new version starts with its own timing (owner Q17). */
-    suspend fun pin(t: Track, c: Candidate): Shown = withContext(Dispatchers.IO) {
+    suspend fun pin(t: Track, c: Candidate): Shown? = edit {
         val old = store.load(t.key)
         val (offset, anchors) = keptTiming(old, c.id)   // picking the same version again keeps it
         val same = old?.takeIf { it.candidate?.id == c.id }
@@ -164,43 +175,47 @@ class LyricsRepo(private val store: LyricsStore) {
 
     /** Forget the pick (and the cache) and match again; the nudge belonged to the pick (owner Q17). */
     suspend fun unpin(t: Track): Shown {
-        withContext(Dispatchers.IO) { store.save(t.key, LyricsStore.Entry(null, false, 0, 0)) }
+        edit { store.save(t.key, LyricsStore.Entry(null, false, 0, 0)) }
         return load(t)
     }
 
-    suspend fun nudge(t: Track, deltaMs: Long): Long = withContext(Dispatchers.IO) {
+    suspend fun nudge(t: Track, deltaMs: Long): Long? = edit {
         val e = store.load(t.key) ?: LyricsStore.Entry(null, false, 0, 0)
         val next = (e.offsetMs + deltaMs).coerceIn(-YourTiming.LIMIT_MS, YourTiming.LIMIT_MS)
         store.save(t.key, e.copy(offsetMs = next, sentAt = 0))   // anchors move with it: they're relative to the base
         next
     }
 
-    /** A tapped line (owner Q22): the line at [lineMs] moves [offsetMs] in all. Returns the anchors now saved. */
-    suspend fun setAnchor(t: Track, lineMs: Long, offsetMs: Long): List<Anchor> = withContext(Dispatchers.IO) {
+    /** A tapped line (owner Q22): the line at [lineMs] moves [offsetMs] in all. Returns the anchors now saved (null: none). */
+    suspend fun setAnchor(t: Track, lineMs: Long, offsetMs: Long): List<Anchor>? = edit {
         // Nothing saved for the song (cleared meanwhile): anchors without a version would be dropped on the next load.
-        val e = store.load(t.key)?.takeIf { it.candidate != null } ?: return@withContext emptyList()
+        val e = store.load(t.key)?.takeIf { it.candidate != null } ?: return@edit null
         val anchors = YourTiming.withAnchor(e.anchors, e.offsetMs, lineMs, offsetMs)
         store.save(t.key, e.copy(anchors = anchors, tapped = true, sentAt = 0))
         anchors
     }
 
     /** Line up now (owner Q19): the base nudge that puts the line at [lineMs] where it was heard. Returns the new base. */
-    suspend fun lineUp(t: Track, lineMs: Long, offsetMs: Long): Long? = withContext(Dispatchers.IO) {
-        val e = store.load(t.key)?.takeIf { it.candidate != null } ?: return@withContext null
+    suspend fun lineUp(t: Track, lineMs: Long, offsetMs: Long): Long? = edit {
+        val e = store.load(t.key)?.takeIf { it.candidate != null } ?: return@edit null
         val base = YourTiming.baseFor(e.anchors, lineMs, offsetMs)
         store.save(t.key, e.copy(offsetMs = base, tapped = true, sentAt = 0))
         base
     }
 
-    /** Share your fix sent: when, so This song can say so. */
-    suspend fun markSent(t: Track, versionId: Long, at: Long) = withContext(Dispatchers.IO) {
-        store.load(t.key)?.takeIf { it.candidate?.id == versionId }?.let { store.save(t.key, it.copy(sentAt = at)) }
-    }
+    /**
+     * Share your fix sent: when, so This song can say so. Only if the saved timing is still what was sent: timing
+     * changed while it was sending isn't on LRCLIB. True when marked.
+     */
+    suspend fun markSent(t: Track, versionId: Long, offsetMs: Long, anchors: List<Anchor>, at: Long): Boolean = edit {
+        val e = store.load(t.key)?.takeIf { it.candidate?.id == versionId && it.offsetMs == offsetMs && it.anchors == anchors }
+        e?.let { store.save(t.key, it.copy(sentAt = at)) } != null
+    } == true
 
     /** "Clear my timing": no nudge and no anchors for this song; the version stays. */
-    suspend fun clearTiming(t: Track) = withContext(Dispatchers.IO) {
-        store.load(t.key)?.let { store.save(t.key, it.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0)) }
-    }
+    suspend fun clearTiming(t: Track): Boolean = edit {
+        store.load(t.key)?.let { store.save(t.key, it.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0)) } != null
+    } == true
 
     /** Settings: how many tracks have something saved (lyrics, a pick or a timing nudge). */
     suspend fun savedCount(): Int = withContext(Dispatchers.IO) { store.count() }

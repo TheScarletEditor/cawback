@@ -223,7 +223,11 @@ class LibraryRepo(context: Context) {
     }
 
     /** [forgotten]: the track keys of songs the merged Library doesn't have (forgotten here or in the backup). */
-    data class Restored(val songsBefore: Int, val songsAfter: Int, val playsBefore: Int, val playsAfter: Int, val forgotten: Set<String> = emptySet())
+    data class Restored(
+        val songsBefore: Int, val songsAfter: Int, val playsBefore: Int, val playsAfter: Int, val forgotten: Set<String> = emptySet(),
+        /** The song keys of forgotten songs, for fixes saved under a version the Library never counted. */
+        val forgottenSongs: Set<String> = emptySet(),
+    )
 
     /**
      * Restore a backup by merging it into this Library (LibraryMerge: plays add up, newest note wins and the older
@@ -248,7 +252,9 @@ class LibraryRepo(context: Context) {
         LyricsStore(app).forgetHashed(before.tracks.map { it.trackKey }.filter { it !in keep }.distinct())
         // Also the backup's own forgotten songs, so a timing fix can't bring their cached lyrics file back.
         val forgotten = (before.tracks + incoming.tracks).map { it.trackKey }.filter { it !in keep }.toSet()
-        return Restored(before.songs.size, merged.songs.size, before.plays.size, merged.plays.size, forgotten)
+        val gone = merged.tombstones.filter { it.kind == "song" }.map { it.uid }.toHashSet()
+        val forgottenSongs = (before.songs + incoming.songs).filter { it.uid in gone }.map { it.matchKey }.toSet()
+        return Restored(before.songs.size, merged.songs.size, before.plays.size, merged.plays.size, forgotten, forgottenSongs)
     }
 
     /** Drops plays older than the "keep plays for" setting. Run when Lyrics starts. */

@@ -47,6 +47,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -269,7 +276,10 @@ fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outp
     val next = target.takeIf { !missed }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(L.surface)
-            .clickable(remember { MutableInteractionSource() }, indication = null) { }
+            // Taps on the bar stay on it (not the lyrics below), without making it one silent button for TalkBack;
+            // read first, before the lyric lines.
+            .pointerInput(Unit) { detectTapGestures { } }
+            .semantics { isTraversalGroup = true; traversalIndex = -1f }
             .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
         when {
@@ -278,7 +288,8 @@ fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outp
             else -> {
                 Text("Tap Now when you hear:", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
                 Text(s.lines[next].text, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 20.sp, color = L.text,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
             }
         }
         FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -28,7 +28,15 @@ class ShareFixTest {
     }
 
     @Test fun theProofOfWorkStopsWhenCancelled() {
-        assertNull(ProofOfWork.solve("p", "00".repeat(32)) { true })
+        assertNull(ProofOfWork.solve("p", "000000" + "FF".repeat(29), cancelled = { true }))
+    }
+
+    @Test fun aChallengeTheDeviceCantFinishIsRefused() {
+        assertNull(ProofOfWork.solve("p", "00".repeat(32)))                         // far too hard: refused at once
+        assertEquals(33, ProofOfWork.zeroBits(ProofOfWork.run { ByteArray(32) { if (it < 4) 0 else 0x7F } }))
+        assertEquals(8, ProofOfWork.zeroBits(byteArrayOf(0x00, 0xFF.toByte())))
+        var t = 0L
+        assertNull(ProofOfWork.solve("p", "00000000" + "FF".repeat(28), now = { t.also { t += 60_000 } }))   // time's up
     }
 
     @Test fun atMostComparesUnsignedBytesLikeTheServer() {

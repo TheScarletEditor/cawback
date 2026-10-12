@@ -65,7 +65,8 @@ data class LibrarySnapshot(
         private const val LIMIT = com.thescarletcoder.lyrics.YourTiming.LIMIT_MS
 
         /** The fixes to restore: none for a song the restore forgot (here or in the backup). */
-        fun toRestore(fixes: List<TimingFix>, forgotten: Set<String>) = fixes.filter { it.key !in forgotten }
+        fun toRestore(fixes: List<TimingFix>, forgotten: Set<String>, forgottenSongs: Set<String> = emptySet()) =
+            fixes.filter { it.key !in forgotten && it.song !in forgottenSongs }
 
         private fun JSONObject.list(name: String) = optJSONArray(name)?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.orEmpty()
 

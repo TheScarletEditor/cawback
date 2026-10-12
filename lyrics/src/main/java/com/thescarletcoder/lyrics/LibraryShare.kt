@@ -356,15 +356,16 @@ fun LibraryBackupSection() {
                                 withContext(Dispatchers.IO) {
                                     val snap = app.contentResolver.openInputStream(uri)!!.use { LibraryBackup.read(it, p) }
                                     val r = LibraryRepo(app).restore(snap)
-                                    r to LyricsStore(app).restoreFixes(com.thescarletcoder.lyrics.library.LibrarySnapshot.toRestore(snap.fixes, r.forgotten))
+                                    r to LyricsStore(app).restoreFixes(com.thescarletcoder.lyrics.library.LibrarySnapshot.toRestore(snap.fixes, r.forgotten, r.forgottenSongs))
                                 }
                             }.fold(
                                 { (r, timing) -> forget(); mode = null; restoreFrom = null
-                                    val (now, later) = timing
+                                    val (now, later, failed) = timing
                                     if (now + later > 0) SettingsWork.lyricsChanged()   // a song showing now picks its timing up
                                     // Counted apart (finalize 0.5.0 Q4): the rest arrive only when their song plays.
                                     val back = (if (now > 0) " Your timing came back for ${count(now, "song")}." else "") +
-                                        (if (later > 0) " ${if (now > 0) "$later more" else count(later, "song")} come back when they next play." else "")
+                                        (if (later > 0) " ${if (now > 0) "$later more" else count(later, "song")} come back when they next play." else "") +
+                                        (if (failed > 0) " Some of your timing couldn't be restored. Restore again to bring it back." else "")
                                     WorkRunner.Result(true, "Restored. Your Library now has ${count(r.songsAfter, "song")} (was ${r.songsBefore}) and ${count(r.playsAfter, "play")} (was ${r.playsBefore}).$back") },
                                 { e ->
                                     WorkRunner.Result(false, when (e) {

@@ -54,10 +54,15 @@ object LrcLib {
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
+    private val PREFIX = Regex("[A-Za-z0-9]{1,128}")
+
     /** Share your fix, step 1 (0.5.0): a challenge to solve on the device. Returns prefix and target. */
     fun requestChallenge(): Pair<String, String> {
         val o = JSONObject(send("POST", "/api/request-challenge", null, null))
-        return o.getString("prefix") to o.getString("target")
+        val prefix = o.getString("prefix")
+        // It goes back in a header: short and plain, or the reply makes no sense.
+        if (!PREFIX.matches(prefix)) throw org.json.JSONException("challenge")
+        return prefix to o.getString("target")
     }
 
     /** Share your fix, step 2: publish with the solved token ("prefix:nonce"). Only ever after the user tapped Send. */

@@ -52,8 +52,10 @@ class TimingFixTest {
     }
 
     @Test fun aForgottenSongGetsNoFixBack() {
-        val other = fix.copy(key = "b".repeat(64))
+        val other = fix.copy(key = "b".repeat(64), song = "other|artist")
         assertEquals(listOf(other), LibrarySnapshot.toRestore(listOf(fix, other), forgotten = setOf(key)))
+        // Also by song key: a fix saved under a version the Library never counted.
+        assertEquals(listOf(other), LibrarySnapshot.toRestore(listOf(fix, other), emptySet(), forgottenSongs = setOf("song|artist")))
     }
 
     @Test fun onlyRealFixesAreBackedUp() {
