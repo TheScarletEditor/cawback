@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -183,7 +184,8 @@ private fun BottomSheet(open: Boolean, onClose: () -> Unit, content: @Composable
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f))
             .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onClose))
     }
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+    // A tall sheet (large text) stops below the status bar, never under the clock (finalize 0.5.0 S3).
+    Box(Modifier.fillMaxSize().statusBarsPadding().padding(top = 8.dp), contentAlignment = Alignment.BottomCenter) {
         AnimatedVisibility(
             open,
             enter = slideInVertically(tween(ms, easing = Motion.NAV_EASE)) { it } + fadeIn(tween(ms)),
