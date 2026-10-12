@@ -86,6 +86,10 @@ class ShareFixTest {
         runner.cancel("share")
         withTimeout(5_000) { while (runner.busy("share")) delay(5) }
         assertEquals(sent, runner.result("share"))
+        // And after an error once it went out (the "Sent on" mark couldn't be saved).
+        assertTrue(runner.run("share") { runner.settle("share", sent); error("store") })
+        withTimeout(5_000) { while (runner.busy("share")) delay(5) }
+        assertEquals(sent, runner.result("share"))
         app.cancel()
     }
 }

@@ -40,12 +40,14 @@ internal class WorkRunner(
         }
         onChange(false)
         val job = scope.launch {
-            var result: Result? = Result(false, FAILED)
-            try { result = block() } catch (e: CancellationException) { result = null; throw e } catch (_: Exception) { } finally {
+            var result: Result? = null
+            var failed = false
+            try { result = block() } catch (e: CancellationException) { throw e } catch (_: Exception) { failed = true } finally {
                 // Cancelled by the user: no message, as if it never started.
                 synchronized(this@WorkRunner) {
                     busy -= key; jobs -= key
-                    (result ?: settled.remove(key))?.let { results[key] = it }
+                    // A settled result wins over a later failure or Cancel; otherwise Cancel leaves no message.
+                    (result ?: settled[key] ?: if (failed) Result(false, FAILED) else null)?.let { results[key] = it }
                     settled -= key
                 }
                 onChange(true)
@@ -56,7 +58,8 @@ internal class WorkRunner(
     }
 
     /**
-     * The job's result is now certain (the work can't be undone): it shows even if Cancel comes before the job ends.
+     * The job's result is now certain (the work can't be undone): it shows even if Cancel or an error comes before the
+     * job ends.
      * Called from inside the job.
      */
     @Synchronized fun settle(key: String, result: Result) { if (key in busy) settled[key] = result }

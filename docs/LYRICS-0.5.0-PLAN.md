@@ -136,7 +136,7 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
 
 7. **Share your fix** (Q23). Preview of exactly what's sent, Send, the publish flow. Tests on the payload builder; one real publish only with the owner's OK for that exact song.
 
-   **Built 2026-10-11** (`873296e` and the mini-audit fixes). Checked against LRCLIB's own server code (MIT, github tranxuanthang/lrclib): a challenge, a proof of work (SHA-256 of prefix + nonce at most the target, byte by byte), then `POST /api/publish` with `X-Publish-Token: prefix:nonce`; no account; a publish becomes the track's latest lyrics for everyone. Owner: "Yes, publish it (Recommended)"; "In the background (Recommended)"; "Only after Fix lines or Line up now (Recommended)"; all wording approved (the share page, sending, done, "Sent on", the other-song line, and the three privacy texts). `/finalize --slice`: one review agent (correctness and security: host lock, proof of work, nothing sent before Send, preview equals what's sent, privacy text accurate), 8 findings fixed (M33 to M40), re-review 2 more (M41, M42), then clean. 113/113 unit tests, lint 0 errors. No real publish yet: one, for a song the owner names, with the owner's OK.
+   **Built 2026-10-11** (`873296e` and the mini-audit fixes). Checked against LRCLIB's own server code (MIT, github tranxuanthang/lrclib): a challenge, a proof of work (SHA-256 of prefix + nonce at most the target, byte by byte), then `POST /api/publish` with `X-Publish-Token: prefix:nonce`; no account; a publish becomes the track's latest lyrics for everyone. Owner: "Yes, publish it (Recommended)"; "In the background (Recommended)"; "Only after Fix lines or Line up now (Recommended)"; all wording approved (the share page, sending, done, "Sent on", the other-song line, and the three privacy texts). `/finalize --slice`: one review agent (correctness and security: host lock, proof of work, nothing sent before Send, preview equals what's sent, privacy text accurate), 8 findings fixed (M33 to M40), re-review 3 more (M41 to M43), then clean. 113/113 unit tests, lint 0 errors. No real publish yet: one, for a song the owner names, with the owner's OK.
 
    | Id | Finding | Fix |
    | --- | --- | --- |
@@ -150,6 +150,7 @@ Each is a commit or small series, tests in the same commit, `/finalize --slice` 
    | M40 | "Only to look up words:" no longer fit the text | "To look up words:" (owner) |
    | M41 | Re-review: Cancel during the publish still showed Send again with no message (a second send likely) | The result is settled once the fix is recorded and shows even after Cancel |
    | M42 | Re-review: the song mark was set before the runner could refuse a second send | Set only when nothing is sending |
+   | M43 | Re-review: if saving "Sent on" failed after the publish, the page said "That didn't finish" | Settled right after the publish; a settled result wins over a later error |
 
 Then `/finalize 0.5.0`. Device tests include both songs from 2026-10-11 (held privately).
 

@@ -496,9 +496,9 @@ private fun LyricsScreen(
                                         // a send that went out must never look like it didn't.
                                         withContext(kotlinx.coroutines.NonCancellable) {
                                             withContext(Dispatchers.IO) { LrcLib.publish(token, body) }
+                                            SettingsWork.runner.settle(SettingsWork.SHARE, sent)
                                             val at = System.currentTimeMillis()
                                             repo.markSent(t, s.candidate.id, at)
-                                            SettingsWork.runner.settle(SettingsWork.SHARE, sent)
                                             val cur = shown
                                             if (cur is Shown.Found && cur.candidate.id == s.candidate.id && track?.key == t.key) shown = cur.copy(sentAt = at)
                                         }
