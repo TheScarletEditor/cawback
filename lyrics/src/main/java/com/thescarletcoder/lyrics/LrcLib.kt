@@ -23,9 +23,15 @@ data class Candidate(
 /** The only network client in Scarlet Lyrics. It can only reach https://lrclib.net. */
 object LrcLib {
     private const val HOST = "lrclib.net"
-    private val AGENT = "ScarletLyrics/${BuildConfig.VERSION_NAME.substringBefore('+')} (+https://github.com/TheScarletEditor/scarlet-lyrics)"
+    // LRCLIB asks every app to name itself (lrclib.net/docs): the app and its maker, never anything about the user.
+    private val AGENT = "ScarletLyrics/${BuildConfig.VERSION_NAME.substringBefore('+')} (The Scarlet Coder; +https://thescarletcoder.com)"
 
     class NotFound : IOException()
+
+    /** LRCLIB asked us to wait (429 or 503 with Retry-After), or the wait isn't over: nothing was sent. */
+    class TooBusy(val waitMs: Long) : IOException()
+
+    private val pacer = Pacer()
 
     /** Exact lookup (LRCLIB matches duration within about 2 seconds). Throws [NotFound] on 404. */
     fun get(track: String, artist: String, album: String?, durationSec: Double?): Candidate {
@@ -73,6 +79,7 @@ object LrcLib {
     private fun send(method: String, pathAndQuery: String, body: String?, token: String?): String {
         val url = URL("https://$HOST$pathAndQuery")
         check(url.protocol == "https" && url.host == HOST)
+        pacer.slot().let { if (it > 0) Thread.sleep(it) }   // one at a time, a short gap between (throws while told to wait)
         val c = url.openConnection() as HttpURLConnection
         try {
             c.requestMethod = method
@@ -93,6 +100,12 @@ object LrcLib {
             when (c.responseCode) {
                 200, 201 -> return c.inputStream.bufferedReader().use { it.readText() }
                 404 -> throw NotFound()
+                // LRCLIB's rule: honor Retry-After, or risk a ban. Nothing more is sent until it has passed.
+                429, 503 -> {
+                    val wait = Pacer.retryAfterMs(c.getHeaderField("Retry-After"), c.responseCode)
+                    pacer.backOff(wait)
+                    throw TooBusy(wait)
+                }
                 else -> throw IOException("LRCLIB answered ${c.responseCode}")
             }
         } finally {
@@ -236,5 +249,34 @@ object Matching {
             .minWithOrNull(compareBy<Candidate>({ it.plain == null && !it.instrumental }, { gap(it) }))   // real words first
             ?.let { return Choice(it, unsure = false) }
         return Choice(synced.minBy { gap(it) }, unsure = true)   // only records that run past the song's end are left
+    }
+}
+
+/**
+ * LRCLIB's client rules (lrclib.net/docs, checked 2026-10-12): requests one at a time with a short gap between them,
+ * and after a 429 or 503 nothing at all until Retry-After has passed. Pure apart from the clock, so it is unit tested.
+ */
+internal class Pacer(private val now: () -> Long = { System.nanoTime() / 1_000_000 }) {
+    private var nextAt = 0L
+    private var waitUntil = 0L
+
+    /** How long to wait before sending. Throws [LrcLib.TooBusy] while LRCLIB's wait isn't over: send nothing. */
+    @Synchronized fun slot(): Long {
+        val t = now()
+        if (t < waitUntil) throw LrcLib.TooBusy(waitUntil - t)
+        val at = maxOf(t, nextAt)
+        nextAt = at + GAP_MS
+        return at - t
+    }
+
+    @Synchronized fun backOff(ms: Long) { waitUntil = maxOf(waitUntil, now() + ms) }
+
+    companion object {
+        const val GAP_MS = 250L
+        private const val MAX_WAIT_MS = 3_600_000L
+
+        /** Retry-After in seconds; when it's missing or a date, a careful default (30 s after a 429, 1 s after a 503). */
+        fun retryAfterMs(header: String?, status: Int): Long =
+            (header?.trim()?.toLongOrNull()?.times(1000) ?: if (status == 429) 30_000L else 1_000L).coerceIn(1_000L, MAX_WAIT_MS)
     }
 }
