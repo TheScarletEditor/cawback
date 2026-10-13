@@ -156,6 +156,8 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
                 fit = fits.fit
                 results = fits.ordered
                 status = if (r.isEmpty()) "Nothing found. Try fewer words." else null
+            } catch (_: LrcLib.TooBusy) {
+                status = "LRCLIB is busy. Try again in a minute."   // it asked us to wait (owner, finalize 0.5.0 S7)
             } catch (_: Exception) { status = "Can't reach LRCLIB. Check your internet connection." }
         }
     }

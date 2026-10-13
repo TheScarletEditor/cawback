@@ -33,6 +33,9 @@ object LrcLib {
 
     private val pacer = Pacer()
 
+    /** One request at a time (LRCLIB's rule): held from the wait for a turn until the reply is read. */
+    private val oneAtATime = java.util.concurrent.locks.ReentrantLock(true)
+
     /** Exact lookup (LRCLIB matches duration within about 2 seconds). Throws [NotFound] on 404. */
     fun get(track: String, artist: String, album: String?, durationSec: Double?): Candidate {
         val q = buildString {
@@ -79,7 +82,14 @@ object LrcLib {
     private fun send(method: String, pathAndQuery: String, body: String?, token: String?): String {
         val url = URL("https://$HOST$pathAndQuery")
         check(url.protocol == "https" && url.host == HOST)
-        pacer.slot().let { if (it > 0) Thread.sleep(it) }   // one at a time, a short gap between (throws while told to wait)
+        oneAtATime.lockInterruptibly()
+        try { return sendNow(url, method, body, token) } finally { oneAtATime.unlock() }
+    }
+
+    private fun sendNow(url: URL, method: String, body: String?, token: String?): String {
+        // A short gap after the last request; throws, sending nothing, while LRCLIB's Retry-After wait isn't over
+        // (checked again after the gap, in case a reply asked for one meanwhile).
+        pacer.slot().let { if (it > 0) { Thread.sleep(it); pacer.checkWait() } }
         val c = url.openConnection() as HttpURLConnection
         try {
             c.requestMethod = method
@@ -269,6 +279,9 @@ internal class Pacer(private val now: () -> Long = { System.nanoTime() / 1_000_0
         return at - t
     }
 
+    /** Throws [LrcLib.TooBusy] while LRCLIB's wait isn't over, without taking a turn. */
+    @Synchronized fun checkWait() { val t = now(); if (t < waitUntil) throw LrcLib.TooBusy(waitUntil - t) }
+
     @Synchronized fun backOff(ms: Long) { waitUntil = maxOf(waitUntil, now() + ms) }
 
     companion object {
@@ -277,6 +290,7 @@ internal class Pacer(private val now: () -> Long = { System.nanoTime() / 1_000_0
 
         /** Retry-After in seconds; when it's missing or a date, a careful default (30 s after a 429, 1 s after a 503). */
         fun retryAfterMs(header: String?, status: Int): Long =
-            (header?.trim()?.toLongOrNull()?.times(1000) ?: if (status == 429) 30_000L else 1_000L).coerceIn(1_000L, MAX_WAIT_MS)
+            (header?.trim()?.toLongOrNull()?.coerceIn(1L, MAX_WAIT_MS / 1000)?.times(1000) ?: if (status == 429) 30_000L else 1_000L)
+                .coerceIn(1_000L, MAX_WAIT_MS)
     }
 }

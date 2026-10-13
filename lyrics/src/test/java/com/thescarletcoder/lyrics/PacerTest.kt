@@ -25,6 +25,9 @@ class PacerTest {
         assertThrows(LrcLib.TooBusy::class.java) { p.slot() }
         t = 5_000
         assertEquals(0L, p.slot())
+        p.checkWait()                                  // over: no throw
+        p.backOff(1_000)                               // a reply asked for a wait while this one waited its turn
+        assertThrows(LrcLib.TooBusy::class.java) { p.checkWait() }
     }
 
     @Test fun retryAfterIsReadCarefully() {
@@ -34,5 +37,6 @@ class PacerTest {
         assertEquals(1_000L, Pacer.retryAfterMs(null, 503))
         assertEquals(1_000L, Pacer.retryAfterMs("0", 503))                               // never a busy loop
         assertEquals(3_600_000L, Pacer.retryAfterMs("999999", 429))                       // capped at an hour
+        assertEquals(3_600_000L, Pacer.retryAfterMs("9300000000000000", 429))             // no overflow
     }
 }
