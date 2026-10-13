@@ -83,7 +83,12 @@ object LrcLib {
         val url = URL("https://$HOST$pathAndQuery")
         check(url.protocol == "https" && url.host == HOST)
         oneAtATime.lockInterruptibly()
-        try { return sendNow(url, method, body, token) } finally { oneAtATime.unlock() }
+        try {
+            return sendNow(url, method, body, token)
+        } finally {
+            pacer.done()   // the gap runs from the end of this request
+            oneAtATime.unlock()
+        }
     }
 
     private fun sendNow(url: URL, method: String, body: String?, token: String?): String {
@@ -281,6 +286,9 @@ internal class Pacer(private val now: () -> Long = { System.nanoTime() / 1_000_0
 
     /** Throws [LrcLib.TooBusy] while LRCLIB's wait isn't over, without taking a turn. */
     @Synchronized fun checkWait() { val t = now(); if (t < waitUntil) throw LrcLib.TooBusy(waitUntil - t) }
+
+    /** A request just ended: the next one waits [GAP_MS] from now. */
+    @Synchronized fun done() { nextAt = maxOf(nextAt, now() + GAP_MS) }
 
     @Synchronized fun backOff(ms: Long) { waitUntil = maxOf(waitUntil, now() + ms) }
 

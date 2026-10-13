@@ -14,6 +14,8 @@ class PacerTest {
         assertEquals(2 * Pacer.GAP_MS, p.slot())
         t += 10_000
         assertEquals(0L, p.slot())                    // long after: no wait
+        t += 300; p.done()                            // a slow reply: the gap counts from its end
+        assertEquals(Pacer.GAP_MS, p.slot())
     }
 
     @Test fun nothingIsSentUntilRetryAfterHasPassed() {
