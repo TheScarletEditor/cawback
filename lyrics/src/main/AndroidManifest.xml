@@ -37,7 +37,7 @@
         </activity>
 
         <!-- Library > Export: hands the export file you chose to share to the app you pick, for that one share only.
-             Not exported; it serves nothing but the exports folder in Lyrics' own cache. -->
+             Not exported; it serves nothing but the exports folder in Cawback's own cache. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.exports"

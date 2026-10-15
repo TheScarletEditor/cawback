@@ -302,7 +302,7 @@ class PlayTracker {
     private fun song(trackKey: String?) = trackKey?.substringBeforeLast('\u0001')
 
     /**
-     * Lyrics is closing (or history was switched off): finish whatever was playing. If the same song is still playing
+     * Cawback is closing (or history was switched off): finish whatever was playing. If the same song is still playing
      * when Lyrics comes back, the listen continues: an app switch doesn't split it, and a long song isn't counted twice.
      */
     fun close(now: Long): Finished? = finish(now)?.also { closed = it; closedAt = now }

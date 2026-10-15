@@ -1,8 +1,8 @@
-# Build the smoke copy of Scarlet Lyrics, install it and open it, so /finalize can drive it over adb.
+# Build the smoke copy of Cawback, install it and open it, so /finalize can drive it over adb.
 #
 # Lyrics Smoke (com.thescarletcoder.lyrics.smoke) is release-optimized exactly like the public build (R8, not
 # debuggable) but has its own app id and the debug key. It installs next to the regular Lyrics with its own database,
-# settings and key, and can never see or change its data. The regular Scarlet Lyrics is never installed, changed or
+# settings and key, and can never see or change its data. The regular Cawback is never installed, changed or
 # uninstalled by this. Remove the smoke copy when done.
 #
 # Run:

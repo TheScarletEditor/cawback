@@ -127,7 +127,7 @@ class LibraryBackupTest {
 
     @Test fun textExportMatchesTheScopeSample() {
         val t = LibraryExport.build(sample, Options(), at(2026, 10, 9), zone)
-        assertTrue(t.startsWith("Scarlet Lyrics library\nExported 2026-10-09 · 2 songs · 3 plays · 2026-01-14 to 2026-10-08\n"))
+        assertTrue(t.startsWith("Cawback library\nExported 2026-10-09 · 2 songs · 3 plays · 2026-01-14 to 2026-10-08\n"))
         assertTrue(t.contains("About this file:"))
         assertTrue(t.contains("\nFavorites\n- Glass Harbor | The Lanterns | Low Tide | 2 | 2026-01-14 | 2026-10-08\n    Note: Night drive song. Better loud.\n    Moment 1:42: the key change\n"))
         assertTrue(t.contains("\nEverything else\n- Paper Saints | Mara Vell | Kindling | 1 | 2026-09-30 | 2026-10-07\n"))

@@ -110,7 +110,7 @@ fun Header(
                         Spacer(Modifier.width(12.dp))
                     }
                     Column(Modifier.weight(1f)) {
-                        Text(t?.title ?: if (onBack != null) "Back to $backTo" else "Scarlet Lyrics", fontFamily = Fraunces,
+                        Text(t?.title ?: if (onBack != null) "Back to $backTo" else "Cawback", fontFamily = Fraunces,
                             fontSize = if (compact) 17.sp else 20.sp, color = L.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (t != null) Text(t.artist, fontFamily = Inter, fontSize = 13.sp, color = L.soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -153,7 +153,7 @@ fun FlexControls(track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: 
                 Spacer(Modifier.width(14.dp))
             }
             Column(Modifier.weight(1f, fill = false)) {
-                Text(track?.title ?: "Scarlet Lyrics", fontFamily = Fraunces, fontSize = 20.sp, color = L.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track?.title ?: "Cawback", fontFamily = Fraunces, fontSize = 20.sp, color = L.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (track != null) Text(track.artist, fontFamily = Inter, fontSize = 14.sp, color = L.soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }

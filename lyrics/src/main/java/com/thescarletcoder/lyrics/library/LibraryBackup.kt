@@ -40,12 +40,12 @@ object LibraryBackup {
     const val EXTENSION = "lyrbak"
 
     class WrongPassphrase : Exception("That passphrase doesn't open this backup, or the file is damaged or incomplete.")
-    const val NEWER = "This backup is from a newer Scarlet Lyrics. Update Lyrics, then restore."
-    private const val TOO_LARGE = "This backup is too large to be a Scarlet Lyrics Library."
+    const val NEWER = "This backup is from a newer Cawback. Update Cawback, then restore."
+    private const val TOO_LARGE = "This backup is too large to be a Cawback Library."
 
     /** A backup that is recognised but can't be read here; the message is meant for the user. */
     class Unreadable(message: String) : IllegalArgumentException(message)
-    class NotABackup : Exception("This isn't a Scarlet Lyrics Library backup.")
+    class NotABackup : Exception("This isn't a Cawback Library backup.")
 
     data class Params(val memoryKiB: Int = MEMORY_KIB, val passes: Int = PASSES, val lanes: Int = LANES)
 

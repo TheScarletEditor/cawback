@@ -20,11 +20,11 @@ data class Candidate(
     val synced: String?,
 )
 
-/** The only network client in Scarlet Lyrics. It can only reach https://lrclib.net. */
+/** The only network client in Cawback. It can only reach https://lrclib.net. */
 object LrcLib {
     private const val HOST = "lrclib.net"
     // LRCLIB asks every app to name itself (lrclib.net/docs): the app and its maker, never anything about the user.
-    private val AGENT = "ScarletLyrics/${BuildConfig.VERSION_NAME.substringBefore('+')} (The Scarlet Coder; +https://thescarletcoder.com)"
+    private val AGENT = "Cawback/${BuildConfig.VERSION_NAME.substringBefore('+')} (The Scarlet Coder; +https://thescarletcoder.com)"
 
     class NotFound : IOException()
 

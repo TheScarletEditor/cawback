@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object History {
     enum class Mode(val id: String, val label: String) {
-        OFF("off", "Off"), WHILE_OPEN("open", "Only while Lyrics is open"), ALWAYS("always", "Always");
+        OFF("off", "Off"), WHILE_OPEN("open", "Only while Cawback is open"), ALWAYS("always", "Always");
         companion object { fun of(id: String?) = entries.firstOrNull { it.id == id } ?: OFF }
     }
 

@@ -67,7 +67,7 @@ object LibraryExport {
 
     private fun text(rows: List<Row>, o: Options, now: Long, zone: ZoneId): String = buildString {
         val totalPlays = rows.sumOf { it.plays }
-        appendLine("Scarlet Lyrics library")
+        appendLine("Cawback library")
         val span = when {
             o.which == Which.RANGE -> listOfNotNull(o.from?.let { day(it, zone) }, o.to?.let { day(it - 1, zone) }).joinToString(" to ")
             else -> rows.mapNotNull { r -> r.last }.let { lasts ->
@@ -85,7 +85,7 @@ object LibraryExport {
         if (o.aiHeader) {
             appendLine()
             appendLine(
-                "About this file: a personal music library exported from Scarlet Lyrics. Each line starting with \"- \" is one song: " +
+                "About this file: a personal music library exported from Cawback. Each line starting with \"- \" is one song: " +
                     (if (o.counts) "title | artist | album | times played | first heard | last heard (dates are YYYY-MM-DD)" else "title | artist | album") +
                     ". A blank album means none was known." +
                     (if (o.notes || o.moments) " Lines indented under a song are the listener's own words: a Note about the song, or a Moment (a time in the song, minutes:seconds, with the listener's label)." else "") +

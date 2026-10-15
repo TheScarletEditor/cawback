@@ -224,7 +224,7 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
         Text("This sends what's below to lrclib.net. It becomes the version everyone gets for this song.",
             fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
         // What stays here, too (owner, finalize 0.5.0 S1).
-        Text("Not sent: who you are (Lyrics has no account), your Library, your listening history, notes and moments, or " +
+        Text("Not sent: who you are (Cawback has no account), your Library, your listening history, notes and moments, or " +
             "anything about other songs. As with every lookup, lrclib.net sees your internet address.",
             fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
         val dur = Math.round(body.optDouble("duration", 0.0)).toInt()
@@ -402,7 +402,7 @@ private fun LyricsDisplaySettings() {
 private fun TimingSettings(repo: LyricsRepo, output: Output) {
     val settings = LocalSettings.current
     Text(
-        "Some headphones play a little late. Set each one once and Lyrics applies it whenever it's connected. Playing through: ${output.label}.",
+        "Some headphones play a little late. Set each one once and Cawback applies it whenever it's connected. Playing through: ${output.label}.",
         fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp),
     )
     Output.entries.forEach { out ->
@@ -449,15 +449,15 @@ private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> U
     if (chosen != "") {
         val name = MediaApps.label(context, chosen)
         Text(
-            if (settings.onlyPlayer) "Lyrics follows only $name. Podcasts and other apps are never looked up."
-            else "Lyrics prefers $name, and follows other apps when they play.",
+            if (settings.onlyPlayer) "Cawback follows only $name. Podcasts and other apps are never looked up."
+            else "Cawback prefers $name, and follows other apps when they play.",
             fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 10.dp),
         )
         FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Choice("Only $name", settings.onlyPlayer) { settings.followOnlyPlayer(true); onFollowChanged() }
             Choice("Other apps too", !settings.onlyPlayer) { settings.followOnlyPlayer(false); onFollowChanged() }
         }
-        Box(Modifier.padding(top = 12.dp)) { Washed("Add \"Lyrics + $name\" to the home screen", onPinShortcut) }
+        Box(Modifier.padding(top = 12.dp)) { Washed("Add \"Cawback + $name\" to the home screen", onPinShortcut) }
     }
     if (chosen == "" || !settings.onlyPlayer) {
         Text("Never follow", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
@@ -474,8 +474,8 @@ private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> U
 @Composable
 private fun AccessSettings(hasAccess: Boolean, onGrant: () -> Unit) {
     Text(
-        if (hasAccess) "On. Scarlet Lyrics can see the song's title, artist, album, length, position and cover. It never reads your notifications."
-        else "Off. Scarlet Lyrics needs it to see what's playing.",
+        if (hasAccess) "On. Cawback can see the song's title, artist, album, length, position and cover. It never reads your notifications."
+        else "Off. Cawback needs it to see what's playing.",
         fontFamily = Inter, fontSize = 17.sp, color = L.text,
     )
     Box(Modifier.padding(top = 12.dp)) { Washed("Open the setting", onGrant) }
@@ -498,7 +498,7 @@ private fun HistorySettings() {
         History.Mode.entries.forEach { m -> Choice(m.label, settings.historyMode == m) { settings.chooseHistory(m) } }
     }
     if (settings.historyMode == History.Mode.ALWAYS) {
-        Text("Counts what you play even while Lyrics is closed.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+        Text("Counts what you play even while Cawback is closed.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
     }
     if (settings.historyMode != History.Mode.OFF) {
         val until = settings.historyPausedUntil
@@ -521,7 +521,7 @@ private fun HistorySettings() {
             History.KEEP_DAYS.forEach { d -> Choice(History.keepLabel(d), settings.keepPlaysDays == d) { settings.chooseKeepPlays(d) } }
         }
         if (settings.keepPlaysDays > 0) {
-            Text("Older plays are removed when Lyrics opens. Songs, notes and moments stay.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+            Text("Older plays are removed when Cawback opens. Songs, notes and moments stay.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
         }
     }
     if (hasLibrary && !SettingsWork.libraryBusy()) {   // one Library job at a time
@@ -625,7 +625,7 @@ private fun ConfirmedWork(
 
 @Composable
 private fun AboutSettings() {
-    Text("Scarlet Lyrics ${BuildConfig.VERSION_NAME}", fontFamily = Inter, fontSize = 17.sp, color = L.text)
+    Text("Cawback ${BuildConfig.VERSION_NAME}", fontFamily = Inter, fontSize = 17.sp, color = L.text)
     Text("Lyrics from LRCLIB (lrclib.net), the only place this app connects to.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
     Text("Free and open source (GPL-3.0). By The Scarlet Coder, thescarletcoder.com", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
 }

@@ -251,7 +251,7 @@ private suspend fun share(context: Context, body: String, name: String, format: 
 /** Clipboard, marked sensitive so Android doesn't show it in the copy preview. */
 private fun copy(context: Context, body: String): String {
     if (body.length > 500_000) return "That's too big to copy. Save it as a file instead."
-    val clip = ClipData.newPlainText("Scarlet Lyrics library", body)
+    val clip = ClipData.newPlainText("Cawback library", body)
     clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
     return "Copied."
@@ -371,7 +371,7 @@ fun LibraryBackupSection() {
                                     WorkRunner.Result(false, when (e) {
                                         is LibraryKey.Gone -> KEY_GONE
                                         is LibraryBackup.WrongPassphrase -> "That passphrase doesn't open this backup, or the file is damaged or incomplete."
-                                        is LibraryBackup.NotABackup -> { forget(); mode = null; restoreFrom = null; "That file isn't a Scarlet Lyrics Library backup." }
+                                        is LibraryBackup.NotABackup -> { forget(); mode = null; restoreFrom = null; "That file isn't a Cawback Library backup." }
                                         is LibraryBackup.Unreadable -> e.message ?: "This backup can't be read."
                                         is IllegalArgumentException -> "This backup can't be read."
                                         else -> "The restore didn't finish. Your Library wasn't changed."
@@ -414,7 +414,7 @@ private fun Secret(value: TextFieldValue, hint: String, onChange: (TextFieldValu
 }
 
 /**
- * Settings > What's on this device (scope section 8): everything Scarlet Lyrics keeps, with real counts, and where
+ * Settings > What's on this device (scope section 8): everything Cawback keeps, with real counts, and where
  * each one goes. [refresh] gives a value that changes when Settings work finished (cleared, deleted or restored data), so
  * the counts follow.
  */
@@ -441,7 +441,7 @@ fun OnThisDevice(repo: LyricsRepo, refresh: () -> Any?) {
         "Saved lyrics: " + n(f.cached, "song"),
         "Lyrics already fetched, so a song you've played before shows up at once and works offline, with your " +
             "\"Other versions\" picks and timing nudges. Each one includes the song's title and artist. Encrypted on this device; " +
-            "Android's backups are switched off for Lyrics; your picks and timing go into a Library backup only if you make one.",
+            "Android's backups are switched off for Cawback; your picks and timing go into a Library backup only if you make one.",
     )
     val lib = f.library
     Item(
@@ -451,14 +451,14 @@ fun OnThisDevice(repo: LyricsRepo, refresh: () -> Any?) {
         "Encrypted, with a key kept by Android's secure key store that never leaves this device. Listening history is " +
             (when (settings.historyMode) {
                 com.thescarletcoder.lyrics.library.History.Mode.OFF -> "off"
-                com.thescarletcoder.lyrics.library.History.Mode.WHILE_OPEN -> "on while Lyrics is open"
+                com.thescarletcoder.lyrics.library.History.Mode.WHILE_OPEN -> "on while Cawback is open"
                 com.thescarletcoder.lyrics.library.History.Mode.ALWAYS -> "on, always"
             }) + (if (settings.historyPaused()) " (paused)" else "") +
             ". It leaves only when you export it or back it up, and only to where you send it.",
     )
     if (f.exports > 0) Item(
         "Last shared export: " + n(f.exports, "file"),
-        "Kept in Lyrics' own temporary storage so the app you shared it with could open it. Replaced at the next export and removed after a day; Android can clear it sooner.",
+        "Kept in Cawback's own temporary storage so the app you shared it with could open it. Replaced at the next export and removed after a day; Android can clear it sooner.",
     )
     Item(
         "Your settings",

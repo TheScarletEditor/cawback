@@ -2,6 +2,19 @@
 
 Against `docs/LYRICS-0.4.1-PLAN.md`. Newest first. scarlet-hq mirrors these (hq-log). Decisions before 0.4.1 live in scarlet-hq (D-001 to D-043) and `docs/FINALIZE-0.4.0.md`.
 
+## 2026-10-14 (the owner, /finalize 0.5.0 Stage 6: Cawback in this release)
+
+Against `docs/FINALIZE-0.5.0.md` (Ship) and scarlet-hq brand-system D-036 (repo rename) and scarlet-lyrics D-053 (the name).
+
+| # | Question | Answer (word for word) | Effect | Check |
+| --- | --- | --- | --- | --- |
+| Q41 | Release title (Scarlet Lyrics or Cawback) | "We should do the full rename in this release" | 0.5.0 ships as Cawback; built as its own slice with the slice checks and a full QA re-run. Package id unchanged (D-053). | grep: no "Scarlet Lyrics" in app source; screenshots. |
+| Q42 | A release-notes line for the LRCLIB pacing (S6) | "Add the line (Recommended)" | Under Privacy: "Cawback follows LRCLIB's rules for apps: one request at a time, and it waits when LRCLIB asks. Other versions says \"LRCLIB is busy\" when that happens." (asked with "Lyrics", renamed by Q41) | RELEASE-NOTES.md. |
+| Q43 | Which in-app text becomes Cawback | "Every self-reference (Recommended)" | Launcher label, header, About, permission and firewall texts, backup and export messages, the export header, "Cawback follows/prefers", the "Cawback + your app" shortcut. "Lyrics" stays where it means the words; test copies (Lyrics Lab, Lyrics Smoke) and code names stay. | grep; JVM export test; screenshots. |
+| Q44 | GitHub repo and local folder | "Yes, in this release (Recommended)" | scarlet-lyrics becomes cawback on GitHub (command shown first), ScarletLyrics becomes Cawback locally, with the scripts and hub files that point at it; APK cawback-<version>.apk plus a fixed-name cawback.apk on every release. | assembleDebug in the new folder; versions.ps1 finds it; the stable link downloads. |
+| Q45 | The old name in public | "Launch as Cawback (Recommended)" | No "formerly" lines; the four old releases are retitled "Cawback 0.1.0" to "Cawback 0.4.1" at publish (files keep their names). | gh release list. |
+| Q46 | User-Agent | "Cawback in the User-Agent (Recommended)" | "Cawback/<version> (The Scarlet Coder; +https://thescarletcoder.com)". Backups from Scarlet Lyrics still restore (format unchanged). | LrcLib.kt; restore of an old backup on the emulator. |
+
 ## 2026-10-14 (the owner, /prep resume: next steps and the tuning log)
 
 Against `docs/LYRICS-LOGGER-PLAN.md`. Earlier owner answers on the log (planning chat, 2026-10-14): the "this song is right / still wrong" tap, yes; the cap of 90 days or 5 MB, yes.

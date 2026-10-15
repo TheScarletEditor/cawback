@@ -81,7 +81,7 @@ class LyricsActivity : ComponentActivity() {
     private lateinit var nowPlaying: NowPlaying
     private lateinit var settings: LyricsSettings
     private lateinit var route: AudioRoute
-    /** Times plays while Lyrics is on screen; records only in "only while Lyrics is open" (History.records). */
+    /** Times plays while Cawback is on screen; records only in "only while Cawback is open" (History.records). */
     private lateinit var recorder: PlayRecorder
     private val access = mutableStateOf(false)
     /** Flip half-folded on a table: where the fold is, in this window (px from the top), else null (Flex mode). */
@@ -178,7 +178,7 @@ class LyricsActivity : ComponentActivity() {
     }
 
     /**
-     * Scarlet Command's Listen button and the "Lyrics + your app" shortcuts send this: open your music app in the other
+     * Scarlet Command's Listen button and the "Cawback + your app" shortcuts send this: open your music app in the other
      * half of the screen. True if it did. (OPEN_SPOTIFY is the older name, still understood.)
      */
     private fun maybeOpenPlayer(i: Intent?): Boolean {
@@ -199,9 +199,9 @@ class LyricsActivity : ComponentActivity() {
         runCatching { startActivity(launch) }
     }
 
-    /** "Lyrics + <your app>": opens Lyrics with [pkg] alongside. */
+    /** "Cawback + <your app>": opens Cawback with [pkg] alongside. */
     private fun playerShortcut(pkg: String) = android.content.pm.ShortcutInfo.Builder(this, SHORTCUT_ID)
-        .setShortLabel("Lyrics + " + MediaApps.label(this, pkg))
+        .setShortLabel("Cawback + " + MediaApps.label(this, pkg))
         .setIcon(android.graphics.drawable.Icon.createWithResource(this, R.mipmap.ic_launcher))
         .setIntent(Intent(this, LyricsActivity::class.java).setAction(ACTION_WITH_PLAYER).putExtra(EXTRA_OPEN_PLAYER, true))
         .build()
@@ -214,7 +214,7 @@ class LyricsActivity : ComponentActivity() {
         runCatching { sm.dynamicShortcuts = listOf(playerShortcut(pkg)) }
     }
 
-    /** Settings: put "Lyrics + <your app>" on the home screen (Android asks first). */
+    /** Settings: put "Cawback + <your app>" on the home screen (Android asks first). */
     private fun pinShortcut() {
         val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
         val pkg = settings.effectivePlayer() ?: return
@@ -610,7 +610,7 @@ private fun Content(
             Shown.NotFound -> EmptyState("No lyrics found", "LRCLIB doesn't have this one yet.", "Search by hand", onPick)
             Shown.Offline -> EmptyState(
                 "Can't reach LRCLIB",
-                "Check your internet connection. If you use a firewall app, let Scarlet Lyrics reach lrclib.net.",
+                "Check your internet connection. If you use a firewall app, let Cawback reach lrclib.net.",
                 "Try again", onRetry,
             )
             is Shown.Found -> when {

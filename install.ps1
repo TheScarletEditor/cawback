@@ -1,4 +1,4 @@
-# Build Scarlet Lyrics and install it over USB.
+# Build Cawback and install it over USB.
 #
 # Default is the `personal` build: release-optimized (fast, not debuggable) but signed with this laptop's debug key,
 # so it installs over earlier debug installs and keeps saved lyrics. Never install a `release` build on the owner's
@@ -25,11 +25,11 @@ if (-not $Serial) {
 
 $type = if ($Debug) { 'debug' } else { 'personal' }
 $task = if ($Debug) { 'assembleDebug' } else { 'assemblePersonal' }
-Write-Host "Building Scarlet Lyrics ($type)..."
+Write-Host "Building Cawback ($type)..."
 cmd /c ".\gradlew.bat :lyrics:$task --console=plain -q"
 if ($LASTEXITCODE -ne 0) { Write-Host "Build failed."; exit 1 }
 
 Write-Host "Installing..."
 & $adb -s $Serial install -r ".\lyrics\build\outputs\apk\$type\lyrics-$type.apk"
 if ($LASTEXITCODE -ne 0) { Write-Host "Install failed."; exit 1 }
-Write-Host "Done. Scarlet Lyrics ($type) is installed."
+Write-Host "Done. Cawback ($type) is installed."

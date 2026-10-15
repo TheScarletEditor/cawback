@@ -2,7 +2,7 @@
 #
 # Lyrics Lab (com.thescarletcoder.lyrics.labtest) is a separate app: its own database, settings and key. The tests
 # wipe and rewrite ITS Library, never the real app's. It has no network, no launcher icon and no notification access. It is
-# uninstalled again when the run ends. The installed Scarlet Lyrics is never installed, changed or uninstalled by this.
+# uninstalled again when the run ends. The installed Cawback is never installed, changed or uninstalled by this.
 #
 # Run:
 #   powershell -ExecutionPolicy Bypass -File .\labtest.ps1                 (the one connected device, every on-device test)
