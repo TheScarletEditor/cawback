@@ -60,6 +60,7 @@ Built in six slices with /prep (`docs/LYRICS-0.5.1-PLAN.md`, answers Q47 to Q60 
 | C9 | Cleanup | mechanical | LyricsStore.kt | The "has the user's timing" test written four times, slightly differently | Entry.hasTiming used by isYours, fixOf and merged | stage 3 |
 | C10 | Cleanup | skipped | LyricsActivity.kt, Chrome.kt, Panels.kt, LyricsStore.kt | Skip and clear results copied onto the screen instead of returned whole; the Fix lines target kept by time instead of index (would change lines sharing a time); one null-name helper for two different jobs; the share job's copied fields (kept on purpose, finalize 0.5.0 C8); one store instance at startup; lazy times in apply; the share body built twice | Larger restructuring or a behaviour change this late; proposed for later | |
 | C11 | Cleanup | question | docs/release-0.5.1/RELEASE-NOTES.md | Release notes draft | Q6: approved | stage 3 |
+| Q1-1 | QA | mechanical | Player.kt | lintRelease: two new UseKtx warnings since the base (the two new settings writes) | Every settings write in the file uses the KTX edit { } (same behaviour; 13 older warnings gone too) | QA |
 
 ## Questions
 

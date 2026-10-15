@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import androidx.core.content.edit
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -63,31 +64,31 @@ class LyricsSettings(context: Context) {
     var cleanUnused by mutableStateOf(p.getBoolean("clean_unused", false)); private set
     /** When Cawback began noting when saved lyrics are opened (0.5.1): the cleanup never counts from before it. */
     val usedTrackedSince: Long = p.getLong("used_since", 0L).takeIf { it > 0 }
-        ?: System.currentTimeMillis().also { p.edit().putLong("used_since", it).apply() }
+        ?: System.currentTimeMillis().also { p.edit { putLong("used_since", it) } }
 
-    fun choosePlayer(pkg: String) { player = pkg; p.edit().putString("player", pkg).apply() }
-    fun followOnlyPlayer(on: Boolean) { onlyPlayer = on; p.edit().putBoolean("only_player", on).apply() }
+    fun choosePlayer(pkg: String) { player = pkg; p.edit { putString("player", pkg) } }
+    fun followOnlyPlayer(on: Boolean) { onlyPlayer = on; p.edit { putBoolean("only_player", on) } }
     fun setIgnored(pkg: String, ignore: Boolean) {
         ignored = if (ignore) ignored + pkg else ignored - pkg
-        p.edit().putStringSet("ignored", ignored).apply()
+        p.edit { putStringSet("ignored", ignored) }
     }
-    fun chooseTextSize(i: Int) { textSize = i.coerceIn(0, 3); p.edit().putInt("text_size", textSize).apply() }
-    fun keepOn(on: Boolean) { keepScreenOn = on; p.edit().putBoolean("keep_screen_on", on).apply() }
-    fun cleanUnusedLyrics(on: Boolean) { cleanUnused = on; p.edit().putBoolean("clean_unused", on).apply() }
-    fun hidePastLines(on: Boolean) { hidePast = on; p.edit().putBoolean("hide_past", on).apply() }
-    fun chooseFollowDelay(s: Int) { followDelaySec = s; p.edit().putInt("follow_delay", s).apply() }
+    fun chooseTextSize(i: Int) { textSize = i.coerceIn(0, 3); p.edit { putInt("text_size", textSize) } }
+    fun keepOn(on: Boolean) { keepScreenOn = on; p.edit { putBoolean("keep_screen_on", on) } }
+    fun cleanUnusedLyrics(on: Boolean) { cleanUnused = on; p.edit { putBoolean("clean_unused", on) } }
+    fun hidePastLines(on: Boolean) { hidePast = on; p.edit { putBoolean("hide_past", on) } }
+    fun chooseFollowDelay(s: Int) { followDelaySec = s; p.edit { putInt("follow_delay", s) } }
     fun nudgeOutput(out: Output, deltaMs: Int) {
         val next = (delayFor(out) + deltaMs).coerceIn(-2000, 2000)
         when (out) {
-            Output.SPEAKER -> { delaySpeaker = next; p.edit().putInt("delay_speaker", next).apply() }
-            Output.WIRED -> { delayWired = next; p.edit().putInt("delay_wired", next).apply() }
-            Output.BLUETOOTH -> { delayBluetooth = next; p.edit().putInt("delay_bluetooth", next).apply() }
+            Output.SPEAKER -> { delaySpeaker = next; p.edit { putInt("delay_speaker", next) } }
+            Output.WIRED -> { delayWired = next; p.edit { putInt("delay_wired", next) } }
+            Output.BLUETOOTH -> { delayBluetooth = next; p.edit { putInt("delay_bluetooth", next) } }
         }
     }
-    fun chooseHistory(m: History.Mode) { historyMode = m; p.edit().putString(History.MODE, m.id).apply() }
+    fun chooseHistory(m: History.Mode) { historyMode = m; p.edit { putString(History.MODE, m.id) } }
     /** Pause for [ms] (or History.PAUSED_UNTIL_ON); 0 resumes. */
-    fun pauseHistory(untilMs: Long) { historyPausedUntil = untilMs; p.edit().putLong(History.PAUSED, untilMs).apply() }
-    fun chooseKeepPlays(days: Int) { keepPlaysDays = days; p.edit().putInt(History.KEEP, days).apply() }
+    fun pauseHistory(untilMs: Long) { historyPausedUntil = untilMs; p.edit { putLong(History.PAUSED, untilMs) } }
+    fun chooseKeepPlays(days: Int) { keepPlaysDays = days; p.edit { putInt(History.KEEP, days) } }
     fun historyPaused(now: Long = System.currentTimeMillis()) = now < historyPausedUntil
 
     fun delayFor(out: Output) = when (out) { Output.SPEAKER -> delaySpeaker; Output.WIRED -> delayWired; Output.BLUETOOTH -> delayBluetooth }
