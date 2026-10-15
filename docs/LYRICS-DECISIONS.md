@@ -2,6 +2,22 @@
 
 Against `docs/LYRICS-0.4.1-PLAN.md`. Newest first. scarlet-hq mirrors these (hq-log). Decisions before 0.4.1 live in scarlet-hq (D-001 to D-043) and `docs/FINALIZE-0.4.0.md`.
 
+## 2026-10-14 (the owner, priorities after 0.5.0 and the 0.5.1 scope)
+
+Against `docs/LYRICS-0.5.1-PLAN.md`. The owner reviewed the ranked list of remaining Lyrics work (scarlet-hq) and answered: "ok, 1-3 now. For the #5 items: dont delete saved lyrics ever, or 90 days with a setting toggle that is default off - i have tons I listen to in rotation over several months. Lets do the tab style now, code cleanup, hide the entries. Keep it back to lyrics, and un-capitalize it. Do the necessary fix cuts now as well. Agreed close old/shipped/scrapped ideas".
+
+| # | Question | Answer (word for word) | Effect | Check |
+| --- | --- | --- | --- | --- |
+| Q47 | What to build now | "ok, 1-3 now" plus the #5 items below | 0.5.1: shared fixes replace the record, Apache notices, the ScarletControls drift, plus the items below. The website runs in its own session. Then the tuning log, Fix words and the rest in the ranked order (scarlet-hq). | Plan slices. |
+| Q48 | Pruning saved lyrics | "dont delete saved lyrics ever, or 90 days with a setting toggle that is default off" | Never deleted by default. A setting deletes saved lyrics unused for 90 days; off by default. | JVM tests; upgrade keeps everything. |
+| Q49 | Tab style | "Underline everywhere (Recommended)" | Songs and Stats take Settings' underline style. | Screenshots. |
+| Q50 | Deferred cleanup C9 to C11 | "code cleanup"; "Drop parallel lookups (Recommended)" | C9, C10 and C11 without parallel lookups (D-057). | Build, tests, review. |
+| Q51 | Bluetooth and Google in "Your music app" | "hide the entries" | Hidden from the music app lists. | JVM test on the filter; emulator. |
+| Q52 | "Back to Lyrics" | "Keep it back to lyrics, and un-capitalize it" | "Back to lyrics". | grep; screenshot. |
+| Q53 | Skipped sections | "Do the necessary fix cuts now"; "Allow big jumps (Recommended)", "Jump at the gap (Recommended)", "Skip lines (Recommended)" | A tapped line may move up to the song's length (Earlier and Later stay at 10 s); the change between two far-apart tapped lines happens at the biggest pause between them; lines the song doesn't have can be marked "not in this song" in Fix lines, hidden, saved with the timing and left out of Share your fix. | JVM tests on the model; emulator. |
+| Q54 | Old ideas | "Agreed close old/shipped/scrapped ideas" | "Share this fix", "local lyric corrections" and "prefer the fuller record" closed in scarlet-hq IDEAS. | IDEAS.md. |
+| Q55 | Version | "0.5.1 (Recommended)" | 0.5.1; Fix words is 0.6.0. | build.gradle at /finalize. |
+
 ## 2026-10-14 (the owner, /finalize 0.5.0 Stage 6: Cawback in this release)
 
 Against `docs/FINALIZE-0.5.0.md` (Ship) and scarlet-hq brand-system D-036 (repo rename) and scarlet-lyrics D-053 (the name).
