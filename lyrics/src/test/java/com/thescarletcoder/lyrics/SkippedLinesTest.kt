@@ -33,6 +33,14 @@ class SkippedLinesTest {
         assertEquals(listOf(20_000L), restored.skips)
     }
 
+    @Test fun aMissingNameSavedBy050IsEmptyNotTheWordNull() {
+        // 0.5.0 stored a JSON null from LRCLIB as the text "null" (finalize 0.5.1 R1).
+        val o = org.json.JSONObject("""{"pinned":true,"c":{"id":5,"track":"Song","artist":"Artist","album":"null","duration":120}}""")
+        val e = LyricsStore.decode(o)
+        assertEquals("", e.candidate!!.album)
+        assertEquals("", ShareFix.body(e.candidate!!, emptyList()).getString("albumName"))
+    }
+
     @Test fun clearingBringsThemBack() {
         val f = LyricsStore.Entry(c, pinned = false, offsetMs = 0, fetchedAt = 1, skips = listOf(20_000))
         val shown = Shown.Found(c, LyricsRepo.linesOf(c, f.skips), true, false, 0, skips = f.skips)

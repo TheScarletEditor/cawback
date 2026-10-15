@@ -73,6 +73,13 @@ class YourTimingTest {
         assertEquals(listOf(10_000L, 20_000L, 30_000L, 63_000L, 65_000L, 68_000L, 80_000L), moved)
     }
 
+    @Test fun theJumpPointIsFoundBetweenTheTwoLines() {
+        val times = listOf(1_000L, 5_000, 5_000, 9_000, 20_000, 21_000, 40_000)
+        assertEquals(20_000L, YourTiming.stepAt(times, 5_000, 21_000))   // 9 s to 20 s is the longest pause
+        assertEquals(40_000L, YourTiming.stepAt(times, 21_000, 40_000))
+        assertEquals(null, YourTiming.stepAt(times, 22_000, 39_000))      // no two lines between
+    }
+
     @Test fun aSmallDifferenceIsStillSpreadEvenly() {
         val a = listOf(Anchor(10_000, 0), Anchor(30_000, -1_000))
         assertEquals(20_500L, YourTiming.apply(lines, 0, a).first { it.text == "line 1" }.timeMs)

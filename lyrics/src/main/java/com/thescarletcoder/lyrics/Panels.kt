@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.runtime.key
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
@@ -42,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -443,17 +446,24 @@ private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> U
     val context = LocalContext.current
     val settings = LocalSettings.current
     val chosen = settings.effectivePlayer() ?: ""
-    val all = remember { MediaApps.all(context) }
-    val launchable = remember(all) { MediaApps.launchable(context, all.map { it.pkg }) }
+    // Asking Android about every app is binder work: done off the main thread, once per visit.
+    val found by produceState<Pair<List<MediaApps.App>, Set<String>>?>(null) {
+        value = withContext(Dispatchers.IO) { MediaApps.all(context).let { it to MediaApps.launchable(context, it.map { a -> a.pkg }) } }
+    }
     // Read again on coming back (a song started in another app moves that app up).
-    var playing by remember { mutableStateOf(MediaApps.playing(context)) }
-    LifecycleResumeEffect(Unit) { playing = MediaApps.playing(context); onPauseOrDispose { } }
-    // Apps set during this visit stay in view until it ends, so undoing an ignore never makes the app vanish.
-    val kept = remember { mutableSetOf<String>() }
-    kept += settings.ignored + setOfNotNull(chosen.ifEmpty { null })
-    val apps = MediaApps.lists(all, playing, kept.toSet(), launchable)
-    AppChoices(apps, { a -> Choice(a.label, chosen == a.pkg) { settings.choosePlayer(a.pkg); onFollowChanged() } }) {
-        Choice("Whatever is playing", chosen == "") { settings.choosePlayer(""); onFollowChanged() }
+    var playing by remember { mutableStateOf(emptySet<String>()) }
+    val scope = rememberCoroutineScope()
+    LifecycleResumeEffect(Unit) {
+        val job = scope.launch { playing = withContext(Dispatchers.IO) { MediaApps.playing(context) } }
+        onPauseOrDispose { job.cancel() }
+    }
+    // Apps set during this visit stay in view until it ends (rotation included), so undoing an ignore never makes the app vanish.
+    var kept by rememberSaveable { mutableStateOf(settings.ignored.toList() + listOfNotNull(chosen.ifEmpty { null })) }
+    fun keep(pkg: String?) { kept = (kept + listOfNotNull(chosen.ifEmpty { null }, pkg)).distinct() }   // the old choice too
+    val (all, launchable) = found ?: (emptyList<MediaApps.App>() to emptySet())
+    val apps = MediaApps.lists(all, playing, kept.toSet() + settings.ignored + setOfNotNull(chosen.ifEmpty { null }), launchable)
+    AppChoices(apps, { a -> Choice(a.label, chosen == a.pkg) { keep(a.pkg); settings.choosePlayer(a.pkg); onFollowChanged() } }) {
+        Choice("Whatever is playing", chosen == "") { keep(null); settings.choosePlayer(""); onFollowChanged() }
     }
     if (chosen != "") {
         val name = MediaApps.label(context, chosen)
@@ -474,7 +484,7 @@ private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> U
         val others = MediaApps.Lists(apps.top.filter { it.pkg != chosen }, apps.more)
         AppChoices(others, { a ->
             val off = a.pkg in settings.ignored
-            Choice(if (off) "${a.label}: ignored" else a.label, off) { settings.setIgnored(a.pkg, !off); onFollowChanged() }
+            Choice(if (off) "${a.label}: ignored" else a.label, off) { keep(a.pkg); settings.setIgnored(a.pkg, !off); onFollowChanged() }
         })
     }
 }
@@ -493,7 +503,10 @@ private fun AppChoices(apps: MediaApps.Lists, chip: @Composable (MediaApps.App) 
         extra()
     }
     if (apps.more.isEmpty()) return
-    Box(Modifier.padding(top = 10.dp)) { Washed(if (open) "Fewer apps" else "More apps", { open = !open }, small = true) }
+    Box(Modifier.padding(top = 10.dp)) {
+        Washed(if (open) "Fewer apps" else "More apps", { open = !open }, small = true,
+            modifier = Modifier.semantics { stateDescription = if (open) "Expanded" else "Collapsed" })   // TalkBack says it folds
+    }
     if (open) FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         apps.more.forEach { chip(it) }
     }

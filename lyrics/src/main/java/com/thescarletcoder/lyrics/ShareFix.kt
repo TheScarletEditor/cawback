@@ -75,6 +75,12 @@ object ProofOfWork {
  * Then the version's lyrics with the user's timing.
  */
 object ShareFix {
+    /**
+     * A version LRCLIB can be told about usefully (owner, finalize 0.5.1 Q5): one with a title and an artist. A fix shared
+     * to a nameless version would land on it, but no lookup ever finds it. A missing album alone is fine.
+     */
+    fun shareable(c: Candidate) = c.track.isNotBlank() && c.artist.isNotBlank()
+
     /** "[01:02.35] words": the lines with their (user-timed) times; blank lines keep their time (instrumental gaps). */
     fun lrc(timed: List<LyricLine>): String = timed.filter { it.timeMs != null }.joinToString("\n") { l ->
         // Whole hundredths first, so 59.995 s is [01:00.00], never [00:60.00].

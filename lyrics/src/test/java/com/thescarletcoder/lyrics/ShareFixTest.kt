@@ -68,6 +68,13 @@ class ShareFixTest {
         assertEquals(0.0, body.getDouble("duration"), 0.001)   // not the song's length: that would miss the version
     }
 
+    @Test fun onlyANamedVersionCanBeShared() {
+        val c = Candidate(9, "Song", "Artist", "", 200.0, false, null, "[00:01.00] a")
+        assertEquals(true, ShareFix.shareable(c))                       // no album is fine
+        assertEquals(false, ShareFix.shareable(c.copy(track = " ")))
+        assertEquals(false, ShareFix.shareable(c.copy(artist = "")))
+    }
+
     @Test fun aMissingAlbumIsEmptyNotTheWordNull() {
         val c = LrcLib.parse(org.json.JSONObject("""{"id":9,"trackName":"Song","artistName":"Artist","albumName":null,"duration":200}"""))
         assertEquals("", c.album)

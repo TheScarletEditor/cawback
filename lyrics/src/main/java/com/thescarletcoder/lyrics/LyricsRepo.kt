@@ -195,9 +195,11 @@ class LyricsRepo(private val store: LyricsStore) {
         return load(t)
     }
 
+    /** Earlier or Later. Returns the new nudge, or null when nothing changed (at the limit, or nothing saved). */
     suspend fun nudge(t: Track, deltaMs: Long): Long? = edit {
         val e = store.load(t.key) ?: LyricsStore.Entry(null, false, 0, 0)
         val next = YourTiming.nudged(e.offsetMs, deltaMs)
+        if (next == e.offsetMs) return@edit null   // at the limit: nothing changed or saved, so a "Sent on" mark stays (finalize 0.5.1 R2)
         store.save(t.key, e.copy(offsetMs = next, sentAt = 0))   // anchors move with it: they're relative to the base
         next
     }

@@ -299,11 +299,14 @@ class LyricsStore(context: Context) {
             return Entry(null, fix.pinned, fix.offsetMs, 0, anchors = fix.anchors, pendingId = fix.versionId, tapped = fix.tapped, skips = fix.skips)
         }
 
+        private fun named(o: JSONObject, key: String) = o.optString(key).takeUnless { it == "null" || o.isNull(key) }.orEmpty()
+
         /** An entry as read; entries from before 0.5.0 have no matching version and no anchors. */
         fun decode(o: JSONObject): Entry = Entry(
             candidate = o.optJSONObject("c")?.let {
                 Candidate(
-                    it.getLong("id"), it.optString("track"), it.optString("artist"), it.optString("album"),
+                    // 0.5.0 saved a missing name from LRCLIB as the word "null"; a shared fix must send it empty (finalize 0.5.1 R1).
+                    it.getLong("id"), named(it, "track"), named(it, "artist"), named(it, "album"),
                     it.optDouble("duration", 0.0), it.optBoolean("instrumental"),
                     it.optString("plain").ifBlank { null }, it.optString("synced").ifBlank { null },
                 )

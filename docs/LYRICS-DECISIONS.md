@@ -25,6 +25,7 @@ Against `docs/LYRICS-0.5.1-PLAN.md`. The owner reviewed the ranked list of remai
 | Q61 | "Missed it" in Fix lines and Line up now (finalize 0.5.1 Q1) | "Keep it in both (Recommended)" | The line to tap stays until Now, Missed it or Not in this song; nothing moves on by the clock. | Emulator. |
 | Q62 | Earlier and Later after a big Line up now move (finalize 0.5.1 Q2) | "Never past 10 s further (Recommended)" | Toward zero always, never further out, never more than 10 s past zero. Refines Q53. | YourTimingTest. |
 | Q63 | Verse breaks in a share with skipped lines (finalize 0.5.1 Q3) | "Accept for now (Recommended)" | Plain lyrics rebuilt from the timed lines in that case. | ShareFix test. |
+| Q64 | Sharing a version with no title or artist (finalize 0.5.1 Q5) | "Point to a named version (Recommended)" | No Share for it; a note points to a named version in Other versions; a missing album alone is fine. | ShareFixTest; emulator. |
 
 ## 2026-10-14 (the owner, /finalize 0.5.0 Stage 6: Cawback in this release)
 

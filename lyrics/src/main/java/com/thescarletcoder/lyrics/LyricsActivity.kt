@@ -300,6 +300,7 @@ private fun LyricsScreen(
     // The Settings tab: kept through Tuning and a recreate; set from the way in when Settings opens (0.4.1, Q5).
     var settingsTab by rememberSaveable { mutableStateOf(SettingsTab.LYRICS) }
     var licenseReading by rememberSaveable { mutableIntStateOf(-1) }   // Open source licenses: the one being read, or -1 for the list
+    var libraryTab by rememberSaveable { mutableStateOf(LibTab.SONGS) }   // Songs or Stats, kept through a song page and back
     fun openSettings(way: SettingsWayIn) { settingsTab = way.tab; panel = Panel.SETTINGS }
     // The step out of Settings (not to Tuning; a recreate isn't a step): results of finished work have been seen.
     // Running work keeps going, and its result waits for the next visit.
@@ -493,7 +494,7 @@ private fun LyricsScreen(
                             panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
                                 onPick = { c -> scope.launch { repo.pin(t, c)?.let { shown = it; panel = Panel.NONE } } },   // not saved: the list stays to try again
                                 onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } })
-                            panel == Panel.LIBRARY -> LibraryPanel(
+                            panel == Panel.LIBRARY -> LibraryPanel(libraryTab, { libraryTab = it },
                                 onSong = { songUid = it; songPending = null; songFromLibrary = true; panel = Panel.SONG },
                                 onExport = { panel = Panel.EXPORT },
                                 onSettings = { openSettings(SettingsWayIn.LIBRARY) })

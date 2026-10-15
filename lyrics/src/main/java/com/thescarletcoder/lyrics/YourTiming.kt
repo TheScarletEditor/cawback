@@ -39,20 +39,27 @@ object YourTiming {
         sortedDelta(anchors.sortedBy { it.lineMs }, lineMs, times)
 
     /** [deltaAt] for anchors already sorted by line, so [apply] sorts them once per song, not once per line. */
-    private fun sortedDelta(a: List<Anchor>, lineMs: Long, times: List<Long>): Long {
+    private fun sortedDelta(a: List<Anchor>, lineMs: Long, times: List<Long>, steps: MutableMap<Long, Long?>? = null): Long {
         if (a.isEmpty()) return 0
         if (lineMs <= a.first().lineMs) return a.first().deltaMs
         if (lineMs >= a.last().lineMs) return a.last().deltaMs
         val i = a.indexOfLast { it.lineMs <= lineMs }
         val l = a[i]; val r = a[i + 1]
-        if (Math.abs(r.deltaMs - l.deltaMs) > STEP_MS) stepAt(times, l.lineMs, r.lineMs)?.let { return if (lineMs < it) l.deltaMs else r.deltaMs }
+        if (Math.abs(r.deltaMs - l.deltaMs) > STEP_MS) {
+            val step = if (steps == null) stepAt(times, l.lineMs, r.lineMs) else steps.getOrPut(l.lineMs) { stepAt(times, l.lineMs, r.lineMs) }
+            step?.let { return if (lineMs < it) l.deltaMs else r.deltaMs }
+        }
         val f = (lineMs - l.lineMs).toDouble() / (r.lineMs - l.lineMs)
         return Math.round(l.deltaMs + (r.deltaMs - l.deltaMs) * f)
     }
 
     /** The first line after the longest pause between the lines at [fromMs] and [toMs] (null without lines between). */
     fun stepAt(times: List<Long>, fromMs: Long, toMs: Long): Long? {
-        val span = times.filter { it in fromMs..toMs }
+        // [times] is sorted: find the stretch by binary search, not by scanning every line.
+        val from = times.binarySearch(fromMs).let { if (it < 0) -it - 1 else it }.let { i -> var j = i; while (j > 0 && times[j - 1] == fromMs) j--; j }
+        var to = from
+        while (to < times.size && times[to] <= toMs) to++
+        val span = times.subList(from, to)
         if (span.size < 2) return null
         return span.zipWithNext().maxByOrNull { (x, y) -> y - x }!!.second
     }
@@ -76,10 +83,12 @@ object YourTiming {
         if (baseMs == 0L && anchors.isEmpty()) return lines
         val times = lines.mapNotNull { it.timeMs }.sorted()
         val sorted = anchors.sortedBy { it.lineMs }
+        // Each jump point worked out once per pair of anchors, not once per line (finalize 0.5.1 R3: a huge record).
+        val steps = HashMap<Long, Long?>()
         var floor = Long.MIN_VALUE
         return lines.map { line ->
             val t = line.timeMs ?: return@map line
-            val offset = (baseMs + sortedDelta(sorted, t, times)).coerceIn(-ANCHOR_LIMIT_MS, ANCHOR_LIMIT_MS)
+            val offset = (baseMs + sortedDelta(sorted, t, times, steps)).coerceIn(-ANCHOR_LIMIT_MS, ANCHOR_LIMIT_MS)
             val moved = maxOf((t - offset).coerceAtLeast(0), floor)
             floor = moved
             line.copy(timeMs = moved)

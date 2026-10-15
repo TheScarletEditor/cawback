@@ -109,11 +109,12 @@ private fun KeyGoneNotice(onStartFresh: () -> Unit) {
     }
 }
 
-private enum class LibTab(val label: String) { SONGS("Songs"), STATS("Stats") }
+internal enum class LibTab(val label: String) { SONGS("Songs"), STATS("Stats") }
 private enum class Sort(val label: String) { RECENT("Last played"), MOST("Most played"), AZ("A to Z") }
 
+/** [tab] lives with the screen, so going back from a song or the export lands on the same tab (finalize 0.5.1 R6). */
 @Composable
-fun LibraryPanel(onSong: (String) -> Unit, onExport: () -> Unit, onSettings: () -> Unit) {
+internal fun LibraryPanel(tab: LibTab, onTab: (LibTab) -> Unit, onSong: (String) -> Unit, onExport: () -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current
     val settings = LocalSettings.current
     val exists = remember { LibraryDatabase.exists(context) }
@@ -133,9 +134,8 @@ fun LibraryPanel(onSong: (String) -> Unit, onExport: () -> Unit, onSettings: () 
             return@Column
         }
         val repo = rememberLibrary() ?: return@Column
-        var tab by rememberSaveable { mutableStateOf(LibTab.SONGS) }   // kept through rotation and folding
         Box(Modifier.padding(top = 4.dp)) {   // the same tabs as Settings (0.5.1, owner Q49)
-            UnderlineTabs(LibTab.entries.map { it.label }, tab.ordinal) { tab = LibTab.entries[it] }
+            UnderlineTabs(LibTab.entries.map { it.label }, tab.ordinal) { onTab(LibTab.entries[it]) }
         }
         if (settings.historyMode == History.Mode.OFF) {
             Text("Listening history is off, so new plays aren't counted.", fontFamily = Inter, fontSize = 14.sp, color = L.soft,

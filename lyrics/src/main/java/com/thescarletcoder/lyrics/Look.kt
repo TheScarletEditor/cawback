@@ -68,7 +68,7 @@ fun Washed(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, sm
     val shape = RoundedCornerShape(if (small) 20.dp else 24.dp)
     Box(
         modifier.minimumInteractiveComponentSize().heightIn(min = if (small) 40.dp else 48.dp).clip(shape).background(L.wash).border(1.dp, L.washEdge, shape)
-            .clickable(onClick = onClick).padding(horizontal = if (small) 14.dp else 18.dp, vertical = if (small) 8.dp else 12.dp),
+            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = if (small) 14.dp else 18.dp, vertical = if (small) 8.dp else 12.dp),
         contentAlignment = Alignment.Center,
     ) { Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = if (small) 14.sp else 16.sp, color = L.text) }
 }
