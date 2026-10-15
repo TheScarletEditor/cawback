@@ -2,6 +2,19 @@
 
 Against `docs/LYRICS-0.4.1-PLAN.md`. Newest first. scarlet-hq mirrors these (hq-log). Decisions before 0.4.1 live in scarlet-hq (D-001 to D-043) and `docs/FINALIZE-0.4.0.md`.
 
+## 2026-10-14 (the owner, /prep resume: next steps and the tuning log)
+
+Against `docs/LYRICS-LOGGER-PLAN.md`. Earlier owner answers on the log (planning chat, 2026-10-14): the "this song is right / still wrong" tap, yes; the cap of 90 days or 5 MB, yes.
+
+| # | Question | Answer (word for word) | Effect | Check |
+| --- | --- | --- | --- | --- |
+| Q35 | What comes next | "Finish 0.5.0, then logger (Recommended)" | /finalize 0.5.0 resumes at Stage 5 part 2 and ships; the log is built after. | FINALIZE-0.5.0.md complete before slice 1. |
+| Q36 | Where the log code lives | "Public source, TUNING off (Recommended)" | Behind `BuildConfig.TUNING`, like the Tuning screen; never runs in a release build. | JVM test; the smoke copy has no log file. |
+| Q37 | Log storage | "Separate encrypted file (Recommended)" | Its own encrypted file, no Library migration, excluded from backups. | JVM tests (slice 1). |
+| Q38 | Two doc edits not made by the /prep session (0.6.0 plan lessons, LB-2) | "Commit them as docs (Recommended)" | Committed as docs only. | git log. |
+| Q39 | The next public feature after 0.5.0 | "Fix words first (Recommended)" | Fix words comes before the visuals; the visuals move to the version after it (the number is set at their /prep). Changes Q28. | Each gets its own /prep. |
+| Q40 | Timing families in the log | "Log only (Recommended)" | Counted for the log only; the pick does not change. Counting families in the pick stays a separate public change. | Existing matching tests pass unchanged. |
+
 ## 2026-10-12 (the owner, 0.6.0 visuals)
 
 Against `docs/LYRICS-0.6.0-PLAN.md` (draft). Asked in the planning chat: version, light theme visuals, and the first wave (Still, Drift, Spiral, Ink, Random, the rest later). The owner: ".6, pastel for light theme, and yes to the rest".

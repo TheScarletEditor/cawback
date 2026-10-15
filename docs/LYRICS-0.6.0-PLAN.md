@@ -1,6 +1,6 @@
 # Scarlet Lyrics 0.6.0 plan: visuals
 
-Status: **draft, 2026-10-12.** The owner chose the version, the light theme treatment and the first wave (Q28 to Q30 in `LYRICS-DECISIONS.md`). Everything else is **proposed** and gets confirmed after the owner has played with the preview (a private interactive sketch of the lens, Drift, Spiral, Ink and Random) and before slice 1 starts. Nothing here is built yet; 0.5.0 comes first.
+Status: **draft, 2026-10-12.** The owner chose the version, the light theme treatment and the first wave (Q28 to Q30 in `LYRICS-DECISIONS.md`). Everything else is **proposed** and gets confirmed after the owner has played with the preview (a private interactive sketch of the lens, Drift, Spiral, Ink and Random) and before slice 1 starts. Nothing here is built yet; 0.5.0 comes first. **Changed 2026-10-14 (Q39):** Fix words ships before the visuals, so the visuals take the version after it; the number is set at their /prep.
 
 ## Why
 
@@ -120,7 +120,15 @@ Settings (Lyrics tab, Background group): Visual, Intensity, Breathe on the bar (
 
 ## How it would be built (proposed)
 
-minSdk is 34, so AGSL `RuntimeShader` is on every supported device; no fallback path. One shader draws the visual, the lens guard and the finishes; `RenderEffect` blur covers the lens. Pure Kotlin for the timing logic (pulse cap, tempo, breaks, arc) so it's JVM-testable.
+minSdk is 34, so AGSL `RuntimeShader` is on every supported device; no fallback path. One shader draws the visual, the lens guard and the finishes. Pure Kotlin for the timing logic (pulse cap, tempo, breaks, arc) so it's JVM-testable.
+
+Lessons from the preview (it stuttered until these were fixed):
+- **No live blur over the moving background.** A blur re-run every frame over a constantly redrawing surface was the biggest cost. Under the lens the guard already pulls the background close to charcoal or bone, so the blur may not be needed at all; add `RenderEffect` blur only if the device check shows the lens edges or motion under the words.
+- **Render the visual below screen resolution** (about 70% of the view's size) and scale it up. The visuals are soft, the lyrics are separate text and stay sharp.
+- **Never read pixels back from the GPU in the app.** The preview's live readability check had to be made asynchronous; in the app the check belongs in the test harness only.
+- **Frame cap as a divisor of the display's refresh rate** (every 2nd frame at 60 Hz, every 4th at 120 Hz), never by elapsed time, or the pacing goes uneven on 90 and 120 Hz screens.
+- **Nothing snaps.** Line pulses and the bar swell rise over about 0.3 s and fall slowly; an instant jump in brightness or twist reads as a stutter even at a perfect frame rate (seen in the preview).
+- **Skip work that can't show:** a bloom that can't reach a pixel is skipped before any noise is computed; nothing is redrawn while paused and settled.
 
 ## Slices (proposed)
 
