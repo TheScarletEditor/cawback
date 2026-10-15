@@ -44,6 +44,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -321,7 +323,7 @@ internal fun SettingsPanel(
             .padding(horizontal = 24.dp, vertical = 8.dp),
     ) {
         Text("Settings", fontFamily = Fraunces, fontSize = 28.sp, color = L.text)
-        SettingsTabs(tab, onTab)
+        UnderlineTabs(SettingsTab.entries.map { it.label }, tab.ordinal) { onTab(SettingsTab.entries[it]) }
         key(tab) {
             val inner = rememberScrollState()
             Column(Modifier.fillMaxWidth().then(if (short) Modifier else Modifier.weight(1f).verticalScroll(inner))) { Sections() }
@@ -330,23 +332,23 @@ internal fun SettingsPanel(
 }
 
 /**
- * The tab row: 48dp tall tabs that say which one is on. One row when all four fit; in a narrow split or with a large
+ * The tab row (Settings, and the Library since 0.5.1, owner Q49): 48dp tall tabs that say which one is on. One row when all fit; in a narrow split or with a large
  * font they wrap into two rows of two, so no tab is ever hidden (0.4.1, owner: "Two rows when narrow"); one per row
  * when even half a row can't hold a label, so no word is ever broken.
  */
 @Composable
-private fun SettingsTabs(tab: SettingsTab, onTab: (SettingsTab) -> Unit) {
+internal fun UnderlineTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     Layout(
         content = {
-            SettingsTab.entries.forEach { t ->
-                val on = t == tab
+            labels.forEachIndexed { i, label ->
+                val on = i == selected
                 Column(
                     Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
-                        .selectable(selected = on, role = Role.Tab) { if (!on) onTab(t) }
+                        .selectable(selected = on, role = Role.Tab) { if (!on) onSelect(i) }
                         .padding(horizontal = 10.dp, vertical = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(t.label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = if (on) L.text else L.soft)
+                    Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = if (on) L.text else L.soft)
                     Box(Modifier.padding(top = 6.dp).width(24.dp).height(2.dp).background(if (on) L.text else Color.Transparent, RoundedCornerShape(1.dp)))
                 }
             }
@@ -440,10 +442,17 @@ private fun ThemeSettings(theme: ThemeChoice, onTheme: (ThemeChoice) -> Unit) {
 private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> Unit) {
     val context = LocalContext.current
     val settings = LocalSettings.current
-    val apps = remember { MediaApps.all(context) }
     val chosen = settings.effectivePlayer() ?: ""
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        apps.forEach { a -> Choice(a.label, chosen == a.pkg) { settings.choosePlayer(a.pkg); onFollowChanged() } }
+    val all = remember { MediaApps.all(context) }
+    val launchable = remember(all) { MediaApps.launchable(context, all.map { it.pkg }) }
+    // Read again on coming back (a song started in another app moves that app up).
+    var playing by remember { mutableStateOf(MediaApps.playing(context)) }
+    LifecycleResumeEffect(Unit) { playing = MediaApps.playing(context); onPauseOrDispose { } }
+    // Apps set during this visit stay in view until it ends, so undoing an ignore never makes the app vanish.
+    val kept = remember { mutableSetOf<String>() }
+    kept += settings.ignored + setOfNotNull(chosen.ifEmpty { null })
+    val apps = MediaApps.lists(all, playing, kept.toSet(), launchable)
+    AppChoices(apps, { a -> Choice(a.label, chosen == a.pkg) { settings.choosePlayer(a.pkg); onFollowChanged() } }) {
         Choice("Whatever is playing", chosen == "") { settings.choosePlayer(""); onFollowChanged() }
     }
     if (chosen != "") {
@@ -462,12 +471,31 @@ private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> U
     if (chosen == "" || !settings.onlyPlayer) {
         Text("Never follow", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
         Text("Ignored apps are never looked up on lrclib.net.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            apps.filter { it.pkg != chosen }.forEach { a ->
-                val off = a.pkg in settings.ignored
-                Choice(if (off) "${a.label}: ignored" else a.label, off) { settings.setIgnored(a.pkg, !off); onFollowChanged() }
-            }
-        }
+        val others = MediaApps.Lists(apps.top.filter { it.pkg != chosen }, apps.more)
+        AppChoices(others, { a ->
+            val off = a.pkg in settings.ignored
+            Choice(if (off) "${a.label}: ignored" else a.label, off) { settings.setIgnored(a.pkg, !off); onFollowChanged() }
+        })
+    }
+}
+
+/**
+ * One app list (0.5.1, owner Q60): the apps that matter now, then "More apps" for the rest, folded away. Apps the user
+ * has chosen or ignored are always in the first group, so nothing set is ever folded away. [extra] goes after the first
+ * group ("Whatever is playing").
+ */
+@Composable
+private fun AppChoices(apps: MediaApps.Lists, chip: @Composable (MediaApps.App) -> Unit,
+                       extra: @Composable () -> Unit = {}) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        apps.top.forEach { chip(it) }
+        extra()
+    }
+    if (apps.more.isEmpty()) return
+    Box(Modifier.padding(top = 10.dp)) { Washed(if (open) "Fewer apps" else "More apps", { open = !open }, small = true) }
+    if (open) FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        apps.more.forEach { chip(it) }
     }
 }
 

@@ -74,7 +74,7 @@ import com.thescarletcoder.scarlet.Tunables
 @Composable
 fun Header(
     track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> Unit, onMore: () -> Unit, onBack: (() -> Unit)? = null,
-    backTo: String = "Lyrics", onSong: (() -> Unit)? = null, unsure: Boolean = false,
+    backTo: String = "lyrics", onSong: (() -> Unit)? = null, unsure: Boolean = false,
 ) {
     val compact = LocalCompact.current
     val swap = Motion.duration(LocalContext.current, Tunables.int(LyricsTuning.SWAP_MS))

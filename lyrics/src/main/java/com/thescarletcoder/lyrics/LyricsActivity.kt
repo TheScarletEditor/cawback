@@ -472,7 +472,7 @@ private fun LyricsScreen(
                             onSong = songButton, unsure = (shown as? Shown.Found)?.unsure == true,
                             backTo = when {
                                 panel == Panel.LICENSES && licenseReading >= 0 -> "Licenses"
-                                else -> when (panel.back(songFromLibrary)) { Panel.SETTINGS -> "Settings"; Panel.LIBRARY -> "Library"; else -> "Lyrics" }
+                                else -> when (panel.back(songFromLibrary)) { Panel.SETTINGS -> "Settings"; Panel.LIBRARY -> "Library"; else -> "lyrics" }   // "Back to lyrics" (owner, 0.5.1 Q52)
                             })
                     }
                     val pageTop = if (barOnTop) with(density) { headerPx.toDp() } else 0.dp

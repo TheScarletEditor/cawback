@@ -132,6 +132,12 @@ object SessionPick {
 object MediaApps {
     data class App(val pkg: String, val label: String)
 
+    /** The Google app: it offers a media service but isn't a music player (owner, 0.5.1 Q51). */
+    private const val GOOGLE = "com.google.android.googlequicksearchbox"
+
+    /** What the lists show (owner, 0.5.1 Q60): [top] first, the rest folded away under "More apps". */
+    data class Lists(val top: List<App>, val more: List<App>)
+
     fun all(context: Context): List<App> {
         val pm = context.packageManager
         return pm.queryIntentServices(Intent("android.media.browse.MediaBrowserService"), 0)
@@ -140,6 +146,28 @@ object MediaApps {
             .map { App(it, label(context, it)) }
             .sortedBy { it.label.lowercase() }
     }
+
+    /**
+     * Any app that offers a media service is listed today, PDF readers and banking apps included, and Android has no
+     * reliable "music player" flag (Spotify doesn't declare one). So: apps playing now and the ones the user has set
+     * (chosen or ignored) come first; other apps with a home-screen icon are folded away; apps with no icon (the
+     * Bluetooth service) and the Google app aren't listed, unless the user set them before. Pure, so it is unit tested.
+     */
+    fun lists(all: List<App>, playing: Set<String>, set: Set<String>, launchable: Set<String>): Lists {
+        val (top, rest) = all.partition { it.pkg in set || (it.pkg in playing && it.pkg in launchable && it.pkg != GOOGLE) }
+        return Lists(top, rest.filter { it.pkg in launchable && it.pkg != GOOGLE })
+    }
+
+    /** Apps with a media session open now (playing or paused). Empty without notification access. */
+    fun playing(context: Context): Set<String> = runCatching {
+        context.getSystemService(android.media.session.MediaSessionManager::class.java)
+            .getActiveSessions(android.content.ComponentName(context, NowPlayingListener::class.java))
+            .map { it.packageName }.toSet()
+    }.getOrDefault(emptySet())
+
+    /** Of [pkgs], the ones with a home-screen icon. */
+    fun launchable(context: Context, pkgs: List<String>): Set<String> =
+        pkgs.filter { context.packageManager.getLaunchIntentForPackage(it) != null }.toSet()
 
     fun label(context: Context, pkg: String): String = runCatching {
         val pm = context.packageManager

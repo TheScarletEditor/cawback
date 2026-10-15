@@ -34,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -132,9 +133,9 @@ fun LibraryPanel(onSong: (String) -> Unit, onExport: () -> Unit, onSettings: () 
             return@Column
         }
         val repo = rememberLibrary() ?: return@Column
-        var tab by remember { mutableStateOf(LibTab.SONGS) }
-        Row(Modifier.padding(top = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            LibTab.entries.forEach { t -> Choice(t.label, tab == t) { tab = t } }
+        var tab by rememberSaveable { mutableStateOf(LibTab.SONGS) }   // kept through rotation and folding
+        Box(Modifier.padding(top = 4.dp)) {   // the same tabs as Settings (0.5.1, owner Q49)
+            UnderlineTabs(LibTab.entries.map { it.label }, tab.ordinal) { tab = LibTab.entries[it] }
         }
         if (settings.historyMode == History.Mode.OFF) {
             Text("Listening history is off, so new plays aren't counted.", fontFamily = Inter, fontSize = 14.sp, color = L.soft,
