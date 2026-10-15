@@ -441,7 +441,8 @@ fun OnThisDevice(repo: LyricsRepo, refresh: () -> Any?) {
         "Saved lyrics: " + n(f.cached, "song"),
         "Lyrics already fetched, so a song you've played before shows up at once and works offline, with your " +
             "\"Other versions\" picks and timing nudges. Each one includes the song's title and artist. Encrypted on this device; " +
-            "Android's backups are switched off for Cawback; your picks and timing go into a Library backup only if you make one.",
+            "Android's backups are switched off for Cawback; your picks and timing go into a Library backup only if you make one. " +
+            "Kept until you clear them, unless you turn on deleting lyrics for songs not played in 90 days (Settings > Privacy).",
     )
     val lib = f.library
     Item(

@@ -619,6 +619,16 @@ private fun SavedLyricsSettings(repo: LyricsRepo) {
             WorkRunner.Result(ok, if (ok) "Cleared." else WorkRunner.FAILED)   // never "Cleared." with files left
         }
     }
+    // Owner, 0.5.1 Q48 and Q56: off by default; lyrics played in rotation over months are worth keeping.
+    val settings = LocalSettings.current
+    Text("Delete saved lyrics for songs not played in ${LyricsSettings.UNUSED_DAYS} days", fontFamily = Inter, fontSize = 15.sp, color = L.soft,
+        modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Choice("On", settings.cleanUnused) { settings.cleanUnusedLyrics(true) }
+        Choice("Off", !settings.cleanUnused) { settings.cleanUnusedLyrics(false) }
+    }
+    Text("Checked when Cawback opens. Songs with your own pick or timing are always kept.", fontFamily = Inter, fontSize = 14.sp,
+        color = L.soft, modifier = Modifier.padding(top = 8.dp))
 }
 
 /**
@@ -672,9 +682,10 @@ fun TuningPage() {
 internal fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(24.dp)
     Box(
-        Modifier.clip(shape).background(if (selected) L.text.copy(alpha = 0.14f) else L.wash)
+        Modifier.heightIn(min = 48.dp).clip(shape).background(if (selected) L.text.copy(alpha = 0.14f) else L.wash)
             .border(1.dp, if (selected) L.text.copy(alpha = 0.45f) else L.washEdge, shape)
             .selectable(selected = selected, onClick = onClick).padding(horizontal = 18.dp, vertical = 12.dp),   // TalkBack says which is on
+        contentAlignment = Alignment.Center,
     ) { Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = L.text) }
 }
 

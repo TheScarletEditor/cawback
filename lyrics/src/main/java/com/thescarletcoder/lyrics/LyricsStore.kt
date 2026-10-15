@@ -80,13 +80,29 @@ class LyricsStore(context: Context) {
         val o = synchronized(LOCK) {
             if (!f.exists()) return null
             when (val r = readOrBusy(f)) {
-                is Read.Ok -> r.o
+                is Read.Ok -> r.o.also { f.setLastModified(System.currentTimeMillis()) }   // last used, for the optional cleanup (0.5.1)
                 Read.Never -> { f.delete(); return null }   // never readable: deleted
                 Read.GaveUp -> return null
             }
         }
         return runCatching { decode(o) }.getOrNull()
     }
+
+    /**
+     * The optional cleanup (owner, 0.5.1 Q48, off by default): deletes saved songs not used for [days], counting from
+     * [trackedSince] at the earliest (when 0.5.1 began noting use), so nothing goes the first time. Songs with the
+     * user's own pick or timing are never deleted (Q56), nor files that can't be read just now. Returns how many went.
+     */
+    fun deleteUnused(days: Int, trackedSince: Long, now: Long = System.currentTimeMillis()): Int =
+        files().filter { unused(it.lastModified(), trackedSince, now, days) }.count { f ->
+            // One file at a time under the lock, so a song starting meanwhile isn't kept waiting; checked again inside it.
+            synchronized(LOCK) {
+                if (!f.exists() || !unused(f.lastModified(), trackedSince, now, days)) return@synchronized false
+                val o = try { (readOrBusy(f) as? Read.Ok)?.o } catch (_: Busy) { null } ?: return@synchronized false   // busy or unreadable: left alone
+                val e = runCatching { decode(o) }.getOrNull() ?: return@synchronized false
+                !isYours(e) && f.delete()
+            }
+        }
 
     fun save(key: String, e: Entry) {
         // The song this belongs to, so "Forget this song" finds every cached version of it (Track.key: title, artist, ...).
@@ -250,6 +266,14 @@ class LyricsStore(context: Context) {
             }
             return o
         }
+
+        /** Not used for [days], counting from [trackedSince] at the earliest. Pure, so it is unit tested. */
+        fun unused(lastUsed: Long, trackedSince: Long, now: Long, days: Int): Boolean =
+            now - maxOf(lastUsed, trackedSince) > days * 86_400_000L
+
+        /** The user's own pick or timing (or a restored fix waiting to apply): the cleanup never deletes these (Q56). */
+        fun isYours(e: Entry): Boolean =
+            e.pinned || e.offsetMs != 0L || e.anchors.isNotEmpty() || e.pendingId != null || e.tapped || e.sentAt > 0
 
         /** A fix worth keeping: a version with a pick, a nudge or tapped lines. */
         fun fixOf(key: String, e: Entry, song: String?): TimingFix? {

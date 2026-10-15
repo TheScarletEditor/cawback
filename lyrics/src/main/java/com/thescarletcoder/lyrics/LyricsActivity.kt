@@ -109,6 +109,11 @@ class LyricsActivity : ComponentActivity() {
         }
         if (savedInstanceState == null) lifecycleScope.launch(Dispatchers.IO) {
             runCatching { LyricsStore(this@LyricsActivity).sealOldFiles() }   // 0.2.0's plain cache files, encrypted
+            // The optional cleanup (owner, 0.5.1 Q48): off unless turned on; never the user's own picks or timing.
+            if (settings.cleanUnused) runCatching {
+                val gone = LyricsStore(this@LyricsActivity).deleteUnused(LyricsSettings.UNUSED_DAYS, settings.usedTrackedSince)
+                if (gone > 0) withContext(Dispatchers.Main) { SettingsWork.finished.intValue++ }   // the counts in Settings read again
+            }
             // A shared export only needs to outlive the share itself.
             File(cacheDir, "exports").listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 86_400_000L }?.forEach { it.delete() }
         }

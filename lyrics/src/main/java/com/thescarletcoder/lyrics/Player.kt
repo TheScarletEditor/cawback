@@ -59,6 +59,11 @@ class LyricsSettings(context: Context) {
     var historyPausedUntil by mutableLongStateOf(p.getLong(History.PAUSED, 0)); private set
     /** Keep plays for this many days; 0 = forever. */
     var keepPlaysDays by mutableIntStateOf(p.getInt(History.KEEP, 0)); private set
+    /** Delete saved lyrics not opened for [UNUSED_DAYS] (owner, 0.5.1 Q48): off unless turned on. */
+    var cleanUnused by mutableStateOf(p.getBoolean("clean_unused", false)); private set
+    /** When Cawback began noting when saved lyrics are opened (0.5.1): the cleanup never counts from before it. */
+    val usedTrackedSince: Long = p.getLong("used_since", 0L).takeIf { it > 0 }
+        ?: System.currentTimeMillis().also { p.edit().putLong("used_since", it).apply() }
 
     fun choosePlayer(pkg: String) { player = pkg; p.edit().putString("player", pkg).apply() }
     fun followOnlyPlayer(on: Boolean) { onlyPlayer = on; p.edit().putBoolean("only_player", on).apply() }
@@ -68,6 +73,7 @@ class LyricsSettings(context: Context) {
     }
     fun chooseTextSize(i: Int) { textSize = i.coerceIn(0, 3); p.edit().putInt("text_size", textSize).apply() }
     fun keepOn(on: Boolean) { keepScreenOn = on; p.edit().putBoolean("keep_screen_on", on).apply() }
+    fun cleanUnusedLyrics(on: Boolean) { cleanUnused = on; p.edit().putBoolean("clean_unused", on).apply() }
     fun hidePastLines(on: Boolean) { hidePast = on; p.edit().putBoolean("hide_past", on).apply() }
     fun chooseFollowDelay(s: Int) { followDelaySec = s; p.edit().putInt("follow_delay", s).apply() }
     fun nudgeOutput(out: Output, deltaMs: Int) {
@@ -98,6 +104,8 @@ class LyricsSettings(context: Context) {
         val TEXT_SIZES = listOf("Small", "Medium", "Large", "Largest")
         /** Font scale for each text size step. */
         val TEXT_SCALE = listOf(0.85f, 1f, 1.18f, 1.36f)
+        /** The optional cleanup's age (owner, 0.5.1 Q48). */
+        const val UNUSED_DAYS = 90
 
         /**
          * A synced lyric line's font size and line height, in sp, for the layout ([compact]: a short window or Flex
