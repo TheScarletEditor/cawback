@@ -12,7 +12,7 @@ Built in six slices with /prep (`docs/LYRICS-0.5.1-PLAN.md`, answers Q47 to Q60 
 | 0 | Preflight | done | Tree clean, 8 commits ahead of origin (the plan and the six slices). Version: 0.5.1 as the owner chose (Q55); versionCode 5 to 6. gh signed in; the tablet connected (the phone not); emulators scarlet_phone, scarlet_small, scarlet_tablet. |
 | 1 | Audit | done | Merged release manifest the same as 0.5.0 (one INTERNET permission, same components and queries); dependencies unchanged. 4 agents (decisions, hard rules, manifest and dependencies, data safety): every decision Q47 to Q60 in the code; nothing from LATER or open IDEAS built; network only to lrclib.net; no logging of user text; no em dashes; no personal data; upgrade from 0.5.0 keeps everything, nothing deletable on the first run, backups 1 to 3 restore. 5 mechanical fixes (A3 to A5, A7, A8; A6 at hq-log), 4 questions (Q1 to Q4) answered and applied. 142 unit tests, build and the release manifest pass. |
 | 2 | Code review | done | 4 agents (data; screens; security; the Android pass). 12 mechanical fixes (R1 to R8, R10 to R13), 1 question (Q5, answered); a re-review found 3 more (R14 to R16), a second re-review clean. R17 noted. 145 unit tests, build passes. |
-| 3 | Cleanup | pending | |
+| 3 | Cleanup | done | simplify (4 agents: reuse, simplification, efficiency, altitude) and own checks: no TODOs, no commented-out code, TUNING off in release, no em dashes, licences match the dependencies. 9 applied (C1 to C9; C3 was a real gap: Clear my timing didn't show for skipped lines alone), others skipped (C10). Release notes drafted (C11, Q6). Build, release build, 145 unit tests. |
 | 4 | QA | pending | |
 | 5 | Smoke test | pending | |
 | 6 | Ship | pending | |
@@ -49,6 +49,17 @@ Built in six slices with /prep (`docs/LYRICS-0.5.1-PLAN.md`, answers Q47 to Q60 
 | R15 | Review | mechanical | LyricsRepo.kt nudge | (re-review) At the limit the screen still dropped "Sent on" until a reload | null at the limit; the screen isn't touched | stage 2 |
 | R16 | Review | mechanical | Chrome.kt FixBar | (re-review) A font change during a skip save could leave the buttons hidden | Not saved across a rebuild | stage 2 |
 | R17 | Review | noted | LyricsStore.kt | Whole-store rewrites (Reset all timing, a restore) mark every song as used | Keeps more, never less; left as is | |
+| C1 | Cleanup | mechanical | Chrome.kt FixBar | The same four-part guard written three times; a copied state | One canTap; YourTiming.nextLine reused to find the line after a skip | stage 3 |
+| C2 | Cleanup | mechanical | Chrome.kt SongSheet | tapped checked twice | Once | stage 3 |
+| C3 | Cleanup | mechanical | Chrome.kt SongSheet | Clear my timing only showed with a nudge or tapped lines: lines hidden on their own could never be brought back | Shows for skipped lines too | stage 3 |
+| C4 | Cleanup | mechanical | Licenses.kt | reflow's doc above the regex | Moved | stage 3 |
+| C5 | Cleanup | mechanical | YourTiming.kt | apply and offsetAt each had the base-plus-move clamp | One private offset() | stage 3 |
+| C6 | Cleanup | mechanical | LyricsRepo.kt found, linesOf | Each song's lyrics parsed twice to know if they're synced | One parse | stage 3 |
+| C7 | Cleanup | mechanical | Panels.kt, LibraryUi.kt | clock fully qualified twice and a forwarding wrapper; chosen.ifEmpty written three times; one label not using SoftText | Imported; chosenPkg; SoftText | stage 3 |
+| C8 | Cleanup | mechanical | LyricsStore.kt load | Every read wrote the file's time (also right before a save) | Only when the mark is over a day old (90-day cleanup) | stage 3 |
+| C9 | Cleanup | mechanical | LyricsStore.kt | The "has the user's timing" test written four times, slightly differently | Entry.hasTiming used by isYours, fixOf and merged | stage 3 |
+| C10 | Cleanup | skipped | LyricsActivity.kt, Chrome.kt, Panels.kt, LyricsStore.kt | Skip and clear results copied onto the screen instead of returned whole; the Fix lines target kept by time instead of index (would change lines sharing a time); one null-name helper for two different jobs; the share job's copied fields (kept on purpose, finalize 0.5.0 C8); one store instance at startup; lazy times in apply; the share body built twice | Larger restructuring or a behaviour change this late; proposed for later | |
+| C11 | Cleanup | question | docs/release-0.5.1/RELEASE-NOTES.md | Release notes draft | Q6: approved | stage 3 |
 
 ## Questions
 
@@ -59,6 +70,7 @@ Built in six slices with /prep (`docs/LYRICS-0.5.1-PLAN.md`, answers Q47 to Q60 
 | Q3 | A9: verse breaks in a share with skipped lines | "Accept for now (Recommended)" | None |
 | Q4 | A10: the new text | "Yes, as written (Recommended)" | As shown |
 | Q5 | R9: versions with no title or artist (the owner: "If they have no title or artist, then we can't edit it right? It would have to be new. So I guess it depends how much is missing and whether other records exist that have it and those should be corrected instead") | "Point to a named version (Recommended)" | A missing album alone is fine; no title or artist: no Share, and "This version has no title or artist on LRCLIB, so no one would find a fix shared to it. To share, pick a named version in Other versions and fix that one." |
+| Q6 | C11: the 0.5.1 release notes, title "Cawback 0.5.1: Cuts and corrections" | "Yes, as written (Recommended)" | Used for the GitHub release |
 
 ## Ship
 

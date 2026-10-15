@@ -54,6 +54,7 @@ import com.thescarletcoder.lyrics.library.LibraryKey
 import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.lyrics.library.LibraryStats
 import com.thescarletcoder.lyrics.library.SongRow
+import com.thescarletcoder.lyrics.library.LibraryExport.clock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
@@ -439,4 +440,3 @@ fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: suspend (Long, String) -
 
 private fun plays(n: Int) = if (n == 1) "1 play" else "$n plays"
 private fun day(context: android.content.Context, ms: Long): String = DateFormat.getMediumDateFormat(context).format(Date(ms))
-private fun clock(ms: Long) = com.thescarletcoder.lyrics.library.LibraryExport.clock(ms)

@@ -44,7 +44,10 @@ class LyricsStore(context: Context) {
         val sentAt: Long = 0,
         /** Lines marked "not in this song" (owner, 0.5.1 Q53), by their time in the record: hidden and not shared. */
         val skips: List<Long> = emptyList(),
-    )
+    ) {
+        /** The user's own timing: a nudge, tapped lines or skipped lines. One test, so a new kind can't be missed in one place. */
+        val hasTiming: Boolean get() = offsetMs != 0L || anchors.isNotEmpty() || skips.isNotEmpty()
+    }
 
     private fun file(key: String) = File(dir, "${hash(key)}.json")
 
@@ -82,7 +85,8 @@ class LyricsStore(context: Context) {
         val o = synchronized(LOCK) {
             if (!f.exists()) return null
             when (val r = readOrBusy(f)) {
-                is Read.Ok -> r.o.also { f.setLastModified(System.currentTimeMillis()) }   // last used, for the optional cleanup (0.5.1)
+                // Last used, for the optional cleanup (0.5.1); a day's precision is plenty against 90 days, so not every read writes.
+                is Read.Ok -> r.o.also { val now = System.currentTimeMillis(); if (now - f.lastModified() > 86_400_000L) f.setLastModified(now) }
                 Read.Never -> { f.delete(); return null }   // never readable: deleted
                 Read.GaveUp -> return null
             }
@@ -276,13 +280,12 @@ class LyricsStore(context: Context) {
             now - maxOf(lastUsed, trackedSince) > days * 86_400_000L
 
         /** The user's own pick or timing (or a restored fix waiting to apply): the cleanup never deletes these (Q56). */
-        fun isYours(e: Entry): Boolean =
-            e.pinned || e.offsetMs != 0L || e.anchors.isNotEmpty() || e.skips.isNotEmpty() || e.pendingId != null || e.tapped || e.sentAt > 0
+        fun isYours(e: Entry): Boolean = e.pinned || e.hasTiming || e.pendingId != null || e.tapped || e.sentAt > 0
 
         /** A fix worth keeping: a version with a pick, a nudge, tapped lines or skipped lines. */
         fun fixOf(key: String, e: Entry, song: String?): TimingFix? {
             val id = e.candidate?.id ?: e.pendingId ?: return null
-            if (!e.pinned && e.offsetMs == 0L && e.anchors.isEmpty() && e.skips.isEmpty()) return null
+            if (!e.pinned && !e.hasTiming) return null
             return TimingFix(key, id, e.pinned, e.offsetMs, e.anchors, song, e.tapped, e.skips)
         }
 
@@ -291,7 +294,7 @@ class LyricsStore(context: Context) {
          * and no timing here: the timing is added. Otherwise, with nothing of the user's here: the version to fetch.
          */
         fun merged(existing: Entry?, fix: TimingFix): Entry? {
-            if (existing != null && (existing.pinned || existing.offsetMs != 0L || existing.anchors.isNotEmpty() || existing.skips.isNotEmpty() || existing.pendingId != null)) return null
+            if (existing != null && (existing.pinned || existing.hasTiming || existing.pendingId != null)) return null
             // Marked current, so the next play doesn't match again and drop the timing.
             if (existing?.candidate?.id == fix.versionId) return existing!!.copy(
                 pinned = fix.pinned || existing.pinned, offsetMs = fix.offsetMs, anchors = fix.anchors, matchVersion = LyricsRepo.MATCHING,

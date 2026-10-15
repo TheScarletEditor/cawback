@@ -21,13 +21,14 @@ object Licenses {
     /** Texts already read, so a rotation shows the page at once and its scroll position holds. */
     val cache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
+    private val spaces = Regex("[ \t]{2,}")
+
     /**
      * License files are wrapped at about 76 characters for a terminal; on a phone each line would wrap again.
      * Joins the lines of each paragraph (blank lines separate paragraphs) so the text flows. A heading line (letters,
      * none lowercase, like "PREAMBLE") at the start of a paragraph keeps its own line, so the last line of an all-caps
      * paragraph ("SUCH DAMAGES.") stays with it; divider lines of dashes are dropped.
      */
-    private val spaces = Regex("[ \t]{2,}")
 
     fun reflow(text: String): String {
         val paragraphs = ArrayList<String>()

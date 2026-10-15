@@ -37,10 +37,13 @@ class LyricsRepo(private val store: LyricsStore) {
          * The version's lines as shown: synced when it has them, else plain; lines marked "not in this song" left out
          * (by their time in the record, so two lines sharing one time go together).
          */
-        fun linesOf(c: Candidate, skips: List<Long>): List<LyricLine> {
+        fun linesOf(c: Candidate, skips: List<Long>): List<LyricLine> = parsed(c, skips).first
+
+        /** [linesOf], and whether the version is synced, from one parse. */
+        private fun parsed(c: Candidate, skips: List<Long>): Pair<List<LyricLine>, Boolean> {
             val synced = c.synced?.let { Lrc.parseSynced(it) }?.takeIf { it.isNotEmpty() }
             val lines = synced ?: c.plain?.let { Lrc.parsePlain(it) } ?: emptyList()
-            return if (skips.isEmpty() || synced == null) lines else lines.filter { it.timeMs !in skips }
+            return (if (skips.isEmpty() || synced == null) lines else lines.filter { it.timeMs !in skips }) to (synced != null)
         }
 
         /** When matching last improved (2026-10-08 17:00 PDT): misses remembered before this are tried again. */
@@ -285,7 +288,8 @@ class LyricsRepo(private val store: LyricsStore) {
         durationSec: Double? = null,
     ): Shown {
         val skips = entry?.skips.orEmpty()
-        return Shown.Found(c, linesOf(c, skips), c.synced?.let { Lrc.parseSynced(it) }?.isNotEmpty() == true, pinned, offset,
+        val (lines, synced) = parsed(c, skips)
+        return Shown.Found(c, lines, synced, pinned, offset,
             unsure = pickUnsure(pinned, unsure, c, durationSec), anchors = anchors,
             tapped = entry?.tapped ?: false, sentAt = entry?.sentAt ?: 0, skips = skips)
     }

@@ -73,7 +73,10 @@ object YourTiming {
 
     /** The whole move for the line at [lineMs]: the base nudge plus its share of the anchors, within the limit. */
     fun offsetAt(baseMs: Long, anchors: List<Anchor>, lineMs: Long, times: List<Long> = emptyList()): Long =
-        (baseMs + deltaAt(anchors, lineMs, times)).coerceIn(-ANCHOR_LIMIT_MS, ANCHOR_LIMIT_MS)
+        offset(baseMs, anchors.sortedBy { it.lineMs }, lineMs, times, null)
+
+    private fun offset(baseMs: Long, sorted: List<Anchor>, lineMs: Long, times: List<Long>, steps: MutableMap<Long, Long?>?): Long =
+        (baseMs + sortedDelta(sorted, lineMs, times, steps)).coerceIn(-ANCHOR_LIMIT_MS, ANCHOR_LIMIT_MS)
 
     /**
      * The lines with the user's timing applied: each line's time minus its move. A line never comes before the one
@@ -88,7 +91,7 @@ object YourTiming {
         var floor = Long.MIN_VALUE
         return lines.map { line ->
             val t = line.timeMs ?: return@map line
-            val offset = (baseMs + sortedDelta(sorted, t, times, steps)).coerceIn(-ANCHOR_LIMIT_MS, ANCHOR_LIMIT_MS)
+            val offset = offset(baseMs, sorted, t, times, steps)
             val moved = maxOf((t - offset).coerceAtLeast(0), floor)
             floor = moved
             line.copy(timeMs = moved)

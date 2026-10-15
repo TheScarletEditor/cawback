@@ -71,6 +71,7 @@ import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.scarlet.Motion
 import com.thescarletcoder.scarlet.ThemeChoice
 import com.thescarletcoder.scarlet.TuningPanel
+import com.thescarletcoder.lyrics.library.LibraryExport.clock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -194,7 +195,7 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
                         listOfNotNull(
                             if (chosen) "Showing now" else null,   // first, so a long row never cuts it off
                             c.artist, c.album.ifBlank { null },
-                            com.thescarletcoder.lyrics.library.LibraryExport.clock(c.durationSec.toLong().coerceIn(0, 86_400) * 1000),   // a nonsense length can't overflow
+                            clock(c.durationSec.toLong().coerceIn(0, 86_400) * 1000),   // a nonsense length can't overflow
                             when { c.synced != null -> "Synced"; c.plain != null -> "Words only"; c.instrumental -> "Instrumental"; else -> null },
                             durDiff?.takeIf { it > 3 }?.let { "length differs by ${it.toInt()}s" },
                             if (f != null && c.synced != null && !f.fits) "runs past the end of this song" else null,
@@ -234,7 +235,7 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
             fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
         val dur = Math.round(body.optDouble("duration", 0.0)).toInt()
         listOf("Title" to body.optString("trackName"), "Artist" to body.optString("artistName"), "Album" to body.optString("albumName"),
-            "Length" to com.thescarletcoder.lyrics.library.LibraryExport.clock(dur * 1000L)).forEach { (k, value) ->
+            "Length" to clock(dur * 1000L)).forEach { (k, value) ->
             Text("$k: $value", fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(vertical = 2.dp))
         }
         Box(Modifier.padding(vertical = 14.dp)) {
@@ -458,10 +459,11 @@ private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> U
         onPauseOrDispose { job.cancel() }
     }
     // Apps set during this visit stay in view until it ends (rotation included), so undoing an ignore never makes the app vanish.
-    var kept by rememberSaveable { mutableStateOf(settings.ignored.toList() + listOfNotNull(chosen.ifEmpty { null })) }
-    fun keep(pkg: String?) { kept = (kept + listOfNotNull(chosen.ifEmpty { null }, pkg)).distinct() }   // the old choice too
+    val chosenPkg = chosen.ifEmpty { null }
+    var kept by rememberSaveable { mutableStateOf(settings.ignored.toList() + listOfNotNull(chosenPkg)) }
+    fun keep(pkg: String?) { kept = (kept + listOfNotNull(chosenPkg, pkg)).distinct() }   // the old choice too
     val (all, launchable) = found ?: (emptyList<MediaApps.App>() to emptySet())
-    val apps = MediaApps.lists(all, playing, kept.toSet() + settings.ignored + setOfNotNull(chosen.ifEmpty { null }), launchable)
+    val apps = MediaApps.lists(all, playing, kept.toSet() + settings.ignored + setOfNotNull(chosenPkg), launchable)
     AppChoices(apps, { a -> Choice(a.label, chosen == a.pkg) { keep(a.pkg); settings.choosePlayer(a.pkg); onFollowChanged() } }) {
         Choice("Whatever is playing", chosen == "") { keep(null); settings.choosePlayer(""); onFollowChanged() }
     }
@@ -634,8 +636,7 @@ private fun SavedLyricsSettings(repo: LyricsRepo) {
     }
     // Owner, 0.5.1 Q48 and Q56: off by default; lyrics played in rotation over months are worth keeping.
     val settings = LocalSettings.current
-    Text("Delete saved lyrics for songs not played in ${LyricsSettings.UNUSED_DAYS} days", fontFamily = Inter, fontSize = 15.sp, color = L.soft,
-        modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+    SoftText("Delete saved lyrics for songs not played in ${LyricsSettings.UNUSED_DAYS} days", Modifier.padding(top = 14.dp, bottom = 8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Choice("On", settings.cleanUnused) { settings.cleanUnusedLyrics(true) }
         Choice("Off", !settings.cleanUnused) { settings.cleanUnusedLyrics(false) }
