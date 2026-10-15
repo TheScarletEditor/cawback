@@ -286,7 +286,7 @@ internal fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Un
 internal fun SettingsPanel(
     repo: LyricsRepo, hasAccess: Boolean, theme: ThemeChoice, onTheme: (ThemeChoice) -> Unit,
     onGrant: () -> Unit, output: Output, onFollowChanged: () -> Unit, onPinShortcut: () -> Unit,
-    onTuning: () -> Unit, tab: SettingsTab, onTab: (SettingsTab) -> Unit,
+    onTuning: () -> Unit, onLicenses: () -> Unit, tab: SettingsTab, onTab: (SettingsTab) -> Unit,
 ) {
     val short = LocalCompact.current
     @Composable
@@ -303,7 +303,7 @@ internal fun SettingsPanel(
                 SettingsSection.BACKUP -> LibraryBackupSection()
                 SettingsSection.SAVED -> SavedLyricsSettings(repo)
                 SettingsSection.ON_DEVICE -> OnThisDevice(repo, refresh = { SettingsWork.finished.intValue })
-                SettingsSection.ABOUT -> AboutSettings()
+                SettingsSection.ABOUT -> AboutSettings(onLicenses)
                 SettingsSection.TUNING -> {
                     Text("Feel values for this build. Not in public releases.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
                     Box(Modifier.padding(top = 12.dp)) { Washed("Open tuning", onTuning) }
@@ -624,10 +624,11 @@ private fun ConfirmedWork(
 }
 
 @Composable
-private fun AboutSettings() {
+private fun AboutSettings(onLicenses: () -> Unit) {
     Text("Cawback ${BuildConfig.VERSION_NAME}", fontFamily = Inter, fontSize = 17.sp, color = L.text)
     Text("Lyrics from LRCLIB (lrclib.net), the only place this app connects to.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
     Text("Free and open source (GPL-3.0). By The Scarlet Coder, thescarletcoder.com", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
+    Box(Modifier.padding(top = 12.dp)) { Washed("Open source licenses", onLicenses) }
 }
 
 @Composable

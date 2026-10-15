@@ -60,9 +60,10 @@ Tests: `gradlew :lyrics:testDebugUnitTest` runs the JVM tests. `labtest.ps1` run
 ## Credits
 
 - Lyrics: [LRCLIB](https://lrclib.net).
-- Fonts: Inter and Fraunces, SIL Open Font License 1.1 (`licenses/`).
-- Encrypted Library: SQLCipher by Zetetic, BSD-style license (`licenses/`).
-- Backup key derivation: Bouncy Castle, MIT license (`licenses/`).
+- Fonts: Inter and Fraunces, SIL Open Font License 1.1 (`licenses/Inter-OFL.txt`, `licenses/Fraunces-OFL.txt`).
+- Encrypted Library: SQLCipher by Zetetic, BSD-style license (`licenses/SQLCipher-LICENSE.txt`).
+- Backup key derivation: Bouncy Castle, MIT license (`licenses/BouncyCastle-LICENSE.txt`).
+- Jetpack Compose, AndroidX (including Room, Palette and WindowManager), the Kotlin standard library and kotlinx.coroutines (Apache 2.0, `licenses/Apache-2.0.txt`).
 
 ## License
 

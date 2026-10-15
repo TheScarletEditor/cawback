@@ -19,6 +19,8 @@ Against `docs/LYRICS-0.5.1-PLAN.md`. The owner reviewed the ranked list of remai
 | Q55 | Version | "0.5.1 (Recommended)" | 0.5.1; Fix words is 0.6.0. | build.gradle at /finalize. |
 | Q56 | The 90-day cleanup and songs with your own pick or timing | "Never delete those (Recommended)" | Only plain cached lookups are deleted. | JVM test. |
 | Q57 | Backup format for skipped lines | "Raise the version (Recommended)" | Library backup format +1; older backups still restore; 0.5.0 says "newer". Backup gate applies at release. | Format tests. |
+| Q58 | Text box focus colour (Keyward is teal) | "Keep scarlet in Cawback" | The shared ScarletControls.kt keeps one deliberate difference, named in drift_check.ps1. | drift_check. |
+| Q59 | Licences inside the app | "Add the page (Recommended)" | "Open source licenses" under Settings > Privacy > About, each licence text shipped in the APK. | LicensesTest; emulator. |
 
 ## 2026-10-14 (the owner, /finalize 0.5.0 Stage 6: Cawback in this release)
 

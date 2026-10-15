@@ -91,6 +91,32 @@ android {
     }
 }
 
+abstract class CopyLicenses : DefaultTask() {
+    @get:InputFile abstract val appLicense: RegularFileProperty
+    @get:InputDirectory abstract val folder: DirectoryProperty
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction fun run() {
+        val out = outputDir.get().dir("licenses").asFile
+        out.deleteRecursively(); out.mkdirs()
+        appLicense.get().asFile.copyTo(out.resolve("LICENSE"))
+        // Only license texts: no stray files (editor backups, OS files) can ship.
+        folder.get().asFile.listFiles()!!.filter { it.isFile && it.extension == "txt" }.forEach { it.copyTo(out.resolve(it.name)) }
+    }
+}
+
+// The license texts ship inside the APK too (Settings > Privacy > About, "Open source licenses", 0.5.1): the repo's
+// LICENSE and licenses/ folder, one copy, under assets/licenses/. Licenses.kt lists them; LicensesTest checks the two match.
+val copyLicenses = tasks.register<CopyLicenses>("copyLicenses") {
+    appLicense.set(rootProject.file("LICENSE"))
+    folder.set(rootProject.file("licenses"))
+    outputDir.set(layout.buildDirectory.dir("generated/licenses"))
+}
+androidComponents {
+    onVariants { v -> v.sources.assets?.addGeneratedSourceDirectory(copyLicenses, CopyLicenses::outputDir) }
+}
+tasks.withType<Test>().configureEach { dependsOn(copyLicenses) }
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

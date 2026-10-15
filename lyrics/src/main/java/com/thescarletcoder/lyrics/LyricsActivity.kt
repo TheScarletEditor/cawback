@@ -255,11 +255,11 @@ class LyricsActivity : ComponentActivity() {
 }
 
 internal enum class Panel {
-    NONE, PICKER, SETTINGS, TUNING, LIBRARY, SONG, EXPORT, SHARE;
+    NONE, PICKER, SETTINGS, TUNING, LICENSES, LIBRARY, SONG, EXPORT, SHARE;
 
     /** Where one step back goes (system Back and the now-playing bar). Pure, so it is unit tested. */
     fun back(songFromLibrary: Boolean): Panel = when {
-        this == TUNING -> SETTINGS
+        this == TUNING || this == LICENSES -> SETTINGS
         this == SONG && songFromLibrary -> LIBRARY
         this == EXPORT -> LIBRARY
         else -> NONE
@@ -294,12 +294,13 @@ private fun LyricsScreen(
     var panel by rememberSaveable { mutableStateOf(Panel.NONE) }
     // The Settings tab: kept through Tuning and a recreate; set from the way in when Settings opens (0.4.1, Q5).
     var settingsTab by rememberSaveable { mutableStateOf(SettingsTab.LYRICS) }
+    var licenseReading by rememberSaveable { mutableIntStateOf(-1) }   // Open source licenses: the one being read, or -1 for the list
     fun openSettings(way: SettingsWayIn) { settingsTab = way.tab; panel = Panel.SETTINGS }
     // The step out of Settings (not to Tuning; a recreate isn't a step): results of finished work have been seen.
     // Running work keeps going, and its result waits for the next visit.
     var lastPanel by remember { mutableStateOf(panel) }
     LaunchedEffect(panel) {
-        fun inSettings(p: Panel) = p == Panel.SETTINGS || p == Panel.TUNING
+        fun inSettings(p: Panel) = p == Panel.SETTINGS || p == Panel.TUNING || p == Panel.LICENSES
         if (inSettings(lastPanel) && !inSettings(panel)) SettingsWork.runner.forgetFinished()
         lastPanel = panel
     }
@@ -408,7 +409,7 @@ private fun LyricsScreen(
     }
 
     // One step back from a page: the system Back and the now-playing bar (Header with onBack) both use it.
-    fun pageBack() { panel = panel.back(songFromLibrary) }
+    fun pageBack() { if (panel == Panel.LICENSES && licenseReading >= 0) licenseReading = -1 else panel = panel.back(songFromLibrary) }
     BackHandler(enabled = sheet || songSheet || fixMode != FixMode.NONE || momentAt != null || panel != Panel.NONE) {
         when {
             sheet -> sheet = false
@@ -469,16 +470,21 @@ private fun LyricsScreen(
                         .onSizeChanged { headerPx = it.height }) {
                         Header(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause, onMore = { sheet = true }, onBack = onBack,
                             onSong = songButton, unsure = (shown as? Shown.Found)?.unsure == true,
-                            backTo = when (panel.back(songFromLibrary)) { Panel.SETTINGS -> "Settings"; Panel.LIBRARY -> "Library"; else -> "Lyrics" })
+                            backTo = when {
+                                panel == Panel.LICENSES && licenseReading >= 0 -> "Licenses"
+                                else -> when (panel.back(songFromLibrary)) { Panel.SETTINGS -> "Settings"; Panel.LIBRARY -> "Library"; else -> "Lyrics" }
+                            })
                     }
                     val pageTop = if (barOnTop) with(density) { headerPx.toDp() } else 0.dp
                     Box(if (flexTop != null) Modifier.height((flexTop - pageTop).coerceAtLeast(0.dp)).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth()) {
                         val t = track
                         when {
                             panel == Panel.TUNING -> TuningPage()
+                            panel == Panel.LICENSES -> LicensesPage(licenseReading) { licenseReading = it }
                             panel == Panel.SETTINGS -> SettingsPanel(repo, hasAccess, theme, onTheme, onGrant,
                                 output = output, onFollowChanged = onFollowChanged, onPinShortcut = onPinShortcut,
-                                onTuning = { panel = Panel.TUNING }, tab = settingsTab, onTab = { settingsTab = it })
+                                onTuning = { panel = Panel.TUNING }, onLicenses = { licenseReading = -1; panel = Panel.LICENSES },
+                                tab = settingsTab, onTab = { settingsTab = it })
                             panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
                                 onPick = { c -> scope.launch { repo.pin(t, c)?.let { shown = it; panel = Panel.NONE } } },   // not saved: the list stays to try again
                                 onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } })
