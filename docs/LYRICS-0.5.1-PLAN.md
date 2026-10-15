@@ -24,14 +24,14 @@ Acceptance: filter JVM test; tabs: TalkBack says which is selected, 48 dp, wrap 
 
 ### Slice 4: optional cleanup of unused saved lyrics (Q48)
 A setting in Settings > Privacy, off by default: delete saved lyrics not opened for 90 days. A "last used" time per saved song (older files count as used now, so nothing goes on the first run). Runs in the background when Cawback opens, on the existing app-level runner, never on the main thread.
-Proposed: a song with your own pick or timing is never deleted by this (only plain cached lookups are).
+Decided (Q56): a song with your own pick or timing is never deleted by this; only plain cached lookups are.
 Acceptance: JVM tests (off: nothing deleted; on: only unused over 90 days; picks and timing kept as decided; a busy key store deletes nothing); What's on this device count updates; text shown to the owner word for word.
 
 ### Slice 5: skipped sections (Q53)
 - A tapped line may move up to the song's length; Earlier and Later keep their 10 s limit.
 - Between two tapped lines whose moves differ by more than about 2 s, the change happens at the biggest pause between lines in that stretch (a step), not spread over every line. Smaller differences still spread evenly.
 - In Fix lines, a line can be marked "not in this song": hidden while it plays, saved with the timing, restored by the same mark, left out of Share your fix.
-Proposed: the Library backup format goes up one version for the skipped lines, so 0.5.0 says "newer" instead of silently dropping them (BACKUP-SPEC applies: drives or a recorded skip).
+Decided (Q57): the Library backup format goes up one version for the skipped lines, so 0.5.0 says "newer" instead of silently dropping them (BACKUP-SPEC applies: drives or a recorded skip).
 Acceptance: JVM tests (a 20 s cut fixed with two taps; the step lands in the gap; skipped lines hidden and absent from the share payload; an older backup restores; the order of lines never changes); emulator walk with the stand-in player; TalkBack labels for the new mark.
 
 ### Slice 6: deferred cleanup (Q50)

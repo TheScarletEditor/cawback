@@ -17,6 +17,8 @@ Against `docs/LYRICS-0.5.1-PLAN.md`. The owner reviewed the ranked list of remai
 | Q53 | Skipped sections | "Do the necessary fix cuts now"; "Allow big jumps (Recommended)", "Jump at the gap (Recommended)", "Skip lines (Recommended)" | A tapped line may move up to the song's length (Earlier and Later stay at 10 s); the change between two far-apart tapped lines happens at the biggest pause between them; lines the song doesn't have can be marked "not in this song" in Fix lines, hidden, saved with the timing and left out of Share your fix. | JVM tests on the model; emulator. |
 | Q54 | Old ideas | "Agreed close old/shipped/scrapped ideas" | "Share this fix", "local lyric corrections" and "prefer the fuller record" closed in scarlet-hq IDEAS. | IDEAS.md. |
 | Q55 | Version | "0.5.1 (Recommended)" | 0.5.1; Fix words is 0.6.0. | build.gradle at /finalize. |
+| Q56 | The 90-day cleanup and songs with your own pick or timing | "Never delete those (Recommended)" | Only plain cached lookups are deleted. | JVM test. |
+| Q57 | Backup format for skipped lines | "Raise the version (Recommended)" | Library backup format +1; older backups still restore; 0.5.0 says "newer". Backup gate applies at release. | Format tests. |
 
 ## 2026-10-14 (the owner, /finalize 0.5.0 Stage 6: Cawback in this release)
 
