@@ -293,8 +293,8 @@ fun FixBar(
             .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
         when {
-            !playing || !started -> Text("Play the song to fix its timing.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
-            next == null -> Text("No more lines to fix.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+            !playing || !started -> SoftText("Play the song to fix its timing.")
+            next == null -> SoftText("No more lines to fix.")
             else -> {
                 Text("Tap Now when you hear:", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
                 Text(s.lines[next].text, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 20.sp, color = L.text,

@@ -64,7 +64,7 @@ private fun PartCard(part: Licenses.Part, onClick: () -> Unit) {
             Text(part.name, fontFamily = Inter, fontSize = 17.sp, color = L.text)
             Text(part.license, fontFamily = Inter, fontSize = 14.sp, color = L.soft)
         }
-        Text("Read", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(start = 12.dp))
+        SoftText("Read", Modifier.padding(start = 12.dp))
     }
 }
 
@@ -81,6 +81,6 @@ private fun LicenseText(part: Licenses.Part) {
                 .getOrDefault("This license text is missing from the app. It's in the source code on GitHub.")
         }
     }
-    Text(part.name, fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+    SoftText(part.name)
     text?.let { Text(it, fontFamily = Inter, fontSize = 14.sp, lineHeight = 20.sp, color = L.text) }
 }

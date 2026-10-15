@@ -191,7 +191,7 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
                         listOfNotNull(
                             if (chosen) "Showing now" else null,   // first, so a long row never cuts it off
                             c.artist, c.album.ifBlank { null },
-                            "%d:%02d".format(c.durationSec.toInt() / 60, c.durationSec.toInt() % 60),
+                            com.thescarletcoder.lyrics.library.LibraryExport.clock(c.durationSec.toLong().coerceIn(0, 86_400) * 1000),   // a nonsense length can't overflow
                             when { c.synced != null -> "Synced"; c.plain != null -> "Words only"; c.instrumental -> "Instrumental"; else -> null },
                             durDiff?.takeIf { it > 3 }?.let { "length differs by ${it.toInt()}s" },
                             if (f != null && c.synced != null && !f.fits) "runs past the end of this song" else null,
@@ -231,7 +231,7 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
             fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
         val dur = Math.round(body.optDouble("duration", 0.0)).toInt()
         listOf("Title" to body.optString("trackName"), "Artist" to body.optString("artistName"), "Album" to body.optString("albumName"),
-            "Length" to "%d:%02d".format(dur / 60, dur % 60)).forEach { (k, value) ->
+            "Length" to com.thescarletcoder.lyrics.library.LibraryExport.clock(dur * 1000L)).forEach { (k, value) ->
             Text("$k: $value", fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(vertical = 2.dp))
         }
         Box(Modifier.padding(vertical = 14.dp)) {
@@ -307,7 +307,7 @@ internal fun SettingsPanel(
                 SettingsSection.ON_DEVICE -> OnThisDevice(repo, refresh = { SettingsWork.finished.intValue })
                 SettingsSection.ABOUT -> AboutSettings(onLicenses)
                 SettingsSection.TUNING -> {
-                    Text("Feel values for this build. Not in public releases.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+                    SoftText("Feel values for this build. Not in public releases.")
                     Box(Modifier.padding(top = 12.dp)) { Washed("Open tuning", onTuning) }
                 }
             }
@@ -378,22 +378,22 @@ internal fun UnderlineTabs(labels: List<String>, selected: Int, onSelect: (Int) 
 @Composable
 private fun LyricsDisplaySettings() {
     val settings = LocalSettings.current
-    Text("Text size", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp))
+    SoftText("Text size", Modifier.padding(bottom = 8.dp))
     TextSizePreview()
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         LyricsSettings.TEXT_SIZES.forEachIndexed { i, n -> Choice(n, settings.textSize == i) { settings.chooseTextSize(i) } }
     }
-    Text("Lines already sung", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+    SoftText("Lines already sung", Modifier.padding(top = 14.dp, bottom = 8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Choice("Dimmed", !settings.hidePast) { settings.hidePastLines(false) }
         Choice("Hidden", settings.hidePast) { settings.hidePastLines(true) }
     }
-    Text("After you scroll, follow the song again after", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+    SoftText("After you scroll, follow the song again after", Modifier.padding(top = 14.dp, bottom = 8.dp))
     // Wraps: on a small phone the three side by side squeezed "8 seconds" to one letter per line.
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         LyricsSettings.FOLLOW_DELAYS.forEach { s -> Choice("$s seconds", settings.followDelaySec == s) { settings.chooseFollowDelay(s) } }
     }
-    Text("Keep the screen on while synced lyrics play", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+    SoftText("Keep the screen on while synced lyrics play", Modifier.padding(top = 14.dp, bottom = 8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Choice("On", settings.keepScreenOn) { settings.keepOn(true) }
         Choice("Off", !settings.keepScreenOn) { settings.keepOn(false) }
@@ -469,7 +469,7 @@ private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> U
         Box(Modifier.padding(top = 12.dp)) { Washed("Add \"Cawback + $name\" to the home screen", onPinShortcut) }
     }
     if (chosen == "" || !settings.onlyPlayer) {
-        Text("Never follow", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+        SoftText("Never follow", Modifier.padding(top = 14.dp, bottom = 8.dp))
         Text("Ignored apps are never looked up on lrclib.net.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp))
         val others = MediaApps.Lists(apps.top.filter { it.pkg != chosen }, apps.more)
         AppChoices(others, { a ->
@@ -538,13 +538,13 @@ private fun HistorySettings() {
             )
             Washed("Resume", { settings.pauseHistory(0) })
         } else {
-            Text("Pause", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+            SoftText("Pause", Modifier.padding(top = 14.dp, bottom = 8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Washed("For 1 hour", { settings.pauseHistory(System.currentTimeMillis() + 3_600_000L) }, small = true)
                 Washed("Until I turn it back on", { settings.pauseHistory(History.PAUSED_UNTIL_ON) }, small = true)
             }
         }
-        Text("Keep plays for", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+        SoftText("Keep plays for", Modifier.padding(top = 14.dp, bottom = 8.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             History.KEEP_DAYS.forEach { d -> Choice(History.keepLabel(d), settings.keepPlaysDays == d) { settings.chooseKeepPlays(d) } }
         }
@@ -591,7 +591,7 @@ private fun HistorySettings() {
         }
     }
     runner.result(SettingsWork.DELETE)?.let {
-        Text(it.text, fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+        SoftText(it.text, Modifier.padding(top = 8.dp))
     }
 }
 
@@ -609,7 +609,7 @@ private fun SavedLyricsSettings(repo: LyricsRepo) {
         },
         fontFamily = Inter, fontSize = 17.sp, color = L.text,
     )
-    Text("Includes your \"Other versions\" picks and timing.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
+    SoftText("Includes your \"Other versions\" picks and timing.", Modifier.padding(top = 4.dp))
     Box(Modifier.padding(top = 12.dp)) {
         ConfirmedWork(
             SettingsWork.SAVED, start = "Clear saved lyrics", confirm = "Clear",
@@ -664,8 +664,8 @@ private fun ConfirmedWork(
 @Composable
 private fun AboutSettings(onLicenses: () -> Unit) {
     Text("Cawback ${BuildConfig.VERSION_NAME}", fontFamily = Inter, fontSize = 17.sp, color = L.text)
-    Text("Lyrics from LRCLIB (lrclib.net), the only place this app connects to.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
-    Text("Free and open source (GPL-3.0). By The Scarlet Coder, thescarletcoder.com", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
+    SoftText("Lyrics from LRCLIB (lrclib.net), the only place this app connects to.", Modifier.padding(top = 4.dp))
+    SoftText("Free and open source (GPL-3.0). By The Scarlet Coder, thescarletcoder.com", Modifier.padding(top = 4.dp))
     Box(Modifier.padding(top = 12.dp)) { Washed("Open source licenses", onLicenses) }
 }
 

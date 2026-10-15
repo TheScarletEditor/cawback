@@ -52,7 +52,7 @@ data class LibrarySnapshot(
         .put("tracks", JSONArray(tracks.map { JSONObject().put("songUid", it.songUid).put("trackKey", it.trackKey) }))
         .put("fixes", JSONArray(fixes.map { f ->
             JSONObject().put("key", f.key).put("id", f.versionId).put("pinned", f.pinned).put("offset", f.offsetMs)
-                .put("anchors", JSONArray(f.anchors.map { JSONArray().put(it.lineMs).put(it.deltaMs) }))
+                .put("anchors", com.thescarletcoder.lyrics.AnchorJson.write(f.anchors))
                 .apply { f.song?.let { put("song", it) }; if (f.tapped) put("tapped", true); if (f.skips.isNotEmpty()) put("skips", JSONArray(f.skips)) }
         }))
 
@@ -62,7 +62,6 @@ data class LibrarySnapshot(
          * 0.5.0 refuses it as newer instead of dropping them). Older versions refuse what they don't know; 1 and 2 still read here.
          */
         const val SCHEMA = 3
-        private val HASH = Regex("[0-9a-f]{64}")
         private const val MAX_ANCHORS = 500            // more than any song's lines
         private const val MAX_ALL_ANCHORS = 200_000    // across every fix: a bad backup can't exhaust memory
         private const val MAX_FIXES = 20_000
@@ -97,11 +96,11 @@ data class LibrarySnapshot(
                     (0 until minOf(arr.length(), MAX_FIXES)).mapNotNull { i ->
                         val f = arr.optJSONObject(i) ?: return@mapNotNull null
                         runCatching {
-                            val key = f.getString("key").takeIf { HASH.matches(it) } ?: return@runCatching null
+                            val key = f.getString("key").takeIf { com.thescarletcoder.lyrics.LyricsStore.HASH.matches(it) } ?: return@runCatching null
                             val a = f.optJSONArray("anchors")
                             val anchors = if (a == null) emptyList() else (0 until minOf(a.length(), MAX_ANCHORS, budget)).also { budget -= it.count() }.mapNotNull { j ->
-                                a.optJSONArray(j)?.takeIf { it.length() == 2 && it.opt(0) is Number && it.opt(1) is Number }
-                                    ?.let { Anchor(it.getLong(0), it.getLong(1).coerceIn(-2 * LIMIT, 2 * LIMIT)) }?.takeIf { it.lineMs in 0..86_400_000L }
+                                com.thescarletcoder.lyrics.AnchorJson.pair(a.optJSONArray(j))
+                                    ?.let { it.copy(deltaMs = it.deltaMs.coerceIn(-2 * LIMIT, 2 * LIMIT)) }?.takeIf { it.lineMs in 0..86_400_000L }
                             }.distinctBy { it.lineMs }.sortedBy { it.lineMs }
                             val s = f.optJSONArray("skips")
                             val skips = if (s == null) emptyList() else (0 until minOf(s.length(), MAX_ANCHORS, budget)).also { budget -= it.count() }

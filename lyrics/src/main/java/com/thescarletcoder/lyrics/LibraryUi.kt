@@ -320,7 +320,7 @@ fun SongPage(songUid: String?, pending: Track?, position: (() -> Long)?, onSeek:
             if (showEarlier) earlier.forEach { h ->
                 Column(Modifier.padding(top = 10.dp)) {
                     Text("Until " + day(context, h.replacedAt), fontFamily = Inter, fontSize = 13.sp, color = L.faint)
-                    Text(h.text, fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+                    SoftText(h.text)
                 }
             }
         }
@@ -418,7 +418,7 @@ fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: suspend (Long, String) -
         ) {
             Text("Bookmark ${clock(at)}", fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = L.text)
             if (saved) {
-                Text("Saved. It's in this song's Note and moments.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+                SoftText("Saved. It's in this song's Note and moments.")
             } else {
                 Text(if (failed) "Couldn't save that moment. Try again?" else "Saves the time and your label, not the words.", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
                 NoteField(label, singleLine = true, hint = "Label (optional)") { label = it }
@@ -439,4 +439,4 @@ fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: suspend (Long, String) -
 
 private fun plays(n: Int) = if (n == 1) "1 play" else "$n plays"
 private fun day(context: android.content.Context, ms: Long): String = DateFormat.getMediumDateFormat(context).format(Date(ms))
-private fun clock(ms: Long) = "%d:%02d".format(ms / 60_000, (ms / 1000) % 60)
+private fun clock(ms: Long) = com.thescarletcoder.lyrics.library.LibraryExport.clock(ms)

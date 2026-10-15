@@ -159,7 +159,7 @@ fun ExportPanel() {
             FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Range.entries.forEach { r -> Choice(r.label, range == r) { range = r; if (r == Range.CUSTOM) picking = true } }
             }
-            Text("$from to $to", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+            SoftText("$from to $to", Modifier.padding(top = 8.dp))
         }
         if (which == Which.ARTIST) {
             Box(Modifier.padding(top = 12.dp)) { SearchField(artist, { artist = it }, {}, hint = "Artist") }

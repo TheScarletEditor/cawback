@@ -44,6 +44,7 @@ Done 2026-10-14. YourTiming: ANCHOR_LIMIT_MS (an hour) for tapped lines and Line
 ### Slice 6: deferred cleanup (Q50)
 C9 (the share steps out of the screen, overlay state, edits returning the new entry), C10 (shared anchor JSON and hash helpers, a body text composable, clock and plural reuse) and C11 without parallel lookups (per-line anchor sort, the Fix lines bar redrawing less often).
 Acceptance: no behaviour change; all tests pass; review agent finds no regressions.
+Done 2026-10-14/15. C11: anchors sorted once per song; the Fix lines bar no longer redraws ten times a second (its clock went with L5-1). C10: AnchorJson and one HASH for the cache and the backup; SoftText for 19 plain uses; one clock format (LibraryExport.clock). C9: the share steps moved from the screen into LyricsRepo.share. Parallel lookups dropped (Q50). Slice check: done-checklist pass and one review agent: no behaviour change found; L6-1 the screen refresh after a send moved back inside the part that can't be cancelled; L6-2 a misplaced doc comment; L6-3 a nonsense LRCLIB length could overflow the shown time (capped). 141 unit tests.
 
 Then `/finalize 0.5.1`.
 

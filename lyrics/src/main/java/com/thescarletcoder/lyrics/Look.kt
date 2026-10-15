@@ -58,6 +58,10 @@ object L {
     val washEdge: Color @Composable @ReadOnlyComposable get() = text.copy(alpha = 0.14f)
 }
 
+/** The soft body text under a heading or a setting: Inter 15 sp, the soft colour. */
+@Composable
+fun SoftText(text: String, modifier: Modifier = Modifier) = Text(text, fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = modifier)
+
 /** The one button style in Lyrics: a neutral wash. */
 @Composable
 fun Washed(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, small: Boolean = false) {

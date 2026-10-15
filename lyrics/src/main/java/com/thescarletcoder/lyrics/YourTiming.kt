@@ -6,6 +6,15 @@ package com.thescarletcoder.lyrics
  */
 data class Anchor(val lineMs: Long, val deltaMs: Long)
 
+/** Anchors as stored, in the cache and in the Library backup: [[lineMs, deltaMs], ...]. */
+internal object AnchorJson {
+    fun write(anchors: List<Anchor>) = org.json.JSONArray(anchors.map { org.json.JSONArray().put(it.lineMs).put(it.deltaMs) })
+
+    /** One stored pair, or null when it isn't two numbers: a damaged pair is left out on its own. */
+    fun pair(p: org.json.JSONArray?): Anchor? =
+        p?.takeIf { it.length() == 2 && it.opt(0) is Number && it.opt(1) is Number }?.let { Anchor(it.getLong(0), it.getLong(1)) }
+}
+
 /**
  * The user's timing for a song: a base nudge (Earlier and Later) plus anchors from tapping lines. It wins over the
  * record's own timing. Lines between two anchors follow both, in proportion; before the first and after the last they
@@ -26,9 +35,12 @@ object YourTiming {
      * How much further than the base nudge the line at [lineMs] moves. [times]: the record's line times (sorted), so a
      * big change between two anchors lands at the longest pause between them; without them it's spread evenly.
      */
-    fun deltaAt(anchors: List<Anchor>, lineMs: Long, times: List<Long> = emptyList()): Long {
-        if (anchors.isEmpty()) return 0
-        val a = anchors.sortedBy { it.lineMs }
+    fun deltaAt(anchors: List<Anchor>, lineMs: Long, times: List<Long> = emptyList()): Long =
+        sortedDelta(anchors.sortedBy { it.lineMs }, lineMs, times)
+
+    /** [deltaAt] for anchors already sorted by line, so [apply] sorts them once per song, not once per line. */
+    private fun sortedDelta(a: List<Anchor>, lineMs: Long, times: List<Long>): Long {
+        if (a.isEmpty()) return 0
         if (lineMs <= a.first().lineMs) return a.first().deltaMs
         if (lineMs >= a.last().lineMs) return a.last().deltaMs
         val i = a.indexOfLast { it.lineMs <= lineMs }
@@ -56,10 +68,12 @@ object YourTiming {
     fun apply(lines: List<LyricLine>, baseMs: Long, anchors: List<Anchor>): List<LyricLine> {
         if (baseMs == 0L && anchors.isEmpty()) return lines
         val times = lines.mapNotNull { it.timeMs }.sorted()
+        val sorted = anchors.sortedBy { it.lineMs }
         var floor = Long.MIN_VALUE
         return lines.map { line ->
             val t = line.timeMs ?: return@map line
-            val moved = maxOf((t - offsetAt(baseMs, anchors, t, times)).coerceAtLeast(0), floor)
+            val offset = (baseMs + sortedDelta(sorted, t, times)).coerceIn(-ANCHOR_LIMIT_MS, ANCHOR_LIMIT_MS)
+            val moved = maxOf((t - offset).coerceAtLeast(0), floor)
             floor = moved
             line.copy(timeMs = moved)
         }

@@ -231,6 +231,30 @@ class LyricsRepo(private val store: LyricsStore) {
         e?.let { store.save(t.key, it.copy(sentAt = at)) } != null
     } == true
 
+    /**
+     * Share your fix (0.5.0, owner Q23): LRCLIB's proof of work, then the publish of [body]. Throws if [cancelled] turns
+     * true before the publish or the work fails. Once the publish starts it finishes and is recorded, even if Cancel
+     * comes now: a send that went out must never look like it didn't. [onSent] runs as soon as LRCLIB has it, and
+     * [onMarked] when "Sent on" was marked, which is only for the timing that was sent ([versionId] to [skips]).
+     */
+    suspend fun share(
+        t: Track, body: org.json.JSONObject, versionId: Long, offsetMs: Long, anchors: List<Anchor>, skips: List<Long>,
+        cancelled: () -> Boolean, onSent: () -> Unit, onMarked: () -> Unit,
+    ) {
+        val token = withContext(Dispatchers.Default) {
+            val (prefix, target) = withContext(Dispatchers.IO) { LrcLib.requestChallenge() }
+            val nonce = ProofOfWork.solve(prefix, target, cancelled)
+                ?: if (cancelled()) throw kotlinx.coroutines.CancellationException() else error("challenge")   // too hard or too long: "That didn't finish"
+            check(ProofOfWork.verify(prefix, target, nonce))   // a last look before sending
+            "$prefix:$nonce"
+        }
+        withContext(kotlinx.coroutines.NonCancellable) {
+            withContext(Dispatchers.IO) { LrcLib.publish(token, body) }
+            onSent()
+            if (markSent(t, versionId, offsetMs, anchors, skips, System.currentTimeMillis())) onMarked()
+        }
+    }
+
     /** "Clear my timing": no nudge, no anchors and no skipped lines for this song; the version stays. */
     suspend fun clearTiming(t: Track): Boolean = edit {
         store.load(t.key)?.let { store.save(t.key, it.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0, skips = emptyList())) } != null

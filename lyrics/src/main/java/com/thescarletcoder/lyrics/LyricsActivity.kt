@@ -510,22 +510,10 @@ private fun LyricsScreen(
                                     val sentSkips = s.skips
                                     SettingsWork.runner.run(SettingsWork.SHARE) {
                                         val sent = WorkRunner.Result(true, "Sent. Thank you: LRCLIB has your timing for this song.")
-                                        val token = withContext(Dispatchers.Default) {
-                                            val (prefix, target) = withContext(Dispatchers.IO) { LrcLib.requestChallenge() }
-                                            val nonce = ProofOfWork.solve(prefix, target, cancelled = { !isActive })
-                                                ?: if (!isActive) throw kotlinx.coroutines.CancellationException() else error("challenge")   // too hard or too long: "That didn't finish"
-                                            check(ProofOfWork.verify(prefix, target, nonce))   // a last look before sending
-                                            "$prefix:$nonce"
-                                        }
-                                        // Once the publish starts it finishes and is recorded, even if Cancel comes now:
-                                        // a send that went out must never look like it didn't.
-                                        withContext(kotlinx.coroutines.NonCancellable) {
-                                            withContext(Dispatchers.IO) { LrcLib.publish(token, body) }
-                                            SettingsWork.runner.settle(SettingsWork.SHARE, sent)
-                                            val at = System.currentTimeMillis()
-                                            // "Sent on" only for the timing that was sent; the screen (even a recreated one) reads it again.
-                                            if (repo.markSent(t, versionId, sentOffset, sentAnchors, sentSkips, at)) SettingsWork.lyricsChanged()
-                                        }
+                                        // "Sent on" only for the timing that was sent; the screen (even a recreated one) reads it again.
+                                        val job = kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
+                                        repo.share(t, body, versionId, sentOffset, sentAnchors, sentSkips, cancelled = { job?.isActive == false },
+                                            onSent = { SettingsWork.runner.settle(SettingsWork.SHARE, sent) }, onMarked = { SettingsWork.lyricsChanged() })
                                         sent
                                     }
                                 }, onCancelSend = { SettingsWork.runner.cancel(SettingsWork.SHARE) }, onClose = { panel = Panel.NONE })

@@ -259,7 +259,7 @@ class LyricsStore(context: Context) {
             e.pendingId?.let { o.put("pid", it) }
             if (e.tapped) o.put("t", true)
             if (e.sentAt > 0) o.put("sent", e.sentAt)
-            if (e.anchors.isNotEmpty()) o.put("anchors", JSONArray().apply { e.anchors.forEach { put(JSONArray().put(it.lineMs).put(it.deltaMs)) } })
+            if (e.anchors.isNotEmpty()) o.put("anchors", AnchorJson.write(e.anchors))
             if (e.skips.isNotEmpty()) o.put("skips", JSONArray(e.skips))
             song?.let { o.put("s", it) }
             e.candidate?.let {
@@ -319,13 +319,11 @@ class LyricsStore(context: Context) {
             skips = o.optJSONArray("skips")?.let { arr -> (0 until arr.length()).mapNotNull { i -> (arr.opt(i) as? Number)?.toLong() }.distinct().sorted() }.orEmpty(),
             anchors = o.optJSONArray("anchors")?.let { arr ->
                 // A damaged pair is skipped on its own, so it can't cost the pick, the nudge or the other anchors.
-                (0 until arr.length()).mapNotNull { i ->
-                    arr.optJSONArray(i)?.takeIf { it.length() == 2 && it.opt(0) is Number && it.opt(1) is Number }
-                        ?.let { Anchor(it.getLong(0), it.getLong(1)) }
-                }
+                (0 until arr.length()).mapNotNull { i -> AnchorJson.pair(arr.optJSONArray(i)) }
             }.orEmpty(),
         )
-        private val HASH = Regex("[0-9a-f]{64}")   // a cache file's name: a SHA-256 in hex
+        /** A cache file's name, and a fix's key in a backup: a SHA-256 in hex. */
+        internal val HASH = Regex("[0-9a-f]{64}")
 
         /** A track key as it's stored anywhere on disk: SHA-256, hex. */
         fun hash(key: String): String =
