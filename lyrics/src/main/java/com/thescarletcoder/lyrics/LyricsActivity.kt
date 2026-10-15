@@ -501,12 +501,13 @@ private fun LyricsScreen(
                             panel == Panel.SHARE && t != null && shown is Shown.Found -> {
                                 val s = shown as Shown.Found
                                 SharePanel(t, s, onSend = {
-                                    val body = ShareFix.body(s.candidate, YourTiming.apply(s.lines, s.offsetMs, s.anchors))
+                                    val body = ShareFix.body(s.candidate, YourTiming.apply(s.lines, s.offsetMs, s.anchors), s.skips.isNotEmpty())
                                     if (SettingsWork.runner.busy(SettingsWork.SHARE)) return@SharePanel
                                     SettingsWork.sharing = t.key   // the result belongs to this song
                                     val versionId = s.candidate.id
                                     val sentOffset = s.offsetMs
                                     val sentAnchors = s.anchors
+                                    val sentSkips = s.skips
                                     SettingsWork.runner.run(SettingsWork.SHARE) {
                                         val sent = WorkRunner.Result(true, "Sent. Thank you: LRCLIB has your timing for this song.")
                                         val token = withContext(Dispatchers.Default) {
@@ -523,7 +524,7 @@ private fun LyricsScreen(
                                             SettingsWork.runner.settle(SettingsWork.SHARE, sent)
                                             val at = System.currentTimeMillis()
                                             // "Sent on" only for the timing that was sent; the screen (even a recreated one) reads it again.
-                                            if (repo.markSent(t, versionId, sentOffset, sentAnchors, at)) SettingsWork.lyricsChanged()
+                                            if (repo.markSent(t, versionId, sentOffset, sentAnchors, sentSkips, at)) SettingsWork.lyricsChanged()
                                         }
                                         sent
                                     }
@@ -553,6 +554,12 @@ private fun LyricsScreen(
                                             if (anchors != null) updateIf(fixing.candidate.id) { it.copy(anchors = anchors, tapped = true, sentAt = 0) }
                                         }
                                     } },
+                                onSkip = { lineMs, done -> val t = track
+                                    if (t == null) done(false) else scope.launch {
+                                        val e = repo.skipLine(t, lineMs)
+                                        if (e != null) updateIf(fixing.candidate.id) { it.withSkips(e.skips).copy(anchors = e.anchors, tapped = true, sentAt = 0) }
+                                        done(e != null)
+                                    } },
                                 onDone = { fixMode = FixMode.NONE })
                         }
                     }
@@ -574,7 +581,7 @@ private fun LyricsScreen(
             onShare = { SettingsWork.runner.clear(SettingsWork.SHARE); panel = Panel.SHARE },
             onClear = { val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch {
-                    if (repo.clearTiming(t)) updateIf(s.candidate.id) { it.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0) }
+                    if (repo.clearTiming(t)) updateIf(s.candidate.id) { it.withSkips(emptyList()).copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0) }
                 } },
         )
         MoreSheet(

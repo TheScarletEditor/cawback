@@ -82,11 +82,12 @@ object ShareFix {
         String.format(Locale.ROOT, "[%02d:%02d.%02d] %s", cs / 6000, (cs % 6000) / 100, cs % 100, l.text).trimEnd()
     }
 
-    fun body(c: Candidate, timed: List<LyricLine>): JSONObject = JSONObject()
+    /** [skipped]: lines were marked "not in this song" (0.5.1): the plain lyrics leave them out too. */
+    fun body(c: Candidate, timed: List<LyricLine>, skipped: Boolean = false): JSONObject = JSONObject()
         .put("trackName", c.track)
         .put("artistName", c.artist)
         .put("albumName", c.album)
         .put("duration", c.durationSec)   // as stored, even 0, so it still matches that version
-        .put("plainLyrics", c.plain ?: timed.joinToString("\n") { it.text })
+        .put("plainLyrics", c.plain?.takeIf { !skipped } ?: timed.joinToString("\n") { it.text })
         .put("syncedLyrics", lrc(timed))
 }

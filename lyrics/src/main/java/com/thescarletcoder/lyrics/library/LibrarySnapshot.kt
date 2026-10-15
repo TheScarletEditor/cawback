@@ -14,6 +14,8 @@ data class TimingFix(
     val key: String, val versionId: Long, val pinned: Boolean, val offsetMs: Long, val anchors: List<Anchor>, val song: String? = null,
     /** Lined up by ear (Line up now or Fix lines), so it can still be shared after a restore. */
     val tapped: Boolean = false,
+    /** Lines marked "not in this song" (0.5.1), by their time in the record. */
+    val skips: List<Long> = emptyList(),
 )
 
 /**
@@ -51,18 +53,21 @@ data class LibrarySnapshot(
         .put("fixes", JSONArray(fixes.map { f ->
             JSONObject().put("key", f.key).put("id", f.versionId).put("pinned", f.pinned).put("offset", f.offsetMs)
                 .put("anchors", JSONArray(f.anchors.map { JSONArray().put(it.lineMs).put(it.deltaMs) }))
-                .apply { f.song?.let { put("song", it) }; if (f.tapped) put("tapped", true) }
+                .apply { f.song?.let { put("song", it) }; if (f.tapped) put("tapped", true); if (f.skips.isNotEmpty()) put("skips", JSONArray(f.skips)) }
         }))
 
     companion object {
-        /** 2: 0.5.0, with the user's timing fixes. 0.4.x refuses it as newer; schema 1 backups still read here. */
-        const val SCHEMA = 2
+        /**
+         * 2: 0.5.0, with the user's timing fixes. 3: 0.5.1, with skipped lines and bigger moves for tapped lines (owner Q57:
+         * 0.5.0 refuses it as newer instead of dropping them). Older versions refuse what they don't know; 1 and 2 still read here.
+         */
+        const val SCHEMA = 3
         private val HASH = Regex("[0-9a-f]{64}")
         private const val MAX_ANCHORS = 500            // more than any song's lines
         private const val MAX_ALL_ANCHORS = 200_000    // across every fix: a bad backup can't exhaust memory
         private const val MAX_FIXES = 20_000
         private const val MAX_SONG_KEY = 1_024
-        private const val LIMIT = com.thescarletcoder.lyrics.YourTiming.LIMIT_MS
+        private const val LIMIT = com.thescarletcoder.lyrics.YourTiming.ANCHOR_LIMIT_MS
 
         /** The fixes to restore: none for a song the restore forgot (here or in the backup). */
         fun toRestore(fixes: List<TimingFix>, forgotten: Set<String>, forgottenSongs: Set<String> = emptySet()) =
@@ -98,8 +103,11 @@ data class LibrarySnapshot(
                                 a.optJSONArray(j)?.takeIf { it.length() == 2 && it.opt(0) is Number && it.opt(1) is Number }
                                     ?.let { Anchor(it.getLong(0), it.getLong(1).coerceIn(-2 * LIMIT, 2 * LIMIT)) }?.takeIf { it.lineMs in 0..86_400_000L }
                             }.distinctBy { it.lineMs }.sortedBy { it.lineMs }
+                            val s = f.optJSONArray("skips")
+                            val skips = if (s == null) emptyList() else (0 until minOf(s.length(), MAX_ANCHORS, budget)).also { budget -= it.count() }
+                                .mapNotNull { j -> (s.opt(j) as? Number)?.toLong()?.takeIf { it in 0..86_400_000L } }.distinct().sorted()
                             TimingFix(key, f.getLong("id"), f.optBoolean("pinned"), f.optLong("offset").coerceIn(-LIMIT, LIMIT), anchors,
-                                f.optString("song").ifBlank { null }?.take(MAX_SONG_KEY), f.optBoolean("tapped"))
+                                f.optString("song").ifBlank { null }?.take(MAX_SONG_KEY), f.optBoolean("tapped"), skips)
                         }.getOrNull()
                     }.distinctBy { it.key }
                 }.orEmpty(),

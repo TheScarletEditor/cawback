@@ -42,6 +42,8 @@ class LyricsStore(context: Context) {
         val tapped: Boolean = false,
         /** When this timing was shared with LRCLIB (0: not shared, or changed since). */
         val sentAt: Long = 0,
+        /** Lines marked "not in this song" (owner, 0.5.1 Q53), by their time in the record: hidden and not shared. */
+        val skips: List<Long> = emptyList(),
     )
 
     private fun file(key: String) = File(dir, "${hash(key)}.json")
@@ -121,8 +123,9 @@ class LyricsStore(context: Context) {
             synchronized(LOCK) {
                 if (!f.exists()) return@forEach   // forgotten or cleared meanwhile: nothing to reset, not a failure
                 val o = try { read(f) } catch (_: Exception) { ok = false; null } ?: return@forEach
-                if (o.optLong("offset") == 0L && o.optJSONArray("anchors").let { it == null || it.length() == 0 } && !o.optBoolean("t")) return@forEach
-                o.put("offset", 0L).remove("anchors"); o.remove("t"); o.remove("sent")
+                if (o.optLong("offset") == 0L && o.optJSONArray("anchors").let { it == null || it.length() == 0 } && !o.optBoolean("t") &&
+                    o.optJSONArray("skips").let { it == null || it.length() == 0 }) return@forEach
+                o.put("offset", 0L).remove("anchors"); o.remove("t"); o.remove("sent"); o.remove("skips")   // skipped lines are timing too
                 if (!runCatching { write(f, o) }.getOrDefault(false)) ok = false   // a failed replace is a failure too
             }
         }
@@ -257,6 +260,7 @@ class LyricsStore(context: Context) {
             if (e.tapped) o.put("t", true)
             if (e.sentAt > 0) o.put("sent", e.sentAt)
             if (e.anchors.isNotEmpty()) o.put("anchors", JSONArray().apply { e.anchors.forEach { put(JSONArray().put(it.lineMs).put(it.deltaMs)) } })
+            if (e.skips.isNotEmpty()) o.put("skips", JSONArray(e.skips))
             song?.let { o.put("s", it) }
             e.candidate?.let {
                 o.put("c", JSONObject()
@@ -273,13 +277,13 @@ class LyricsStore(context: Context) {
 
         /** The user's own pick or timing (or a restored fix waiting to apply): the cleanup never deletes these (Q56). */
         fun isYours(e: Entry): Boolean =
-            e.pinned || e.offsetMs != 0L || e.anchors.isNotEmpty() || e.pendingId != null || e.tapped || e.sentAt > 0
+            e.pinned || e.offsetMs != 0L || e.anchors.isNotEmpty() || e.skips.isNotEmpty() || e.pendingId != null || e.tapped || e.sentAt > 0
 
-        /** A fix worth keeping: a version with a pick, a nudge or tapped lines. */
+        /** A fix worth keeping: a version with a pick, a nudge, tapped lines or skipped lines. */
         fun fixOf(key: String, e: Entry, song: String?): TimingFix? {
             val id = e.candidate?.id ?: e.pendingId ?: return null
-            if (!e.pinned && e.offsetMs == 0L && e.anchors.isEmpty()) return null
-            return TimingFix(key, id, e.pinned, e.offsetMs, e.anchors, song, e.tapped)
+            if (!e.pinned && e.offsetMs == 0L && e.anchors.isEmpty() && e.skips.isEmpty()) return null
+            return TimingFix(key, id, e.pinned, e.offsetMs, e.anchors, song, e.tapped, e.skips)
         }
 
         /**
@@ -287,12 +291,12 @@ class LyricsStore(context: Context) {
          * and no timing here: the timing is added. Otherwise, with nothing of the user's here: the version to fetch.
          */
         fun merged(existing: Entry?, fix: TimingFix): Entry? {
-            if (existing != null && (existing.pinned || existing.offsetMs != 0L || existing.anchors.isNotEmpty() || existing.pendingId != null)) return null
+            if (existing != null && (existing.pinned || existing.offsetMs != 0L || existing.anchors.isNotEmpty() || existing.skips.isNotEmpty() || existing.pendingId != null)) return null
             // Marked current, so the next play doesn't match again and drop the timing.
             if (existing?.candidate?.id == fix.versionId) return existing!!.copy(
                 pinned = fix.pinned || existing.pinned, offsetMs = fix.offsetMs, anchors = fix.anchors, matchVersion = LyricsRepo.MATCHING,
-                tapped = fix.tapped)
-            return Entry(null, fix.pinned, fix.offsetMs, 0, anchors = fix.anchors, pendingId = fix.versionId, tapped = fix.tapped)
+                tapped = fix.tapped, skips = fix.skips)
+            return Entry(null, fix.pinned, fix.offsetMs, 0, anchors = fix.anchors, pendingId = fix.versionId, tapped = fix.tapped, skips = fix.skips)
         }
 
         /** An entry as read; entries from before 0.5.0 have no matching version and no anchors. */
@@ -312,6 +316,7 @@ class LyricsStore(context: Context) {
             fetchedAt = o.optLong("at"),
             matchVersion = o.optInt("mv"),
             unsure = o.optBoolean("u"),
+            skips = o.optJSONArray("skips")?.let { arr -> (0 until arr.length()).mapNotNull { i -> (arr.opt(i) as? Number)?.toLong() }.distinct().sorted() }.orEmpty(),
             anchors = o.optJSONArray("anchors")?.let { arr ->
                 // A damaged pair is skipped on its own, so it can't cost the pick, the nudge or the other anchors.
                 (0 until arr.length()).mapNotNull { i ->

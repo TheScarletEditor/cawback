@@ -215,7 +215,7 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
     val runner = SettingsWork.runner
     @Suppress("UNUSED_VARIABLE") val v = SettingsWork.version.intValue   // redraw when sending starts or ends
     val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
-    val body = remember(s) { ShareFix.body(s.candidate, timed) }
+    val body = remember(s) { ShareFix.body(s.candidate, timed, s.skips.isNotEmpty()) }
     val mine = SettingsWork.sharing == t.key
     val busy = runner.busy(SettingsWork.SHARE)
     val sending = busy && mine

@@ -37,7 +37,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
@@ -267,19 +266,24 @@ enum class FixMode { NONE, LINE_UP, FIX }
  * closes; Fix lines moves on to the next line with each tap, until Done.
  */
 @Composable
-fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outputDelayMs: Long, onNow: (lineMs: Long, offsetMs: Long) -> Unit, onDone: () -> Unit) {
-    var pos by remember { mutableLongStateOf(np.positionMs()) }
-    LaunchedEffect(Unit) { while (true) { pos = np.positionMs(); kotlinx.coroutines.delay(100) } }
+fun FixBar(
+    mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outputDelayMs: Long, onNow: (lineMs: Long, offsetMs: Long) -> Unit,
+    onSkip: (lineMs: Long, done: (saved: Boolean) -> Unit) -> Unit, onDone: () -> Unit,
+) {
     val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
     var target by remember { mutableStateOf<Int?>(null) }
     var started by remember { mutableStateOf(false) }
     LaunchedEffect(playing) {
         if (playing && !started) { target = YourTiming.firstTarget(timed, np.positionMs() + outputDelayMs); started = true }
     }
-    // A missed line is replaced once, by a new line that can't have been sung yet; the bar never drifts with the clock.
-    val missed = target?.let { YourTiming.missed(timed, it, pos + outputDelayMs) } == true
-    LaunchedEffect(missed) { if (missed) target = YourTiming.firstTarget(timed, np.positionMs() + outputDelayMs) }
-    val next = target.takeIf { !missed }
+    // The line stays until it's tapped, missed or marked (0.5.1): after a cut the timing can be off by far more than
+    // 10 s either way, so the clock can't tell a line still to come from one already sung. The user can.
+    val next = target
+    // After "Not in this song" the line leaves the list: the same place now holds the next line (the first with words).
+    var skippedAt by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(timed) {
+        skippedAt?.let { i -> target = (i until timed.size).firstOrNull { timed[it].text.isNotBlank() && timed[it].timeMs != null }; skippedAt = null }
+    }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(L.surface)
             // Taps on the bar stay on it (not the lyrics below), without making it one silent button for TalkBack;
@@ -299,12 +303,19 @@ fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outp
             }
         }
         FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (playing && started && next != null) Washed("Now", {
+            if (playing && started && next != null && skippedAt == null) Washed("Now", {
                 // The line's time in the record, not on screen: the move is worked out against the record's own timing.
                 val lineMs = s.lines[next].timeMs ?: return@Washed
                 onNow(lineMs, YourTiming.offsetFromTap(lineMs, np.positionMs(), outputDelayMs, Tunables.int(LyricsTuning.REACTION_MS).toLong()))
                 target = YourTiming.afterTap(timed, next)
             })
+            // Fix lines only (owner, 0.5.1 Q53): a line in this version that the song doesn't have, hidden from now on.
+            if (mode == FixMode.FIX && playing && started && next != null && skippedAt == null) Washed("Not in this song", {
+                val lineMs = s.lines[next].timeMs ?: return@Washed
+                skippedAt = next
+                onSkip(lineMs) { saved -> if (!saved) skippedAt = null }   // not saved: the same line stays, to try again
+            })
+            if (playing && started && next != null && skippedAt == null) Washed("Missed it", { target = YourTiming.afterTap(timed, next) })
             Washed(if (mode == FixMode.LINE_UP && next != null) "Cancel" else "Done", onDone)
         }
     }
