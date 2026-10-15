@@ -128,11 +128,14 @@ object LrcLib {
         }
     }
 
-    private fun parse(o: JSONObject) = Candidate(
+    /** A JSON null reads as "" (optString alone gives the word "null", which a shared fix would then send). */
+    private fun text(o: JSONObject, key: String) = if (o.isNull(key)) "" else o.optString(key)
+
+    internal fun parse(o: JSONObject) = Candidate(
         id = o.getLong("id"),
-        track = o.optString("trackName"),
-        artist = o.optString("artistName"),
-        album = o.optString("albumName"),
+        track = text(o, "trackName"),
+        artist = text(o, "artistName"),
+        album = text(o, "albumName"),
         durationSec = o.optDouble("duration", 0.0),
         instrumental = o.optBoolean("instrumental"),
         plain = o.optString("plainLyrics").takeIf { !o.isNull("plainLyrics") && it.isNotBlank() },

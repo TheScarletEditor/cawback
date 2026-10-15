@@ -13,6 +13,7 @@ Each slice: tests in the same commit, then `/finalize --slice`.
 ### Slice 1: a shared fix replaces the record it fixes (Q47)
 Share your fix sends the chosen record's own title, artist, album and length (`Candidate.track`, `artist`, `album`, `durationSec`) instead of the music app's. LRCLIB then adds the fix to that record (its server matches title, artist and album exactly, ignoring case, and the length within 2 s) instead of creating a near-duplicate. The Share preview shows those names, since they are what's sent.
 Acceptance: payload test (record names sent, not the player's; length within LRCLIB's 2 s match); the preview text shown to the owner word for word; Send still never tapped in tests.
+Done 2026-10-14. Slice check: done-checklist pass and one review agent. L1-1: a record with an empty or missing length now sends it as stored (0), not the song's length, which would miss the version (fixed). L1-2: a JSON null album read as the word "null" (fixed: read as empty; test). L1-3 (noted, not fixable here): if two LRCLIB records share title, artist and album within 2 s, LRCLIB files the fix under the older one. No preview text changed (the preview shows what's sent, now the version's names). 120 unit tests.
 
 ### Slice 2: licences and the shared controls file (Q47)
 Apache 2.0 notice for Compose and AndroidX in `licenses/` and a Credits line (as Keyward 0.2.2). Compare `ScarletControls.kt` with the canonical copy in Keyward; bring the copy in line, or report the difference as a question if the copies changed on purpose.

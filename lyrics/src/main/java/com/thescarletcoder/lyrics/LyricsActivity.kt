@@ -490,7 +490,7 @@ private fun LyricsScreen(
                             panel == Panel.SHARE && t != null && shown is Shown.Found -> {
                                 val s = shown as Shown.Found
                                 SharePanel(t, s, onSend = {
-                                    val body = ShareFix.body(t, s.candidate, YourTiming.apply(s.lines, s.offsetMs, s.anchors))
+                                    val body = ShareFix.body(s.candidate, YourTiming.apply(s.lines, s.offsetMs, s.anchors))
                                     if (SettingsWork.runner.busy(SettingsWork.SHARE)) return@SharePanel
                                     SettingsWork.sharing = t.key   // the result belongs to this song
                                     val versionId = s.candidate.id

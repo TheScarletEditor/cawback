@@ -70,7 +70,9 @@ object ProofOfWork {
 
 /**
  * Share your fix (0.5.0, owner Q23): what goes to LRCLIB, built here so the preview shows exactly what's sent. The song
- * as the player names it (so others with the same player get it), and the version's lyrics with the user's timing.
+ * as the fixed version names it (owner, 0.5.1 Q47): LRCLIB files a publish under the record with the same title, artist
+ * and album (ignoring case) and a length within 2 s, so the fix replaces that version instead of adding a near-duplicate.
+ * Then the version's lyrics with the user's timing.
  */
 object ShareFix {
     /** "[01:02.35] words": the lines with their (user-timed) times; blank lines keep their time (instrumental gaps). */
@@ -80,11 +82,11 @@ object ShareFix {
         String.format(Locale.ROOT, "[%02d:%02d.%02d] %s", cs / 6000, (cs % 6000) / 100, cs % 100, l.text).trimEnd()
     }
 
-    fun body(t: Track, c: Candidate, timed: List<LyricLine>): JSONObject = JSONObject()
-        .put("trackName", t.title)
-        .put("artistName", t.artist)
-        .put("albumName", t.album?.ifBlank { null } ?: c.album)
-        .put("duration", (t.durationMs?.takeIf { it > 0 }?.div(1000.0)) ?: c.durationSec)
+    fun body(c: Candidate, timed: List<LyricLine>): JSONObject = JSONObject()
+        .put("trackName", c.track)
+        .put("artistName", c.artist)
+        .put("albumName", c.album)
+        .put("duration", c.durationSec)   // as stored, even 0, so it still matches that version
         .put("plainLyrics", c.plain ?: timed.joinToString("\n") { it.text })
         .put("syncedLyrics", lrc(timed))
 }
