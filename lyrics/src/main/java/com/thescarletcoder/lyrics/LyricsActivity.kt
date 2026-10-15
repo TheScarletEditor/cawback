@@ -211,7 +211,10 @@ class LyricsActivity : ComponentActivity() {
         val sm = getSystemService(android.content.pm.ShortcutManager::class.java) ?: return
         val pkg = settings.effectivePlayer()
         if (pkg == null) { runCatching { sm.removeAllDynamicShortcuts() }; return }
-        runCatching { sm.dynamicShortcuts = listOf(playerShortcut(pkg)) }
+        val shortcut = playerShortcut(pkg)
+        runCatching { sm.dynamicShortcuts = listOf(shortcut) }
+        // A copy pinned to the home screen keeps its old label (an older name, an older app) until it's updated too.
+        runCatching { sm.updateShortcuts(listOf(shortcut)) }
     }
 
     /** Settings: put "Cawback + <your app>" on the home screen (Android asks first). */
