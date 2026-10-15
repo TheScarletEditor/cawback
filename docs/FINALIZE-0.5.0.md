@@ -103,7 +103,7 @@ All asked and answered 2026-10-12.
 | Step | Offered | Choice | Result |
 |---|---|---|---|
 | Install on devices | 2026-10-14, in Stage 5 | "Install on both (Recommended)" | Both devices 0.5.0+2b9155f, versions.ps1: up to date (the commits after it change only this report) |
-| Signed public build | | | |
+| Signed public build | 2026-10-14: push, then release.ps1 by the owner | "Push (Recommended)" (main at 8530af6 on TheScarletEditor/cawback) | The owner signed with release.ps1. dist/cawback-0.5.0.apk (and the same file as cawback.apk): v3 signature verifies; certificate SHA-256 b2388659...1acacd, the same as 0.4.1; 0.5.0 / 5, label Cawback, no suffix, not debuggable; both .sha256 files match (a8b46e8b...ebdac9); 9.65 MB. Upgrade test on the phone emulator: signed 0.4.1 with a 0.50 s nudge and "follows only YouTube Music", then signed 0.5.0 over it: the nudge, the setting (now "Cawback follows only...") and notification access kept, no crash; both removed after (the emulator had no Lyrics build before) |
 | GitHub release (draft) | | | |
 | Website update | | | |
 
