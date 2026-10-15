@@ -442,7 +442,8 @@ fun OnThisDevice(repo: LyricsRepo, refresh: () -> Any?) {
         "Lyrics already fetched, so a song you've played before shows up at once and works offline, with your " +
             "\"Other versions\" picks and timing nudges. Each one includes the song's title and artist. Encrypted on this device; " +
             "Android's backups are switched off for Cawback; your picks and timing go into a Library backup only if you make one. " +
-            "Kept until you clear them, unless you turn on deleting lyrics for songs not played in 90 days (Settings > Privacy).",
+            "Kept until you clear them, unless you turn on deleting lyrics for songs not played in 90 days (Settings > Privacy). " +
+            "Songs with your own pick or timing are always kept.",
     )
     val lib = f.library
     Item(
@@ -468,7 +469,7 @@ fun OnThisDevice(repo: LyricsRepo, refresh: () -> Any?) {
     Item(
         "Sent to lrclib.net",
         "To look up words: the title, artist, album and length of the song playing, and what you type into an " +
-            "\"Other versions\" search. When you share a fix, that song's details and lyrics with your timing, and only " +
+            "\"Other versions\" search. When you share a fix, the chosen version's details and lyrics with your timing, and only " +
             "after you tap Send. Nothing else, and to no one else.",
     )
     Item(

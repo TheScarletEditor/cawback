@@ -197,9 +197,7 @@ class LyricsRepo(private val store: LyricsStore) {
 
     suspend fun nudge(t: Track, deltaMs: Long): Long? = edit {
         val e = store.load(t.key) ?: LyricsStore.Entry(null, false, 0, 0)
-        // Earlier and Later stay within 10 s (owner, 0.5.1 Q53); a bigger move from Line up now can still be stepped back.
-        val limit = maxOf(YourTiming.LIMIT_MS, Math.abs(e.offsetMs))
-        val next = (e.offsetMs + deltaMs).coerceIn(-limit, limit)
+        val next = YourTiming.nudged(e.offsetMs, deltaMs)
         store.save(t.key, e.copy(offsetMs = next, sentAt = 0))   // anchors move with it: they're relative to the base
         next
     }

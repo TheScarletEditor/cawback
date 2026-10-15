@@ -36,7 +36,7 @@ Not recorded: lyric text, album art, the music app, anything from other apps, lo
 - Unit tests: 118 of 118 pass.
 - `lintDebug`: 0 errors, 49 warnings (the same older set /finalize 0.5.0 recorded).
 - Repo guard: installed, matches the current hook.
-- Devices: the tablet runs 0.5.0+cb6f88d-dirty and the Flip phone 0.5.0+397d5ff-dirty, both behind main (7b7dace) and built from uncommitted trees. /finalize's ship step brings both up to date.
+- Devices: the tablet runs 0.5.0+cb6f88d-dirty and the phone 0.5.0+397d5ff-dirty, both behind main (7b7dace) and built from uncommitted trees. /finalize's ship step brings both up to date.
 
 ## What can go wrong (proposed, for the owner to confirm)
 

@@ -54,6 +54,15 @@ class YourTimingTest {
         assertEquals(listOf(Anchor(1_000, YourTiming.ANCHOR_LIMIT_MS)), YourTiming.withAnchor(emptyList(), 0, 1_000, Long.MAX_VALUE / 2))
     }
 
+    @Test fun earlierAndLaterStayWithinTenSecondsOfZero() {
+        assertEquals(10_000L, YourTiming.nudged(9_900, 250))
+        assertEquals(-10_000L, YourTiming.nudged(-9_900, -250))
+        // After Line up now moved it 30 s: back toward zero, never further out, never past -10 s.
+        assertEquals(29_750L, YourTiming.nudged(30_000, -250))
+        assertEquals(30_000L, YourTiming.nudged(30_000, 250))
+        assertEquals(-10_000L, YourTiming.nudged(-9_900, -250))
+    }
+
     @Test fun aCutJumpsAtTheLongestPause() {
         // The record is missing 20 s from 0:40 on: tapped lines before (no move) and after (20 s later).
         val song = listOf(LyricLine(10_000, "a"), LyricLine(20_000, "b"), LyricLine(30_000, "c"), LyricLine(43_000, "d"),

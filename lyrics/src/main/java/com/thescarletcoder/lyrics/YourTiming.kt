@@ -57,6 +57,13 @@ object YourTiming {
         return span.zipWithNext().maxByOrNull { (x, y) -> y - x }!!.second
     }
 
+    /**
+     * Earlier and Later (owner, 0.5.1 Q53 and finalize A2): within 10 s either way. A bigger move from Line up now can
+     * be stepped back toward zero, never further out, and never more than 10 s past zero on the other side.
+     */
+    fun nudged(currentMs: Long, deltaMs: Long): Long =
+        (currentMs + deltaMs).coerceIn(minOf(-LIMIT_MS, currentMs), maxOf(LIMIT_MS, currentMs))
+
     /** The whole move for the line at [lineMs]: the base nudge plus its share of the anchors, within the limit. */
     fun offsetAt(baseMs: Long, anchors: List<Anchor>, lineMs: Long, times: List<Long> = emptyList()): Long =
         (baseMs + deltaAt(anchors, lineMs, times)).coerceIn(-ANCHOR_LIMIT_MS, ANCHOR_LIMIT_MS)
