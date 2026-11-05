@@ -33,6 +33,9 @@ class LyricsRepo(private val store: LyricsStore) {
     private val retryMissAfterMs = 24 * 3_600_000L
 
     companion object {
+        /** See [edit]: shared by every LyricsRepo. */
+        private val edits = kotlinx.coroutines.sync.Mutex()
+
         /**
          * The version's lines as shown: synced when it has them, else plain; lines marked "not in this song" left out
          * (by their time in the record, so two lines sharing one time go together).
@@ -174,9 +177,9 @@ class LyricsRepo(private val store: LyricsStore) {
 
     /**
      * The user's changes read and then write the song's entry: one at a time, so quick taps all count (M13), and never
-     * over an entry that can't be read just now (null: nothing changed).
+     * over an entry that can't be read just now (null: nothing changed). One lock for the whole app, so the lyrics
+     * screen and the fixing window (D-062), each with its own repo, still take turns.
      */
-    private val edits = kotlinx.coroutines.sync.Mutex()
     private suspend fun <T> edit(block: () -> T): T? = withContext(Dispatchers.IO) {
         edits.withLock { try { block() } catch (_: LyricsStore.Busy) { null } }
     }

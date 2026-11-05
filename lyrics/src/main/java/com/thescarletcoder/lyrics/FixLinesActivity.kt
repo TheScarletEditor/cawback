@@ -14,5 +14,7 @@ class FixLinesActivity : LyricsActivity() {
         const val EXTRA_MODE = "com.thescarletcoder.lyrics.FIX_MODE"
         /** The song it's for: title and artist, as the lyrics screen keys a song. */
         const val EXTRA_SONG = "com.thescarletcoder.lyrics.FIX_SONG"
+        /** Opened from split screen: closing it brings your music app back beside Cawback. */
+        const val EXTRA_FROM_SPLIT = "com.thescarletcoder.lyrics.FIX_FROM_SPLIT"
     }
 }
