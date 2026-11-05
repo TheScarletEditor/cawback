@@ -350,6 +350,8 @@ fun MoreSheet(
 ) {
     val settings = LocalSettings.current
     BottomSheet(open, onClose) {
+                // The same visible way out as This song (owner, finalize 0.5.1 Q10).
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { IconButton(36.dp, "Close", onClose, draw = Icons.close) }
                 if (hasTrack && shown !is Shown.NoAccess) SheetRow("Note and moments", "Your note on this song, and bookmarked times.") { onClose(); onSongPage() }
                 SheetRow("Library", null) { onClose(); onLibrary() }
                 // Pausing is on the lyrics screen, not buried in Settings (scope section 6).
