@@ -61,6 +61,8 @@ Built in six slices with /prep (`docs/LYRICS-0.5.1-PLAN.md`, answers Q47 to Q60 
 | C10 | Cleanup | skipped | LyricsActivity.kt, Chrome.kt, Panels.kt, LyricsStore.kt | Skip and clear results copied onto the screen instead of returned whole; the Fix lines target kept by time instead of index (would change lines sharing a time); one null-name helper for two different jobs; the share job's copied fields (kept on purpose, finalize 0.5.0 C8); one store instance at startup; lazy times in apply; the share body built twice | Larger restructuring or a behaviour change this late; proposed for later | |
 | C11 | Cleanup | question | docs/release-0.5.1/RELEASE-NOTES.md | Release notes draft | Q6: approved | stage 3 |
 | Q1-1 | QA | mechanical | Player.kt | lintRelease: two new UseKtx warnings since the base (the two new settings writes) | Every settings write in the file uses the KTX edit { } (same behaviour; 13 older warnings gone too) | QA |
+| S1 | Smoke part 2 | question | Chrome.kt SongSheet | The owner's device tests: no visible way out of This song (Back works, but the owner kept looking for a button) | Q8: a close X at the right of the title row (Look.kt Icons.close); Back and a tap outside still close it | QA pass 4 |
+| S2 | Smoke part 2 | question | LibraryUi.kt SongsList | The owner's device tests: the Library's top (search, sort and filter buttons) is so tall the list has little room to scroll; "those buttons should be much smaller" | Choice(small = true): 34 dp tall, 14 sp, 6 dp gaps (was 48 dp, 16 sp, 8 dp) for Songs' sort and filters and Stats' periods | QA pass 4 |
 
 ## Questions
 
@@ -72,6 +74,8 @@ Built in six slices with /prep (`docs/LYRICS-0.5.1-PLAN.md`, answers Q47 to Q60 
 | Q4 | A10: the new text | "Yes, as written (Recommended)" | As shown |
 | Q5 | R9: versions with no title or artist (the owner: "If they have no title or artist, then we can't edit it right? It would have to be new. So I guess it depends how much is missing and whether other records exist that have it and those should be corrected instead") | "Point to a named version (Recommended)" | A missing album alone is fine; no title or artist: no Share, and "This version has no title or artist on LRCLIB, so no one would find a fix shared to it. To share, pick a named version in Other versions and fix that one." |
 | Q6 | C11: the 0.5.1 release notes, title "Cawback 0.5.1: Cuts and corrections" | "Yes, as written (Recommended)" | Used for the GitHub release |
+| Q7 | S1, S2 found in the owner's device tests (2026-11-04: "otherwise, the tests pass"): publish now or fix first | "Hold, fix first" | Fixed in 0.5.1; full QA again, a new signed build, then Publish |
+| Q8 | S1: the way out of This song | "Close X by the title (Recommended)" | As built |
 
 ## Ship
 

@@ -177,10 +177,10 @@ private fun SongsList(repo: LibraryRepo, onSong: (String) -> Unit) {
 
     Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
         SearchField(query, { query = it }, {}, hint = "Search songs, artists, albums")
-        FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sort.entries.forEach { s -> Choice(s.label, sort == s) { sort = s } }
-            Choice("Favorites", favorites) { favorites = !favorites }
-            Choice("Has a note", withNote) { withNote = !withNote }
+        FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Sort.entries.forEach { s -> Choice(s.label, sort == s, small = true) { sort = s } }
+            Choice("Favorites", favorites, small = true) { favorites = !favorites }
+            Choice("Has a note", withNote, small = true) { withNote = !withNote }
         }
         when {
             all == null -> {}
@@ -215,8 +215,8 @@ private fun StatsPage(repo: LibraryRepo, onSong: (String) -> Unit) {
         value = withContext(Dispatchers.IO) { repo.stats(period, ZoneId.systemDefault()) }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            LibraryStats.Period.entries.forEach { p -> Choice(p.label, period == p) { period = p } }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            LibraryStats.Period.entries.forEach { p -> Choice(p.label, period == p, small = true) { period = p } }
         }
         val r = result ?: return@Column
         if (r.plays == 0) {

@@ -693,14 +693,16 @@ fun TuningPage() {
 }
 
 @Composable
-internal fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun Choice(label: String, selected: Boolean, small: Boolean = false, onClick: () -> Unit) {
     val shape = RoundedCornerShape(24.dp)
+    // Small: the Library's sort and filter row, so the list gets the screen (owner, finalize 0.5.1 S2).
     Box(
-        Modifier.heightIn(min = 48.dp).clip(shape).background(if (selected) L.text.copy(alpha = 0.14f) else L.wash)
+        Modifier.heightIn(min = if (small) 34.dp else 48.dp).clip(shape).background(if (selected) L.text.copy(alpha = 0.14f) else L.wash)
             .border(1.dp, if (selected) L.text.copy(alpha = 0.45f) else L.washEdge, shape)
-            .selectable(selected = selected, onClick = onClick).padding(horizontal = 18.dp, vertical = 12.dp),   // TalkBack says which is on
+            .selectable(selected = selected, onClick = onClick)   // TalkBack says which is on
+            .padding(horizontal = if (small) 12.dp else 18.dp, vertical = if (small) 6.dp else 12.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = L.text) }
+    ) { Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = if (small) 14.sp else 16.sp, color = L.text) }
 }
 
 @Composable
