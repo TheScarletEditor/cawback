@@ -208,10 +208,13 @@ class LyricsRepo(private val store: LyricsStore) {
     }
 
     /** A tapped line (owner Q22): the line at [lineMs] moves [offsetMs] in all. Returns the anchors now saved (null: none). */
-    suspend fun setAnchor(t: Track, lineMs: Long, offsetMs: Long): List<Anchor>? = edit {
+    suspend fun setAnchor(t: Track, lineMs: Long, offsetMs: Long, onlyLine: Boolean = false): List<Anchor>? = edit {
         // Nothing saved for the song (cleared meanwhile): anchors without a version would be dropped on the next load.
         val e = store.load(t.key)?.takeIf { it.candidate != null } ?: return@edit null
-        val anchors = YourTiming.withAnchor(e.anchors, e.offsetMs, lineMs, offsetMs)
+        // Only this line (owner, 2026-11-05): the lines either side stay put. Times as on screen, as in lineUp.
+        val anchors = if (onlyLine) YourTiming.withOnlyLine(e.anchors, e.offsetMs, lineMs, offsetMs,
+            linesOf(e.candidate!!, e.skips).mapNotNull { it.timeMs }.sorted())
+        else YourTiming.withAnchor(e.anchors, e.offsetMs, lineMs, offsetMs)
         store.save(t.key, e.copy(anchors = anchors, tapped = true, sentAt = 0))
         anchors
     }

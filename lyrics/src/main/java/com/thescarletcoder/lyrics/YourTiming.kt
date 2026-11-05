@@ -103,6 +103,19 @@ object YourTiming {
         (anchors.filter { it.lineMs != lineMs } + Anchor(lineMs, offsetMs.coerceIn(-ANCHOR_LIMIT_MS, ANCHOR_LIMIT_MS) - baseMs)).sortedBy { it.lineMs }
 
     /**
+     * Only this line (owner, 2026-11-05): the line at [lineMs] moves [offsetMs] in all, and the lines either side of it
+     * stay where they show now, so a line sung a little early or late doesn't pull the rest of the song with it. The
+     * neighbours are pinned with their current move (a tap of their own stays as it is). [times]: the record's line
+     * times as on screen (sorted); lines sharing a time count as one.
+     */
+    fun withOnlyLine(anchors: List<Anchor>, baseMs: Long, lineMs: Long, offsetMs: Long, times: List<Long>): List<Anchor> {
+        val sorted = anchors.sortedBy { it.lineMs }
+        val neighbours = listOfNotNull(times.lastOrNull { it < lineMs }, times.firstOrNull { it > lineMs })
+        val pins = neighbours.filter { n -> sorted.none { it.lineMs == n } }.map { Anchor(it, sortedDelta(sorted, it, times)) }
+        return withAnchor(sorted + pins, baseMs, lineMs, offsetMs)
+    }
+
+    /**
      * The move for a line from a tap (owner Q19, Q22): the line at [lineMs] in the record was heard at [tapPositionMs]
      * of the song, less [reactionMs] (people tap a little late). [outputDelayMs] is the headphones' own delay, applied
      * separately, so it's taken out here.

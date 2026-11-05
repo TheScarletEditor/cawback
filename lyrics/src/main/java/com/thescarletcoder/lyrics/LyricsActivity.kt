@@ -532,14 +532,14 @@ private fun LyricsScreen(
                         val fixing = shown as? Shown.Found
                         if (fixMode != FixMode.NONE && fixing != null && panel == Panel.NONE && songShowing && !songSheet && !sheet) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
                             FixBar(fixMode, fixing, np, playing, settings.delayFor(output).toLong(),
-                                onNow = { lineMs, offsetMs -> val t = track
+                                onNow = { lineMs, offsetMs, onlyLine -> val t = track
                                     if (t != null) scope.launch {
                                         if (fixMode == FixMode.LINE_UP) {
                                             fixMode = FixMode.NONE   // closes the bar at once: one Now per Line up
                                             val base = repo.lineUp(t, lineMs, offsetMs)
                                             if (base != null) updateIf(fixing.candidate.id) { it.copy(offsetMs = base, tapped = true, sentAt = 0) }
                                         } else {
-                                            val anchors = repo.setAnchor(t, lineMs, offsetMs)
+                                            val anchors = repo.setAnchor(t, lineMs, offsetMs, onlyLine)
                                             if (anchors != null) updateIf(fixing.candidate.id) { it.copy(anchors = anchors, tapped = true, sentAt = 0) }
                                         }
                                     } },
