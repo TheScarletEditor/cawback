@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.runtime.key
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
@@ -42,8 +44,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,6 +71,7 @@ import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.scarlet.Motion
 import com.thescarletcoder.scarlet.ThemeChoice
 import com.thescarletcoder.scarlet.TuningPanel
+import com.thescarletcoder.lyrics.library.LibraryExport.clock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -189,7 +195,7 @@ fun Picker(t: Track, current: Shown.Found?, repo: LyricsRepo, onPick: (Candidate
                         listOfNotNull(
                             if (chosen) "Showing now" else null,   // first, so a long row never cuts it off
                             c.artist, c.album.ifBlank { null },
-                            "%d:%02d".format(c.durationSec.toInt() / 60, c.durationSec.toInt() % 60),
+                            clock(c.durationSec.toLong().coerceIn(0, 86_400) * 1000),   // a nonsense length can't overflow
                             when { c.synced != null -> "Synced"; c.plain != null -> "Words only"; c.instrumental -> "Instrumental"; else -> null },
                             durDiff?.takeIf { it > 3 }?.let { "length differs by ${it.toInt()}s" },
                             if (f != null && c.synced != null && !f.fits) "runs past the end of this song" else null,
@@ -213,7 +219,7 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
     val runner = SettingsWork.runner
     @Suppress("UNUSED_VARIABLE") val v = SettingsWork.version.intValue   // redraw when sending starts or ends
     val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
-    val body = remember(s, t) { ShareFix.body(t, s.candidate, timed) }
+    val body = remember(s) { ShareFix.body(s.candidate, timed, s.skips.isNotEmpty()) }
     val mine = SettingsWork.sharing == t.key
     val busy = runner.busy(SettingsWork.SHARE)
     val sending = busy && mine
@@ -229,7 +235,7 @@ fun SharePanel(t: Track, s: Shown.Found, onSend: () -> Unit, onCancelSend: () ->
             fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
         val dur = Math.round(body.optDouble("duration", 0.0)).toInt()
         listOf("Title" to body.optString("trackName"), "Artist" to body.optString("artistName"), "Album" to body.optString("albumName"),
-            "Length" to "%d:%02d".format(dur / 60, dur % 60)).forEach { (k, value) ->
+            "Length" to clock(dur * 1000L)).forEach { (k, value) ->
             Text("$k: $value", fontFamily = Inter, fontSize = 16.sp, color = L.text, modifier = Modifier.padding(vertical = 2.dp))
         }
         Box(Modifier.padding(vertical = 14.dp)) {
@@ -286,7 +292,7 @@ internal fun SearchField(value: TextFieldValue, onChange: (TextFieldValue) -> Un
 internal fun SettingsPanel(
     repo: LyricsRepo, hasAccess: Boolean, theme: ThemeChoice, onTheme: (ThemeChoice) -> Unit,
     onGrant: () -> Unit, output: Output, onFollowChanged: () -> Unit, onPinShortcut: () -> Unit,
-    onTuning: () -> Unit, tab: SettingsTab, onTab: (SettingsTab) -> Unit,
+    onTuning: () -> Unit, onLicenses: () -> Unit, tab: SettingsTab, onTab: (SettingsTab) -> Unit,
 ) {
     val short = LocalCompact.current
     @Composable
@@ -303,9 +309,9 @@ internal fun SettingsPanel(
                 SettingsSection.BACKUP -> LibraryBackupSection()
                 SettingsSection.SAVED -> SavedLyricsSettings(repo)
                 SettingsSection.ON_DEVICE -> OnThisDevice(repo, refresh = { SettingsWork.finished.intValue })
-                SettingsSection.ABOUT -> AboutSettings()
+                SettingsSection.ABOUT -> AboutSettings(onLicenses)
                 SettingsSection.TUNING -> {
-                    Text("Feel values for this build. Not in public releases.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+                    SoftText("Feel values for this build. Not in public releases.")
                     Box(Modifier.padding(top = 12.dp)) { Washed("Open tuning", onTuning) }
                 }
             }
@@ -321,7 +327,7 @@ internal fun SettingsPanel(
             .padding(horizontal = 24.dp, vertical = 8.dp),
     ) {
         Text("Settings", fontFamily = Fraunces, fontSize = 28.sp, color = L.text)
-        SettingsTabs(tab, onTab)
+        UnderlineTabs(SettingsTab.entries.map { it.label }, tab.ordinal) { onTab(SettingsTab.entries[it]) }
         key(tab) {
             val inner = rememberScrollState()
             Column(Modifier.fillMaxWidth().then(if (short) Modifier else Modifier.weight(1f).verticalScroll(inner))) { Sections() }
@@ -330,23 +336,23 @@ internal fun SettingsPanel(
 }
 
 /**
- * The tab row: 48dp tall tabs that say which one is on. One row when all four fit; in a narrow split or with a large
+ * The tab row (Settings, and the Library since 0.5.1, owner Q49): 48dp tall tabs that say which one is on. One row when all fit; in a narrow split or with a large
  * font they wrap into two rows of two, so no tab is ever hidden (0.4.1, owner: "Two rows when narrow"); one per row
  * when even half a row can't hold a label, so no word is ever broken.
  */
 @Composable
-private fun SettingsTabs(tab: SettingsTab, onTab: (SettingsTab) -> Unit) {
+internal fun UnderlineTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     Layout(
         content = {
-            SettingsTab.entries.forEach { t ->
-                val on = t == tab
+            labels.forEachIndexed { i, label ->
+                val on = i == selected
                 Column(
                     Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
-                        .selectable(selected = on, role = Role.Tab) { if (!on) onTab(t) }
+                        .selectable(selected = on, role = Role.Tab) { if (!on) onSelect(i) }
                         .padding(horizontal = 10.dp, vertical = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(t.label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = if (on) L.text else L.soft)
+                    Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = if (on) L.text else L.soft)
                     Box(Modifier.padding(top = 6.dp).width(24.dp).height(2.dp).background(if (on) L.text else Color.Transparent, RoundedCornerShape(1.dp)))
                 }
             }
@@ -376,22 +382,22 @@ private fun SettingsTabs(tab: SettingsTab, onTab: (SettingsTab) -> Unit) {
 @Composable
 private fun LyricsDisplaySettings() {
     val settings = LocalSettings.current
-    Text("Text size", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp))
+    SoftText("Text size", Modifier.padding(bottom = 8.dp))
     TextSizePreview()
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         LyricsSettings.TEXT_SIZES.forEachIndexed { i, n -> Choice(n, settings.textSize == i) { settings.chooseTextSize(i) } }
     }
-    Text("Lines already sung", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+    SoftText("Lines already sung", Modifier.padding(top = 14.dp, bottom = 8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Choice("Dimmed", !settings.hidePast) { settings.hidePastLines(false) }
         Choice("Hidden", settings.hidePast) { settings.hidePastLines(true) }
     }
-    Text("After you scroll, follow the song again after", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+    SoftText("After you scroll, follow the song again after", Modifier.padding(top = 14.dp, bottom = 8.dp))
     // Wraps: on a small phone the three side by side squeezed "8 seconds" to one letter per line.
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         LyricsSettings.FOLLOW_DELAYS.forEach { s -> Choice("$s seconds", settings.followDelaySec == s) { settings.chooseFollowDelay(s) } }
     }
-    Text("Keep the screen on while synced lyrics play", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+    SoftText("Keep the screen on while synced lyrics play", Modifier.padding(top = 14.dp, bottom = 8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Choice("On", settings.keepScreenOn) { settings.keepOn(true) }
         Choice("Off", !settings.keepScreenOn) { settings.keepOn(false) }
@@ -440,11 +446,26 @@ private fun ThemeSettings(theme: ThemeChoice, onTheme: (ThemeChoice) -> Unit) {
 private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> Unit) {
     val context = LocalContext.current
     val settings = LocalSettings.current
-    val apps = remember { MediaApps.all(context) }
     val chosen = settings.effectivePlayer() ?: ""
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        apps.forEach { a -> Choice(a.label, chosen == a.pkg) { settings.choosePlayer(a.pkg); onFollowChanged() } }
-        Choice("Whatever is playing", chosen == "") { settings.choosePlayer(""); onFollowChanged() }
+    // Asking Android about every app is binder work: done off the main thread, once per visit.
+    val found by produceState<Pair<List<MediaApps.App>, Set<String>>?>(null) {
+        value = withContext(Dispatchers.IO) { MediaApps.all(context).let { it to MediaApps.launchable(context, it.map { a -> a.pkg }) } }
+    }
+    // Read again on coming back (a song started in another app moves that app up).
+    var playing by remember { mutableStateOf(emptySet<String>()) }
+    val scope = rememberCoroutineScope()
+    LifecycleResumeEffect(Unit) {
+        val job = scope.launch { playing = withContext(Dispatchers.IO) { MediaApps.playing(context) } }
+        onPauseOrDispose { job.cancel() }
+    }
+    // Apps set during this visit stay in view until it ends (rotation included), so undoing an ignore never makes the app vanish.
+    val chosenPkg = chosen.ifEmpty { null }
+    var kept by rememberSaveable { mutableStateOf(settings.ignored.toList() + listOfNotNull(chosenPkg)) }
+    fun keep(pkg: String?) { kept = (kept + listOfNotNull(chosenPkg, pkg)).distinct() }   // the old choice too
+    val (all, launchable) = found ?: (emptyList<MediaApps.App>() to emptySet())
+    val apps = MediaApps.lists(all, playing, kept.toSet() + settings.ignored + setOfNotNull(chosenPkg), launchable)
+    AppChoices(apps, { a -> Choice(a.label, chosen == a.pkg) { keep(a.pkg); settings.choosePlayer(a.pkg); onFollowChanged() } }) {
+        Choice("Whatever is playing", chosen == "") { keep(null); settings.choosePlayer(""); onFollowChanged() }
     }
     if (chosen != "") {
         val name = MediaApps.label(context, chosen)
@@ -460,14 +481,36 @@ private fun MusicAppSettings(onFollowChanged: () -> Unit, onPinShortcut: () -> U
         Box(Modifier.padding(top = 12.dp)) { Washed("Add \"Cawback + $name\" to the home screen", onPinShortcut) }
     }
     if (chosen == "" || !settings.onlyPlayer) {
-        Text("Never follow", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+        SoftText("Never follow", Modifier.padding(top = 14.dp, bottom = 8.dp))
         Text("Ignored apps are never looked up on lrclib.net.", fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(bottom = 8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            apps.filter { it.pkg != chosen }.forEach { a ->
-                val off = a.pkg in settings.ignored
-                Choice(if (off) "${a.label}: ignored" else a.label, off) { settings.setIgnored(a.pkg, !off); onFollowChanged() }
-            }
-        }
+        val others = MediaApps.Lists(apps.top.filter { it.pkg != chosen }, apps.more)
+        AppChoices(others, { a ->
+            val off = a.pkg in settings.ignored
+            Choice(if (off) "${a.label}: ignored" else a.label, off) { keep(a.pkg); settings.setIgnored(a.pkg, !off); onFollowChanged() }
+        })
+    }
+}
+
+/**
+ * One app list (0.5.1, owner Q60): the apps that matter now, then "More apps" for the rest, folded away. Apps the user
+ * has chosen or ignored are always in the first group, so nothing set is ever folded away. [extra] goes after the first
+ * group ("Whatever is playing").
+ */
+@Composable
+private fun AppChoices(apps: MediaApps.Lists, chip: @Composable (MediaApps.App) -> Unit,
+                       extra: @Composable () -> Unit = {}) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        apps.top.forEach { chip(it) }
+        extra()
+    }
+    if (apps.more.isEmpty()) return
+    Box(Modifier.padding(top = 10.dp)) {
+        Washed(if (open) "Fewer apps" else "More apps", { open = !open }, small = true,
+            modifier = Modifier.semantics { stateDescription = if (open) "Expanded" else "Collapsed" })   // TalkBack says it folds
+    }
+    if (open) FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        apps.more.forEach { chip(it) }
     }
 }
 
@@ -510,13 +553,13 @@ private fun HistorySettings() {
             )
             Washed("Resume", { settings.pauseHistory(0) })
         } else {
-            Text("Pause", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+            SoftText("Pause", Modifier.padding(top = 14.dp, bottom = 8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Washed("For 1 hour", { settings.pauseHistory(System.currentTimeMillis() + 3_600_000L) }, small = true)
                 Washed("Until I turn it back on", { settings.pauseHistory(History.PAUSED_UNTIL_ON) }, small = true)
             }
         }
-        Text("Keep plays for", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+        SoftText("Keep plays for", Modifier.padding(top = 14.dp, bottom = 8.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             History.KEEP_DAYS.forEach { d -> Choice(History.keepLabel(d), settings.keepPlaysDays == d) { settings.chooseKeepPlays(d) } }
         }
@@ -563,7 +606,7 @@ private fun HistorySettings() {
         }
     }
     runner.result(SettingsWork.DELETE)?.let {
-        Text(it.text, fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 8.dp))
+        SoftText(it.text, Modifier.padding(top = 8.dp))
     }
 }
 
@@ -581,7 +624,7 @@ private fun SavedLyricsSettings(repo: LyricsRepo) {
         },
         fontFamily = Inter, fontSize = 17.sp, color = L.text,
     )
-    Text("Includes your \"Other versions\" picks and timing.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
+    SoftText("Includes your \"Other versions\" picks and timing.", Modifier.padding(top = 4.dp))
     Box(Modifier.padding(top = 12.dp)) {
         ConfirmedWork(
             SettingsWork.SAVED, start = "Clear saved lyrics", confirm = "Clear",
@@ -591,6 +634,15 @@ private fun SavedLyricsSettings(repo: LyricsRepo) {
             WorkRunner.Result(ok, if (ok) "Cleared." else WorkRunner.FAILED)   // never "Cleared." with files left
         }
     }
+    // Owner, 0.5.1 Q48 and Q56: off by default; lyrics played in rotation over months are worth keeping.
+    val settings = LocalSettings.current
+    SoftText("Delete saved lyrics for songs not played in ${LyricsSettings.UNUSED_DAYS} days", Modifier.padding(top = 14.dp, bottom = 8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Choice("On", settings.cleanUnused) { settings.cleanUnusedLyrics(true) }
+        Choice("Off", !settings.cleanUnused) { settings.cleanUnusedLyrics(false) }
+    }
+    Text("Checked when Cawback opens. Songs with your own pick or timing are always kept.", fontFamily = Inter, fontSize = 14.sp,
+        color = L.soft, modifier = Modifier.padding(top = 8.dp))
 }
 
 /**
@@ -624,10 +676,11 @@ private fun ConfirmedWork(
 }
 
 @Composable
-private fun AboutSettings() {
+private fun AboutSettings(onLicenses: () -> Unit) {
     Text("Cawback ${BuildConfig.VERSION_NAME}", fontFamily = Inter, fontSize = 17.sp, color = L.text)
-    Text("Lyrics from LRCLIB (lrclib.net), the only place this app connects to.", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
-    Text("Free and open source (GPL-3.0). By The Scarlet Coder, thescarletcoder.com", fontFamily = Inter, fontSize = 15.sp, color = L.soft, modifier = Modifier.padding(top = 4.dp))
+    SoftText("Lyrics from LRCLIB (lrclib.net), the only place this app connects to.", Modifier.padding(top = 4.dp))
+    SoftText("Free and open source (GPL-3.0). By The Scarlet Coder, thescarletcoder.com", Modifier.padding(top = 4.dp))
+    Box(Modifier.padding(top = 12.dp)) { Washed("Open source licenses", onLicenses) }
 }
 
 @Composable
@@ -643,9 +696,10 @@ fun TuningPage() {
 internal fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(24.dp)
     Box(
-        Modifier.clip(shape).background(if (selected) L.text.copy(alpha = 0.14f) else L.wash)
+        Modifier.heightIn(min = 48.dp).clip(shape).background(if (selected) L.text.copy(alpha = 0.14f) else L.wash)
             .border(1.dp, if (selected) L.text.copy(alpha = 0.45f) else L.washEdge, shape)
             .selectable(selected = selected, onClick = onClick).padding(horizontal = 18.dp, vertical = 12.dp),   // TalkBack says which is on
+        contentAlignment = Alignment.Center,
     ) { Text(label, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 16.sp, color = L.text) }
 }
 

@@ -20,7 +20,7 @@ class TimingFixTest {
     @Test fun aBackupCarriesTheFixesAndNoLyrics() {
         val snap = LibrarySnapshot(fixes = listOf(fix))
         val json = snap.toJson()
-        assertEquals(2, json.getInt("schema"))
+        assertEquals(3, json.getInt("schema"))   // 0.5.1: skipped lines (owner Q57); 0.5.0 refuses it as newer
         assertEquals(listOf(fix), LibrarySnapshot.fromJson(json).fixes)
         assertTrue("no lyric text", !json.toString().contains("line 0"))
         // Through the real passphrase backup too.
@@ -47,8 +47,8 @@ class TimingFixTest {
         json.put("fixes", arr)
         val f = LibrarySnapshot.fromJson(json).fixes.single()
         assertEquals(1L, f.versionId)
-        assertEquals(YourTiming.LIMIT_MS, f.offsetMs)
-        assertEquals(listOf(Anchor(5_000, -2 * YourTiming.LIMIT_MS)), f.anchors)   // clamped; a negative line time left out
+        assertEquals(YourTiming.ANCHOR_LIMIT_MS, f.offsetMs)
+        assertEquals(listOf(Anchor(5_000, -2 * YourTiming.ANCHOR_LIMIT_MS)), f.anchors)   // clamped; a negative line time left out
     }
 
     @Test fun aForgottenSongGetsNoFixBack() {

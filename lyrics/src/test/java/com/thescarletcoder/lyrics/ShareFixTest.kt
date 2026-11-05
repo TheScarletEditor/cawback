@@ -47,17 +47,38 @@ class ShareFixTest {
         assertFalse(ProofOfWork.atMost(byteArrayOf(0x80.toByte(), 0x00), byteArrayOf(0x7F, 0x00)))   // 0x80 is 128, not -128
     }
 
-    @Test fun whatIsSentIsTheSongAsThePlayerNamesItWithYourTiming() {
-        val t = Track("Song (feat. Guest)", "Artist, Guest", "Album", 248_400)
+    @Test fun whatIsSentIsTheSongAsTheFixedVersionNamesItWithYourTiming() {
+        // The player calls it "Song (feat. Guest)" by "Artist, Guest" on "Album", 248.4 s: none of that is sent.
         val c = Candidate(7, "Song", "Artist", "Other album", 249.0, false, "line one\nline two", "[00:06.10] line one\n[00:09.00] line two")
         val timed = YourTiming.apply(Lrc.parseSynced(c.synced!!), 0, listOf(Anchor(6_100, -1_000)))   // a tapped first line
-        val body = ShareFix.body(t, c, timed)
-        assertEquals("Song (feat. Guest)", body.getString("trackName"))
-        assertEquals("Artist, Guest", body.getString("artistName"))
-        assertEquals("Album", body.getString("albumName"))
-        assertEquals(248.4, body.getDouble("duration"), 0.001)
+        val body = ShareFix.body(c, timed)
+        // The version's own names and length, so LRCLIB files the fix under that version (owner, 0.5.1 Q47).
+        assertEquals("Song", body.getString("trackName"))
+        assertEquals("Artist", body.getString("artistName"))
+        assertEquals("Other album", body.getString("albumName"))
+        assertEquals(249.0, body.getDouble("duration"), 0.001)
         assertEquals("line one\nline two", body.getString("plainLyrics"))
         assertEquals("[00:07.10] line one\n[00:10.00] line two", body.getString("syncedLyrics"))
+    }
+
+    @Test fun aVersionWithoutAnAlbumOrLengthIsSentAsLrclibHasIt() {
+        val c = Candidate(8, "Song", "Artist", "", 0.0, false, null, "[00:01.00] a")
+        val body = ShareFix.body(c, Lrc.parseSynced(c.synced!!))
+        assertEquals("", body.getString("albumName"))   // as LRCLIB has it, so it still finds the same version
+        assertEquals(0.0, body.getDouble("duration"), 0.001)   // not the song's length: that would miss the version
+    }
+
+    @Test fun onlyANamedVersionCanBeShared() {
+        val c = Candidate(9, "Song", "Artist", "", 200.0, false, null, "[00:01.00] a")
+        assertEquals(true, ShareFix.shareable(c))                       // no album is fine
+        assertEquals(false, ShareFix.shareable(c.copy(track = " ")))
+        assertEquals(false, ShareFix.shareable(c.copy(artist = "")))
+    }
+
+    @Test fun aMissingAlbumIsEmptyNotTheWordNull() {
+        val c = LrcLib.parse(org.json.JSONObject("""{"id":9,"trackName":"Song","artistName":"Artist","albumName":null,"duration":200}"""))
+        assertEquals("", c.album)
+        assertEquals("", ShareFix.body(c, emptyList()).getString("albumName"))
     }
 
     @Test fun anInstrumentalGapKeepsItsTime() {

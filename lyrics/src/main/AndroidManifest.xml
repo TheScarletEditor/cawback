@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- To list your music apps (Settings, Your music app) and open the one you chose alongside. Not a permission:
-         it only lets Lyrics see which installed apps offer music. -->
+         it only lets Cawback see which installed apps offer music. -->
     <queries>
         <intent>
             <action android:name="android.media.browse.MediaBrowserService" />

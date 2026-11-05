@@ -62,7 +62,8 @@ object LibraryExport {
     }
 
     private fun day(ms: Long, zone: ZoneId) = Instant.ofEpochMilli(ms).atZone(zone).toLocalDate().toString()
-    private fun clock(ms: Long) = "%d:%02d".format(ms / 60_000, (ms / 1000) % 60)
+    /** A time in a song as people write it, 4:08 (also the app's own screens). */
+    internal fun clock(ms: Long) = "%d:%02d".format(ms / 60_000, (ms / 1000) % 60)
     private fun count(n: Int) = "%,d".format(n)
 
     private fun text(rows: List<Row>, o: Options, now: Long, zone: ZoneId): String = buildString {

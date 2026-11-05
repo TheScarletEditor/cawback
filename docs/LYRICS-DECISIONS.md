@@ -2,6 +2,31 @@
 
 Against `docs/LYRICS-0.4.1-PLAN.md`. Newest first. scarlet-hq mirrors these (hq-log). Decisions before 0.4.1 live in scarlet-hq (D-001 to D-043) and `docs/FINALIZE-0.4.0.md`.
 
+## 2026-10-14 (the owner, priorities after 0.5.0 and the 0.5.1 scope)
+
+Against `docs/LYRICS-0.5.1-PLAN.md`. The owner reviewed the ranked list of remaining Lyrics work (scarlet-hq) and answered: "ok, 1-3 now. For the #5 items: dont delete saved lyrics ever, or 90 days with a setting toggle that is default off - i have tons I listen to in rotation over several months. Lets do the tab style now, code cleanup, hide the entries. Keep it back to lyrics, and un-capitalize it. Do the necessary fix cuts now as well. Agreed close old/shipped/scrapped ideas".
+
+| # | Question | Answer (word for word) | Effect | Check |
+| --- | --- | --- | --- | --- |
+| Q47 | What to build now | "ok, 1-3 now" plus the #5 items below | 0.5.1: shared fixes replace the record, Apache notices, the ScarletControls drift, plus the items below. The website runs in its own session. Then the tuning log, Fix words and the rest in the ranked order (scarlet-hq). | Plan slices. |
+| Q48 | Pruning saved lyrics | "dont delete saved lyrics ever, or 90 days with a setting toggle that is default off" | Never deleted by default. A setting deletes saved lyrics unused for 90 days; off by default. | JVM tests; upgrade keeps everything. |
+| Q49 | Tab style | "Underline everywhere (Recommended)" | Songs and Stats take Settings' underline style. | Screenshots. |
+| Q50 | Deferred cleanup C9 to C11 | "code cleanup"; "Drop parallel lookups (Recommended)" | C9, C10 and C11 without parallel lookups (D-057). | Build, tests, review. |
+| Q51 | Bluetooth and Google in "Your music app" | "hide the entries" | Hidden from the music app lists. | JVM test on the filter; emulator. |
+| Q52 | "Back to Lyrics" | "Keep it back to lyrics, and un-capitalize it" | "Back to lyrics". | grep; screenshot. |
+| Q53 | Skipped sections | "Do the necessary fix cuts now"; "Allow big jumps (Recommended)", "Jump at the gap (Recommended)", "Skip lines (Recommended)" | A tapped line may move up to the song's length (Earlier and Later stay at 10 s); the change between two far-apart tapped lines happens at the biggest pause between them; lines the song doesn't have can be marked "not in this song" in Fix lines, hidden, saved with the timing and left out of Share your fix. | JVM tests on the model; emulator. |
+| Q54 | Old ideas | "Agreed close old/shipped/scrapped ideas" | "Share this fix", "local lyric corrections" and "prefer the fuller record" closed in scarlet-hq IDEAS. | IDEAS.md. |
+| Q55 | Version | "0.5.1 (Recommended)" | 0.5.1; Fix words is 0.6.0. | build.gradle at /finalize. |
+| Q56 | The 90-day cleanup and songs with your own pick or timing | "Never delete those (Recommended)" | Only plain cached lookups are deleted. | JVM test. |
+| Q57 | Backup format for skipped lines | "Raise the version (Recommended)" | Library backup format +1; older backups still restore; 0.5.0 says "newer". Backup gate applies at release. | Format tests. |
+| Q58 | Text box focus colour (Keyward is teal) | "Keep scarlet in Cawback" | The shared ScarletControls.kt keeps one deliberate difference, named in drift_check.ps1. | drift_check. |
+| Q59 | Licences inside the app | "Add the page (Recommended)" | "Open source licenses" under Settings > Privacy > About, each licence text shipped in the APK. | LicensesTest; emulator. |
+| Q60 | How far the music app lists are trimmed (any app with a media service is listed: on a real phone a PDF reader, a finance app, a habit app; Android has no reliable "music player" flag, Spotify declares none) | "Music and audio apps only (Recommended)", withdrawn by Claude when the check showed it would hide Spotify; then "Both" | Apps playing now and apps the user chose or ignored first; other apps with an icon under a folded "More apps"; no-icon apps (the Bluetooth service) and the Google app not listed unless set before. Refines Q51. | MediaAppsTest; emulator. |
+| Q61 | "Missed it" in Fix lines and Line up now (finalize 0.5.1 Q1) | "Keep it in both (Recommended)" | The line to tap stays until Now, Missed it or Not in this song; nothing moves on by the clock. | Emulator. |
+| Q62 | Earlier and Later after a big Line up now move (finalize 0.5.1 Q2) | "Never past 10 s further (Recommended)" | Toward zero always, never further out, never more than 10 s past zero. Refines Q53. | YourTimingTest. |
+| Q63 | Verse breaks in a share with skipped lines (finalize 0.5.1 Q3) | "Accept for now (Recommended)" | Plain lyrics rebuilt from the timed lines in that case. | ShareFix test. |
+| Q64 | Sharing a version with no title or artist (finalize 0.5.1 Q5) | "Point to a named version (Recommended)" | No Share for it; a note points to a named version in Other versions; a missing album alone is fine. | ShareFixTest; emulator. |
+
 ## 2026-10-14 (the owner, /finalize 0.5.0 Stage 6: Cawback in this release)
 
 Against `docs/FINALIZE-0.5.0.md` (Ship) and scarlet-hq brand-system D-036 (repo rename) and scarlet-lyrics D-053 (the name).

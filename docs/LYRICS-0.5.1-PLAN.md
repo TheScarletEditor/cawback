@@ -1,0 +1,64 @@
+# Cawback 0.5.1 plan
+
+Status: **go given 2026-10-14** (the owner: "1-3 now" and the #5 items). Answers Q47 to Q55 in `LYRICS-DECISIONS.md`. Items marked proposed are Claude's and are confirmed or changed with the owner before their slice is committed.
+
+## Baseline (2026-10-14, at 702c029, from /finalize 0.5.0 QA pass 8)
+
+Build passes; 118 of 118 unit tests (debug and release); lintRelease 0 errors, 49 older warnings; labtest 8/8 on the tablet. Repo guard installed. Both devices run 0.5.0+702c029.
+
+## Slices
+
+Each slice: tests in the same commit, then `/finalize --slice`.
+
+### Slice 1: a shared fix replaces the record it fixes (Q47)
+Share your fix sends the chosen record's own title, artist, album and length (`Candidate.track`, `artist`, `album`, `durationSec`) instead of the music app's. LRCLIB then adds the fix to that record (its server matches title, artist and album exactly, ignoring case, and the length within 2 s) instead of creating a near-duplicate. The Share preview shows those names, since they are what's sent.
+Acceptance: payload test (record names sent, not the player's; length within LRCLIB's 2 s match); the preview text shown to the owner word for word; Send still never tapped in tests.
+Done 2026-10-14. Slice check: done-checklist pass and one review agent. L1-1: a record with an empty or missing length now sends it as stored (0), not the song's length, which would miss the version (fixed). L1-2: a JSON null album read as the word "null" (fixed: read as empty; test). L1-3 (noted, not fixable here): if two LRCLIB records share title, artist and album within 2 s, LRCLIB files the fix under the older one. No preview text changed (the preview shows what's sent, now the version's names). 120 unit tests.
+
+### Slice 2: licences and the shared controls file (Q47)
+Apache 2.0 notice for Compose and AndroidX in `licenses/` and a Credits line (as Keyward 0.2.2). Compare `ScarletControls.kt` with the canonical copy in Keyward; bring the copy in line, or report the difference as a question if the copies changed on purpose.
+Acceptance: drift_check clean for this file; README Credits matches `licenses/`.
+Owner, 2026-10-14: "Keep scarlet in Cawback" (Q58: the drift check gets a named exception for the text box border line; Keyward stays teal) and "Add the page" (Q59: an in-app "Open source licenses" page under Settings > Privacy > About, as Keyward's).
+Done 2026-10-14. licenses/Apache-2.0.txt; README Credits name every file; :lyrics:copyLicenses puts LICENSE and licenses/*.txt in the APK (six texts); Licenses.kt, LicensesPage.kt, Panel.LICENSES; LicensesTest (the list, the APK copy and the README in step; reflow keeps every word). drift_check: "same (allowed per-app difference)". Slice check: done-checklist pass and one review agent: L2-1 a license opened part way down the shared scroll (fixed: each view starts at its top); L2-2 "Back to licenses" lowercase unlike Settings and Library (fixed: "Licenses"); L2-3 page title not marked as a heading for TalkBack (fixed); L2-4 transitive Apache 2.0 libraries not named (fixed: "and their Apache 2.0 dependencies"). Not yet seen on a screen: the page (emulator walk before /finalize).
+
+### Slice 3: small screen changes (Q49, Q51, Q52)
+Songs and Stats tabs in the Library use Settings' underline style (one shared tab composable). "Your music app" and "Never follow" no longer list the Bluetooth service or the Google app. The header reads "Back to lyrics".
+Acceptance: filter JVM test; tabs: TalkBack says which is selected, 48 dp, wrap at 200% font; screenshots on three emulator shapes, light and dark.
+Owner, 2026-10-14 (Q60): the lists show apps playing now and apps the user set first, other apps with an icon under a folded "More apps", never the no-icon Bluetooth service or the Google app (unless set before). Claude's first recommendation ("music and audio apps only") was withdrawn: Spotify declares no category.
+Done 2026-10-14. MediaApps.lists (MediaAppsTest, 7 tests); AppChoices with "More apps" / "Fewer apps"; UnderlineTabs shared by Settings and the Library; "Back to lyrics". Slice check: done-checklist pass and one review agent: L3-1 the lists didn't refresh on coming back (fixed: read again on resume); L3-2 un-ignoring a no-icon app made it vanish mid-visit (fixed: apps set during a visit stay until it ends); L3-3 the Library tab reset on rotation (fixed, older than 0.5.1); L3-4 four more rule tests. Noted: an app tapped under "More apps" moves to the first group (as Q60); an ignored app also shows first in "Your music app" (as Q60). New text: "More apps", "Fewer apps", "Back to lyrics". Not yet seen on a screen.
+
+### Slice 4: optional cleanup of unused saved lyrics (Q48)
+A setting in Settings > Privacy, off by default: delete saved lyrics not opened for 90 days. A "last used" time per saved song (older files count as used now, so nothing goes on the first run). Runs in the background when Cawback opens, on the existing app-level runner, never on the main thread.
+Decided (Q56): a song with your own pick or timing is never deleted by this; only plain cached lookups are.
+Acceptance: JVM tests (off: nothing deleted; on: only unused over 90 days; picks and timing kept as decided; a busy key store deletes nothing); What's on this device count updates; text shown to the owner word for word.
+Done 2026-10-14. LyricsStore notes use on every read; deleteUnused; the setting under Settings > Privacy > Saved lyrics; runs on IO at startup after sealOldFiles. New text: "Delete saved lyrics for songs not played in 90 days" (On / Off), "Checked when Cawback opens. Songs with your own pick or timing are always kept."; What's on this device and the README add "Kept until you clear them, unless you turn on deleting lyrics for songs not played in 90 days (Settings > Privacy)." Slice check: done-checklist pass and one review agent: L4-1 one busy file stopped the whole cleanup (fixed); L4-2 the cleanup held the store lock for every file, so the current song's lyrics could wait (fixed: one file at a time, checked again inside the lock); L4-3 a song could be deleted between being read and being marked used (fixed: marked inside the lock); L4-4 timing lined up by ear to no net nudge, or shared, wasn't counted as the user's (fixed); L4-5 Settings counts didn't refresh after a cleanup (fixed); L4-6 "not opened" said instead of "not played" (fixed); L4-7 the On/Off chips (and every Choice) were under 48 dp tall (fixed, older than 0.5.1). Not covered by a JVM test: deleteUnused itself (needs the Keystore); emulator check before /finalize.
+
+### Slice 5: skipped sections (Q53)
+- A tapped line may move up to the song's length; Earlier and Later keep their 10 s limit.
+- Between two tapped lines whose moves differ by more than about 2 s, the change happens at the biggest pause between lines in that stretch (a step), not spread over every line. Smaller differences still spread evenly.
+- In Fix lines, a line can be marked "not in this song": hidden while it plays, saved with the timing, left out of Share your fix. Changed in building (a hidden line can't be tapped again): Clear my timing and Reset all timing bring skipped lines back.
+Decided (Q57): the Library backup format goes up one version for the skipped lines, so 0.5.0 says "newer" instead of silently dropping them (BACKUP-SPEC applies: drives or a recorded skip).
+Acceptance: JVM tests (a 20 s cut fixed with two taps; the step lands in the gap; skipped lines hidden and absent from the share payload; an older backup restores; the order of lines never changes); emulator walk with the stand-in player; TalkBack labels for the new mark.
+Done 2026-10-14. YourTiming: ANCHOR_LIMIT_MS (an hour) for tapped lines and Line up now, Earlier and Later within max(10 s, the current base); a step at the longest pause when two anchors differ by more than 2 s. Skips in the cache entry, Shown.Found (lines without them), the Library backup (schema 3), Clear my timing, Reset all timing, Share (synced and plain), markSent. Fix lines: "Not in this song" and "Missed it". Slice check: done-checklist pass and one review agent: L5-1 (high) with timing off by more than 10 s the bar moved on by the clock before the line could be heard, so a cut could never be fixed (fixed: the line stays until Now, Missed it or Not in this song; the new "Missed it" moves to the next line; YourTiming.missed removed); L5-2 skipping a line already tapped kept its tap (fixed: dropped with it; Now hidden while a skip saves); L5-3 a skip that failed to save jammed the bar (fixed); L5-4 Clear my timing left skipped lines hidden until a reload (fixed); L5-5 picking the same version again dropped skipped lines (fixed, also on a re-match). Noted: with skipped lines the shared plain lyrics are built from the timed lines (verse breaks from the plain record are lost). New text: "Not in this song", "Missed it". Not yet seen on a screen.
+
+### Slice 6: deferred cleanup (Q50)
+C9 (the share steps out of the screen, overlay state, edits returning the new entry), C10 (shared anchor JSON and hash helpers, a body text composable, clock and plural reuse) and C11 without parallel lookups (per-line anchor sort, the Fix lines bar redrawing less often).
+Acceptance: no behaviour change; all tests pass; review agent finds no regressions.
+Done 2026-10-14/15. C11: anchors sorted once per song; the Fix lines bar no longer redraws ten times a second (its clock went with L5-1). C10: AnchorJson and one HASH for the cache and the backup; SoftText for 19 plain uses; one clock format (LibraryExport.clock). C9: the share steps moved from the screen into LyricsRepo.share. Parallel lookups dropped (Q50). Slice check: done-checklist pass and one review agent: no behaviour change found; L6-1 the screen refresh after a send moved back inside the part that can't be cancelled; L6-2 a misplaced doc comment; L6-3 a nonsense LRCLIB length could overflow the shown time (capped). 141 unit tests.
+
+Then `/finalize 0.5.1`.
+
+## What can go wrong (proposed)
+
+| # | Case | What the code does |
+| --- | --- | --- |
+| W1 | The record has no album | Send the record's album as it is (empty), as LRCLIB stores it. |
+| W2 | A cleanup run is killed half way | Each deletion is one file; a half run just leaves the rest for next time. |
+| W3 | The key store is busy during cleanup | Nothing is deleted on that run. |
+| W4 | Two tapped lines pull hard against each other | Lines never change order (the existing floor rule). |
+| W5 | Every line marked "not in this song" | Shown as no lyrics for this version, with Other versions still reachable. |
+| W6 | A restored backup from 0.5.0 | Restores as before; no skipped lines. |
+
+## Not in this release
+
+The tuning log, Fix words (0.6.0), time a plain record yourself, the approved mark, visuals, the resolver.

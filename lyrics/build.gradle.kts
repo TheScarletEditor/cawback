@@ -23,8 +23,8 @@ android {
         applicationId = "com.thescarletcoder.lyrics"
         minSdk = 34
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.5.1"
         buildConfigField("boolean", "TUNING", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // SQLCipher ships a native library per CPU type. No Android 14 phone is 32-bit x86; x86_64 stays for emulators.
@@ -90,6 +90,32 @@ android {
         jniLibs { useLegacyPackaging = true }
     }
 }
+
+abstract class CopyLicenses : DefaultTask() {
+    @get:InputFile abstract val appLicense: RegularFileProperty
+    @get:InputDirectory abstract val folder: DirectoryProperty
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction fun run() {
+        val out = outputDir.get().dir("licenses").asFile
+        out.deleteRecursively(); out.mkdirs()
+        appLicense.get().asFile.copyTo(out.resolve("LICENSE"))
+        // Only license texts: no stray files (editor backups, OS files) can ship.
+        folder.get().asFile.listFiles()!!.filter { it.isFile && it.extension == "txt" }.forEach { it.copyTo(out.resolve(it.name)) }
+    }
+}
+
+// The license texts ship inside the APK too (Settings > Privacy > About, "Open source licenses", 0.5.1): the repo's
+// LICENSE and licenses/ folder, one copy, under assets/licenses/. Licenses.kt lists them; LicensesTest checks the two match.
+val copyLicenses = tasks.register<CopyLicenses>("copyLicenses") {
+    appLicense.set(rootProject.file("LICENSE"))
+    folder.set(rootProject.file("licenses"))
+    outputDir.set(layout.buildDirectory.dir("generated/licenses"))
+}
+androidComponents {
+    onVariants { v -> v.sources.assets?.addGeneratedSourceDirectory(copyLicenses, CopyLicenses::outputDir) }
+}
+tasks.withType<Test>().configureEach { dependsOn(copyLicenses) }
 
 dependencies {
     implementation(libs.androidx.core.ktx)

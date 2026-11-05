@@ -37,10 +37,10 @@ Settings has four tabs: Lyrics, Player, Library and Privacy. Lyrics and Player s
 
 ## Privacy and permissions
 
-- **Internet, for one site only.** Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library, over HTTPS. That is the only place the app connects to. To find the words, it sends the song's title, artist, album and length, and anything you type into an "Other versions" search. Sharing a timing fix (This song > Share your fix) sends that song's title, artist, album, length and lyrics with your timing, only after you tap Send. As with any website, LRCLIB also sees your IP address.
+- **Internet, for one site only.** Lyrics come from [LRCLIB](https://lrclib.net), a free, open lyrics library, over HTTPS. That is the only place the app connects to. To find the words, it sends the song's title, artist, album and length, and anything you type into an "Other versions" search. Sharing a timing fix (This song > Share your fix) sends the chosen version's title, artist, album and length, and its lyrics with your timing (lines you marked "Not in this song" left out), only after you tap Send. As with any website, LRCLIB also sees your IP address.
 - **Notification access**, because Android requires it for an app to see what's playing. Cawback sees only what's playing: the song's title, artist, album, length, position and cover art (the cover only tints the screen and is never saved). It never reads your notifications.
 - **Nothing from your Library leaves your device** unless you export it or make a backup, and then it goes only where you choose.
-- **Saved lyrics:** a small encrypted on-device cache keeps fetched lyrics (each with its song title and artist), your "Other versions" picks and timing. It's excluded from Android's backups; your picks and timing are also in a Library backup if you make one. Settings > Privacy shows how many songs are saved and has "Clear saved lyrics".
+- **Saved lyrics:** a small encrypted on-device cache keeps fetched lyrics (each with its song title and artist), your "Other versions" picks and timing. It's excluded from Android's backups; your picks and timing are also in a Library backup if you make one. Settings > Privacy shows how many songs are saved and has "Clear saved lyrics". Saved lyrics are kept until you clear them, unless you turn on deleting them for songs not played in 90 days (off by default; songs with your own pick or timing are always kept).
 - **Settings > Privacy > What's on this device** shows exactly what Cawback keeps, with real counts, and what it sends to lrclib.net.
 - The full privacy policy is at [thescarletcoder.com/privacy](https://thescarletcoder.com/privacy).
 
@@ -60,9 +60,10 @@ Tests: `gradlew :lyrics:testDebugUnitTest` runs the JVM tests. `labtest.ps1` run
 ## Credits
 
 - Lyrics: [LRCLIB](https://lrclib.net).
-- Fonts: Inter and Fraunces, SIL Open Font License 1.1 (`licenses/`).
-- Encrypted Library: SQLCipher by Zetetic, BSD-style license (`licenses/`).
-- Backup key derivation: Bouncy Castle, MIT license (`licenses/`).
+- Fonts: Inter and Fraunces, SIL Open Font License 1.1 (`licenses/Inter-OFL.txt`, `licenses/Fraunces-OFL.txt`).
+- Encrypted Library: SQLCipher by Zetetic, BSD-style license (`licenses/SQLCipher-LICENSE.txt`).
+- Backup key derivation: Bouncy Castle, MIT license (`licenses/BouncyCastle-LICENSE.txt`).
+- Jetpack Compose, AndroidX (including Room, Palette and WindowManager), the Kotlin standard library and kotlinx.coroutines (Apache 2.0, `licenses/Apache-2.0.txt`).
 
 ## License
 

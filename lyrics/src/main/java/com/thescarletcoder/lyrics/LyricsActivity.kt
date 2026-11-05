@@ -109,6 +109,11 @@ class LyricsActivity : ComponentActivity() {
         }
         if (savedInstanceState == null) lifecycleScope.launch(Dispatchers.IO) {
             runCatching { LyricsStore(this@LyricsActivity).sealOldFiles() }   // 0.2.0's plain cache files, encrypted
+            // The optional cleanup (owner, 0.5.1 Q48): off unless turned on; never the user's own picks or timing.
+            if (settings.cleanUnused) runCatching {
+                val gone = LyricsStore(this@LyricsActivity).deleteUnused(LyricsSettings.UNUSED_DAYS, settings.usedTrackedSince)
+                if (gone > 0) withContext(Dispatchers.Main) { SettingsWork.finished.intValue++ }   // the counts in Settings read again
+            }
             // A shared export only needs to outlive the share itself.
             File(cacheDir, "exports").listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 86_400_000L }?.forEach { it.delete() }
         }
@@ -255,11 +260,11 @@ class LyricsActivity : ComponentActivity() {
 }
 
 internal enum class Panel {
-    NONE, PICKER, SETTINGS, TUNING, LIBRARY, SONG, EXPORT, SHARE;
+    NONE, PICKER, SETTINGS, TUNING, LICENSES, LIBRARY, SONG, EXPORT, SHARE;
 
     /** Where one step back goes (system Back and the now-playing bar). Pure, so it is unit tested. */
     fun back(songFromLibrary: Boolean): Panel = when {
-        this == TUNING -> SETTINGS
+        this == TUNING || this == LICENSES -> SETTINGS
         this == SONG && songFromLibrary -> LIBRARY
         this == EXPORT -> LIBRARY
         else -> NONE
@@ -294,12 +299,14 @@ private fun LyricsScreen(
     var panel by rememberSaveable { mutableStateOf(Panel.NONE) }
     // The Settings tab: kept through Tuning and a recreate; set from the way in when Settings opens (0.4.1, Q5).
     var settingsTab by rememberSaveable { mutableStateOf(SettingsTab.LYRICS) }
+    var licenseReading by rememberSaveable { mutableIntStateOf(-1) }   // Open source licenses: the one being read, or -1 for the list
+    var libraryTab by rememberSaveable { mutableStateOf(LibTab.SONGS) }   // Songs or Stats, kept through a song page and back
     fun openSettings(way: SettingsWayIn) { settingsTab = way.tab; panel = Panel.SETTINGS }
     // The step out of Settings (not to Tuning; a recreate isn't a step): results of finished work have been seen.
     // Running work keeps going, and its result waits for the next visit.
     var lastPanel by remember { mutableStateOf(panel) }
     LaunchedEffect(panel) {
-        fun inSettings(p: Panel) = p == Panel.SETTINGS || p == Panel.TUNING
+        fun inSettings(p: Panel) = p == Panel.SETTINGS || p == Panel.TUNING || p == Panel.LICENSES
         if (inSettings(lastPanel) && !inSettings(panel)) SettingsWork.runner.forgetFinished()
         lastPanel = panel
     }
@@ -408,7 +415,7 @@ private fun LyricsScreen(
     }
 
     // One step back from a page: the system Back and the now-playing bar (Header with onBack) both use it.
-    fun pageBack() { panel = panel.back(songFromLibrary) }
+    fun pageBack() { if (panel == Panel.LICENSES && licenseReading >= 0) licenseReading = -1 else panel = panel.back(songFromLibrary) }
     BackHandler(enabled = sheet || songSheet || fixMode != FixMode.NONE || momentAt != null || panel != Panel.NONE) {
         when {
             sheet -> sheet = false
@@ -469,20 +476,25 @@ private fun LyricsScreen(
                         .onSizeChanged { headerPx = it.height }) {
                         Header(track.takeIf { hasAccess }, look.takeIf { songShowing }, playing, np::playPause, onMore = { sheet = true }, onBack = onBack,
                             onSong = songButton, unsure = (shown as? Shown.Found)?.unsure == true,
-                            backTo = when (panel.back(songFromLibrary)) { Panel.SETTINGS -> "Settings"; Panel.LIBRARY -> "Library"; else -> "Lyrics" })
+                            backTo = when {
+                                panel == Panel.LICENSES && licenseReading >= 0 -> "Licenses"
+                                else -> when (panel.back(songFromLibrary)) { Panel.SETTINGS -> "Settings"; Panel.LIBRARY -> "Library"; else -> "lyrics" }   // "Back to lyrics" (owner, 0.5.1 Q52)
+                            })
                     }
                     val pageTop = if (barOnTop) with(density) { headerPx.toDp() } else 0.dp
                     Box(if (flexTop != null) Modifier.height((flexTop - pageTop).coerceAtLeast(0.dp)).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth()) {
                         val t = track
                         when {
                             panel == Panel.TUNING -> TuningPage()
+                            panel == Panel.LICENSES -> LicensesPage(licenseReading) { licenseReading = it }
                             panel == Panel.SETTINGS -> SettingsPanel(repo, hasAccess, theme, onTheme, onGrant,
                                 output = output, onFollowChanged = onFollowChanged, onPinShortcut = onPinShortcut,
-                                onTuning = { panel = Panel.TUNING }, tab = settingsTab, onTab = { settingsTab = it })
+                                onTuning = { panel = Panel.TUNING }, onLicenses = { licenseReading = -1; panel = Panel.LICENSES },
+                                tab = settingsTab, onTab = { settingsTab = it })
                             panel == Panel.PICKER && t != null -> Picker(t, shown as? Shown.Found, repo,
                                 onPick = { c -> scope.launch { repo.pin(t, c)?.let { shown = it; panel = Panel.NONE } } },   // not saved: the list stays to try again
                                 onAuto = { scope.launch { shown = null; shown = repo.unpin(t); panel = Panel.NONE } })
-                            panel == Panel.LIBRARY -> LibraryPanel(
+                            panel == Panel.LIBRARY -> LibraryPanel(libraryTab, { libraryTab = it },
                                 onSong = { songUid = it; songPending = null; songFromLibrary = true; panel = Panel.SONG },
                                 onExport = { panel = Panel.EXPORT },
                                 onSettings = { openSettings(SettingsWayIn.LIBRARY) })
@@ -490,30 +502,19 @@ private fun LyricsScreen(
                             panel == Panel.SHARE && t != null && shown is Shown.Found -> {
                                 val s = shown as Shown.Found
                                 SharePanel(t, s, onSend = {
-                                    val body = ShareFix.body(t, s.candidate, YourTiming.apply(s.lines, s.offsetMs, s.anchors))
+                                    val body = ShareFix.body(s.candidate, YourTiming.apply(s.lines, s.offsetMs, s.anchors), s.skips.isNotEmpty())
                                     if (SettingsWork.runner.busy(SettingsWork.SHARE)) return@SharePanel
                                     SettingsWork.sharing = t.key   // the result belongs to this song
                                     val versionId = s.candidate.id
                                     val sentOffset = s.offsetMs
                                     val sentAnchors = s.anchors
+                                    val sentSkips = s.skips
                                     SettingsWork.runner.run(SettingsWork.SHARE) {
                                         val sent = WorkRunner.Result(true, "Sent. Thank you: LRCLIB has your timing for this song.")
-                                        val token = withContext(Dispatchers.Default) {
-                                            val (prefix, target) = withContext(Dispatchers.IO) { LrcLib.requestChallenge() }
-                                            val nonce = ProofOfWork.solve(prefix, target, cancelled = { !isActive })
-                                                ?: if (!isActive) throw kotlinx.coroutines.CancellationException() else error("challenge")   // too hard or too long: "That didn't finish"
-                                            check(ProofOfWork.verify(prefix, target, nonce))   // a last look before sending
-                                            "$prefix:$nonce"
-                                        }
-                                        // Once the publish starts it finishes and is recorded, even if Cancel comes now:
-                                        // a send that went out must never look like it didn't.
-                                        withContext(kotlinx.coroutines.NonCancellable) {
-                                            withContext(Dispatchers.IO) { LrcLib.publish(token, body) }
-                                            SettingsWork.runner.settle(SettingsWork.SHARE, sent)
-                                            val at = System.currentTimeMillis()
-                                            // "Sent on" only for the timing that was sent; the screen (even a recreated one) reads it again.
-                                            if (repo.markSent(t, versionId, sentOffset, sentAnchors, at)) SettingsWork.lyricsChanged()
-                                        }
+                                        // "Sent on" only for the timing that was sent; the screen (even a recreated one) reads it again.
+                                        val job = kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
+                                        repo.share(t, body, versionId, sentOffset, sentAnchors, sentSkips, cancelled = { job?.isActive == false },
+                                            onSent = { SettingsWork.runner.settle(SettingsWork.SHARE, sent) }, onMarked = { SettingsWork.lyricsChanged() })
                                         sent
                                     }
                                 }, onCancelSend = { SettingsWork.runner.cancel(SettingsWork.SHARE) }, onClose = { panel = Panel.NONE })
@@ -542,6 +543,12 @@ private fun LyricsScreen(
                                             if (anchors != null) updateIf(fixing.candidate.id) { it.copy(anchors = anchors, tapped = true, sentAt = 0) }
                                         }
                                     } },
+                                onSkip = { lineMs, done -> val t = track
+                                    if (t == null) done(false) else scope.launch {
+                                        val e = repo.skipLine(t, lineMs)
+                                        if (e != null) updateIf(fixing.candidate.id) { it.withSkips(e.skips).copy(anchors = e.anchors, tapped = true, sentAt = 0) }
+                                        done(e != null)
+                                    } },
                                 onDone = { fixMode = FixMode.NONE })
                         }
                     }
@@ -563,7 +570,7 @@ private fun LyricsScreen(
             onShare = { SettingsWork.runner.clear(SettingsWork.SHARE); panel = Panel.SHARE },
             onClear = { val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch {
-                    if (repo.clearTiming(t)) updateIf(s.candidate.id) { it.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0) }
+                    if (repo.clearTiming(t)) updateIf(s.candidate.id) { it.withSkips(emptyList()).copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0) }
                 } },
         )
         MoreSheet(

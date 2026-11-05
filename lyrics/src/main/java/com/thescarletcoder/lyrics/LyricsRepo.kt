@@ -20,7 +20,12 @@ sealed interface Shown {
         val unsure: Boolean = false, val anchors: List<Anchor> = emptyList(),
         /** Lined up by ear, so it can be shared; and when it was shared (0 if not). */
         val tapped: Boolean = false, val sentAt: Long = 0,
-    ) : Shown
+        /** Lines marked "not in this song" (0.5.1), by record time; already left out of [lines]. */
+        val skips: List<Long> = emptyList(),
+    ) : Shown {
+        /** With these lines marked "not in this song": [lines] read again from the version, without them. */
+        fun withSkips(s: List<Long>) = copy(skips = s, lines = LyricsRepo.linesOf(candidate, s))
+    }
 }
 
 /** Cache first, then LRCLIB: exact lookup, then a cleaned-up title, then a search. */
@@ -28,6 +33,19 @@ class LyricsRepo(private val store: LyricsStore) {
     private val retryMissAfterMs = 24 * 3_600_000L
 
     companion object {
+        /**
+         * The version's lines as shown: synced when it has them, else plain; lines marked "not in this song" left out
+         * (by their time in the record, so two lines sharing one time go together).
+         */
+        fun linesOf(c: Candidate, skips: List<Long>): List<LyricLine> = parsed(c, skips).first
+
+        /** [linesOf], and whether the version is synced, from one parse. */
+        private fun parsed(c: Candidate, skips: List<Long>): Pair<List<LyricLine>, Boolean> {
+            val synced = c.synced?.let { Lrc.parseSynced(it) }?.takeIf { it.isNotEmpty() }
+            val lines = synced ?: c.plain?.let { Lrc.parsePlain(it) } ?: emptyList()
+            return (if (skips.isEmpty() || synced == null) lines else lines.filter { it.timeMs !in skips }) to (synced != null)
+        }
+
         /** When matching last improved (2026-10-08 17:00 PDT): misses remembered before this are tried again. */
         private const val MATCHING_CHANGED_AT = 1_791_504_000_000L
 
@@ -115,7 +133,7 @@ class LyricsRepo(private val store: LyricsStore) {
             val e = LyricsStore.Entry(
                 c, pinned = false, offsetMs = offset, fetchedAt = System.currentTimeMillis(),
                 matchVersion = if (m.complete) MATCHING else 0, unsure = m.choice?.unsure ?: false, anchors = anchors,
-                tapped = same?.tapped ?: false, sentAt = same?.sentAt ?: 0,
+                tapped = same?.tapped ?: false, sentAt = same?.sentAt ?: 0, skips = same?.skips.orEmpty(),
             )
             // Saved only if nothing changed while the lookup was out (a nudge or pick then wins): one edit at a time.
             val kept = !retried && edit { if (store.load(t.key) == cached) { store.save(t.key, e); true } else false } == true
@@ -169,7 +187,7 @@ class LyricsRepo(private val store: LyricsStore) {
         val (offset, anchors) = keptTiming(old, c.id)   // picking the same version again keeps it
         val same = old?.takeIf { it.candidate?.id == c.id }
         val e = LyricsStore.Entry(c, pinned = true, offsetMs = offset, fetchedAt = System.currentTimeMillis(), anchors = anchors,
-            tapped = same?.tapped ?: false, sentAt = same?.sentAt ?: 0)
+            tapped = same?.tapped ?: false, sentAt = same?.sentAt ?: 0, skips = same?.skips.orEmpty())
         store.save(t.key, e)
         found(c, true, offset, anchors = anchors, entry = e, durationSec = t.seconds())
     }
@@ -180,9 +198,11 @@ class LyricsRepo(private val store: LyricsStore) {
         return load(t)
     }
 
+    /** Earlier or Later. Returns the new nudge, or null when nothing changed (at the limit, or nothing saved). */
     suspend fun nudge(t: Track, deltaMs: Long): Long? = edit {
         val e = store.load(t.key) ?: LyricsStore.Entry(null, false, 0, 0)
-        val next = (e.offsetMs + deltaMs).coerceIn(-YourTiming.LIMIT_MS, YourTiming.LIMIT_MS)
+        val next = YourTiming.nudged(e.offsetMs, deltaMs)
+        if (next == e.offsetMs) return@edit null   // at the limit: nothing changed or saved, so a "Sent on" mark stays (finalize 0.5.1 R2)
         store.save(t.key, e.copy(offsetMs = next, sentAt = 0))   // anchors move with it: they're relative to the base
         next
     }
@@ -199,7 +219,8 @@ class LyricsRepo(private val store: LyricsStore) {
     /** Line up now (owner Q19): the base nudge that puts the line at [lineMs] where it was heard. Returns the new base. */
     suspend fun lineUp(t: Track, lineMs: Long, offsetMs: Long): Long? = edit {
         val e = store.load(t.key)?.takeIf { it.candidate != null } ?: return@edit null
-        val base = YourTiming.baseFor(e.anchors, lineMs, offsetMs)
+        val times = linesOf(e.candidate!!, e.skips).mapNotNull { it.timeMs }.sorted()   // as on screen, so a jump lands the same
+        val base = YourTiming.baseFor(e.anchors, lineMs, offsetMs, times)
         store.save(t.key, e.copy(offsetMs = base, tapped = true, sentAt = 0))
         base
     }
@@ -208,15 +229,47 @@ class LyricsRepo(private val store: LyricsStore) {
      * Share your fix sent: when, so This song can say so. Only if the saved timing is still what was sent: timing
      * changed while it was sending isn't on LRCLIB. True when marked.
      */
-    suspend fun markSent(t: Track, versionId: Long, offsetMs: Long, anchors: List<Anchor>, at: Long): Boolean = edit {
-        val e = store.load(t.key)?.takeIf { it.candidate?.id == versionId && it.offsetMs == offsetMs && it.anchors == anchors }
+    suspend fun markSent(t: Track, versionId: Long, offsetMs: Long, anchors: List<Anchor>, skips: List<Long>, at: Long): Boolean = edit {
+        val e = store.load(t.key)?.takeIf { it.candidate?.id == versionId && it.offsetMs == offsetMs && it.anchors == anchors && it.skips == skips }
         e?.let { store.save(t.key, it.copy(sentAt = at)) } != null
     } == true
 
-    /** "Clear my timing": no nudge and no anchors for this song; the version stays. */
+    /**
+     * Share your fix (0.5.0, owner Q23): LRCLIB's proof of work, then the publish of [body]. Throws if [cancelled] turns
+     * true before the publish or the work fails. Once the publish starts it finishes and is recorded, even if Cancel
+     * comes now: a send that went out must never look like it didn't. [onSent] runs as soon as LRCLIB has it, and
+     * [onMarked] when "Sent on" was marked, which is only for the timing that was sent ([versionId] to [skips]).
+     */
+    suspend fun share(
+        t: Track, body: org.json.JSONObject, versionId: Long, offsetMs: Long, anchors: List<Anchor>, skips: List<Long>,
+        cancelled: () -> Boolean, onSent: () -> Unit, onMarked: () -> Unit,
+    ) {
+        val token = withContext(Dispatchers.Default) {
+            val (prefix, target) = withContext(Dispatchers.IO) { LrcLib.requestChallenge() }
+            val nonce = ProofOfWork.solve(prefix, target, cancelled)
+                ?: if (cancelled()) throw kotlinx.coroutines.CancellationException() else error("challenge")   // too hard or too long: "That didn't finish"
+            check(ProofOfWork.verify(prefix, target, nonce))   // a last look before sending
+            "$prefix:$nonce"
+        }
+        withContext(kotlinx.coroutines.NonCancellable) {
+            withContext(Dispatchers.IO) { LrcLib.publish(token, body) }
+            onSent()
+            if (markSent(t, versionId, offsetMs, anchors, skips, System.currentTimeMillis())) onMarked()
+        }
+    }
+
+    /** "Clear my changes" (was "Clear my timing" before 0.5.1): no nudge, no anchors and no skipped lines for this song; the version stays. */
     suspend fun clearTiming(t: Track): Boolean = edit {
-        store.load(t.key)?.let { store.save(t.key, it.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0)) } != null
+        store.load(t.key)?.let { store.save(t.key, it.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0, skips = emptyList())) } != null
     } == true
+
+    /** Fix lines (owner, 0.5.1 Q53): the line at [lineMs] isn't in this song. Returns the entry now saved (null: not saved). */
+    suspend fun skipLine(t: Track, lineMs: Long): LyricsStore.Entry? = edit {
+        val e = store.load(t.key)?.takeIf { it.candidate != null } ?: return@edit null
+        val skips = (e.skips + lineMs).distinct().sorted()
+        // A tap on that line goes with it, so it can't pull the lines around it toward a hidden one.
+        e.copy(skips = skips, anchors = e.anchors.filter { it.lineMs != lineMs }, tapped = true, sentAt = 0).also { store.save(t.key, it) }
+    }
 
     /** Settings: how many tracks have something saved (lyrics, a pick or a timing nudge). */
     suspend fun savedCount(): Int = withContext(Dispatchers.IO) { store.count() }
@@ -234,10 +287,11 @@ class LyricsRepo(private val store: LyricsStore) {
         c: Candidate, pinned: Boolean, offset: Long, unsure: Boolean = false, anchors: List<Anchor> = emptyList(), entry: LyricsStore.Entry? = null,
         durationSec: Double? = null,
     ): Shown {
-        val synced = c.synced?.let { Lrc.parseSynced(it) }?.takeIf { it.isNotEmpty() }
-        val lines = synced ?: c.plain?.let { Lrc.parsePlain(it) } ?: emptyList()
-        return Shown.Found(c, lines, synced != null, pinned, offset, unsure = pickUnsure(pinned, unsure, c, durationSec), anchors = anchors,
-            tapped = entry?.tapped ?: false, sentAt = entry?.sentAt ?: 0)
+        val skips = entry?.skips.orEmpty()
+        val (lines, synced) = parsed(c, skips)
+        return Shown.Found(c, lines, synced, pinned, offset,
+            unsure = pickUnsure(pinned, unsure, c, durationSec), anchors = anchors,
+            tapped = entry?.tapped ?: false, sentAt = entry?.sentAt ?: 0, skips = skips)
     }
 }
 

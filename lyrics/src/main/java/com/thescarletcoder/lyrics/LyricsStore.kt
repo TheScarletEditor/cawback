@@ -42,7 +42,12 @@ class LyricsStore(context: Context) {
         val tapped: Boolean = false,
         /** When this timing was shared with LRCLIB (0: not shared, or changed since). */
         val sentAt: Long = 0,
-    )
+        /** Lines marked "not in this song" (owner, 0.5.1 Q53), by their time in the record: hidden and not shared. */
+        val skips: List<Long> = emptyList(),
+    ) {
+        /** The user's own timing: a nudge, tapped lines or skipped lines. One test, so a new kind can't be missed in one place. */
+        val hasTiming: Boolean get() = offsetMs != 0L || anchors.isNotEmpty() || skips.isNotEmpty()
+    }
 
     private fun file(key: String) = File(dir, "${hash(key)}.json")
 
@@ -80,13 +85,30 @@ class LyricsStore(context: Context) {
         val o = synchronized(LOCK) {
             if (!f.exists()) return null
             when (val r = readOrBusy(f)) {
-                is Read.Ok -> r.o
+                // Last used, for the optional cleanup (0.5.1); a day's precision is plenty against 90 days, so not every read writes.
+                is Read.Ok -> r.o.also { val now = System.currentTimeMillis(); if (now - f.lastModified() > 86_400_000L) f.setLastModified(now) }
                 Read.Never -> { f.delete(); return null }   // never readable: deleted
                 Read.GaveUp -> return null
             }
         }
         return runCatching { decode(o) }.getOrNull()
     }
+
+    /**
+     * The optional cleanup (owner, 0.5.1 Q48, off by default): deletes saved songs not used for [days], counting from
+     * [trackedSince] at the earliest (when 0.5.1 began noting use), so nothing goes the first time. Songs with the
+     * user's own pick or timing are never deleted (Q56), nor files that can't be read just now. Returns how many went.
+     */
+    fun deleteUnused(days: Int, trackedSince: Long, now: Long = System.currentTimeMillis()): Int =
+        files().filter { unused(it.lastModified(), trackedSince, now, days) }.count { f ->
+            // One file at a time under the lock, so a song starting meanwhile isn't kept waiting; checked again inside it.
+            synchronized(LOCK) {
+                if (!f.exists() || !unused(f.lastModified(), trackedSince, now, days)) return@synchronized false
+                val o = try { (readOrBusy(f) as? Read.Ok)?.o } catch (_: Busy) { null } ?: return@synchronized false   // busy or unreadable: left alone
+                val e = runCatching { decode(o) }.getOrNull() ?: return@synchronized false
+                !isYours(e) && f.delete()
+            }
+        }
 
     fun save(key: String, e: Entry) {
         // The song this belongs to, so "Forget this song" finds every cached version of it (Track.key: title, artist, ...).
@@ -105,8 +127,9 @@ class LyricsStore(context: Context) {
             synchronized(LOCK) {
                 if (!f.exists()) return@forEach   // forgotten or cleared meanwhile: nothing to reset, not a failure
                 val o = try { read(f) } catch (_: Exception) { ok = false; null } ?: return@forEach
-                if (o.optLong("offset") == 0L && o.optJSONArray("anchors").let { it == null || it.length() == 0 } && !o.optBoolean("t")) return@forEach
-                o.put("offset", 0L).remove("anchors"); o.remove("t"); o.remove("sent")
+                if (o.optLong("offset") == 0L && o.optJSONArray("anchors").let { it == null || it.length() == 0 } && !o.optBoolean("t") &&
+                    o.optJSONArray("skips").let { it == null || it.length() == 0 }) return@forEach
+                o.put("offset", 0L).remove("anchors"); o.remove("t"); o.remove("sent"); o.remove("skips")   // skipped lines are timing too
                 if (!runCatching { write(f, o) }.getOrDefault(false)) ok = false   // a failed replace is a failure too
             }
         }
@@ -240,7 +263,8 @@ class LyricsStore(context: Context) {
             e.pendingId?.let { o.put("pid", it) }
             if (e.tapped) o.put("t", true)
             if (e.sentAt > 0) o.put("sent", e.sentAt)
-            if (e.anchors.isNotEmpty()) o.put("anchors", JSONArray().apply { e.anchors.forEach { put(JSONArray().put(it.lineMs).put(it.deltaMs)) } })
+            if (e.anchors.isNotEmpty()) o.put("anchors", AnchorJson.write(e.anchors))
+            if (e.skips.isNotEmpty()) o.put("skips", JSONArray(e.skips))
             song?.let { o.put("s", it) }
             e.candidate?.let {
                 o.put("c", JSONObject()
@@ -251,11 +275,18 @@ class LyricsStore(context: Context) {
             return o
         }
 
-        /** A fix worth keeping: a version with a pick, a nudge or tapped lines. */
+        /** Not used for [days], counting from [trackedSince] at the earliest. Pure, so it is unit tested. */
+        fun unused(lastUsed: Long, trackedSince: Long, now: Long, days: Int): Boolean =
+            now - maxOf(lastUsed, trackedSince) > days * 86_400_000L
+
+        /** The user's own pick or timing (or a restored fix waiting to apply): the cleanup never deletes these (Q56). */
+        fun isYours(e: Entry): Boolean = e.pinned || e.hasTiming || e.pendingId != null || e.tapped || e.sentAt > 0
+
+        /** A fix worth keeping: a version with a pick, a nudge, tapped lines or skipped lines. */
         fun fixOf(key: String, e: Entry, song: String?): TimingFix? {
             val id = e.candidate?.id ?: e.pendingId ?: return null
-            if (!e.pinned && e.offsetMs == 0L && e.anchors.isEmpty()) return null
-            return TimingFix(key, id, e.pinned, e.offsetMs, e.anchors, song, e.tapped)
+            if (!e.pinned && !e.hasTiming) return null
+            return TimingFix(key, id, e.pinned, e.offsetMs, e.anchors, song, e.tapped, e.skips)
         }
 
         /**
@@ -263,19 +294,22 @@ class LyricsStore(context: Context) {
          * and no timing here: the timing is added. Otherwise, with nothing of the user's here: the version to fetch.
          */
         fun merged(existing: Entry?, fix: TimingFix): Entry? {
-            if (existing != null && (existing.pinned || existing.offsetMs != 0L || existing.anchors.isNotEmpty() || existing.pendingId != null)) return null
+            if (existing != null && (existing.pinned || existing.hasTiming || existing.pendingId != null)) return null
             // Marked current, so the next play doesn't match again and drop the timing.
             if (existing?.candidate?.id == fix.versionId) return existing!!.copy(
                 pinned = fix.pinned || existing.pinned, offsetMs = fix.offsetMs, anchors = fix.anchors, matchVersion = LyricsRepo.MATCHING,
-                tapped = fix.tapped)
-            return Entry(null, fix.pinned, fix.offsetMs, 0, anchors = fix.anchors, pendingId = fix.versionId, tapped = fix.tapped)
+                tapped = fix.tapped, skips = fix.skips)
+            return Entry(null, fix.pinned, fix.offsetMs, 0, anchors = fix.anchors, pendingId = fix.versionId, tapped = fix.tapped, skips = fix.skips)
         }
+
+        private fun named(o: JSONObject, key: String) = o.optString(key).takeUnless { it == "null" || o.isNull(key) }.orEmpty()
 
         /** An entry as read; entries from before 0.5.0 have no matching version and no anchors. */
         fun decode(o: JSONObject): Entry = Entry(
             candidate = o.optJSONObject("c")?.let {
                 Candidate(
-                    it.getLong("id"), it.optString("track"), it.optString("artist"), it.optString("album"),
+                    // 0.5.0 saved a missing name from LRCLIB as the word "null"; a shared fix must send it empty (finalize 0.5.1 R1).
+                    it.getLong("id"), named(it, "track"), named(it, "artist"), named(it, "album"),
                     it.optDouble("duration", 0.0), it.optBoolean("instrumental"),
                     it.optString("plain").ifBlank { null }, it.optString("synced").ifBlank { null },
                 )
@@ -288,15 +322,14 @@ class LyricsStore(context: Context) {
             fetchedAt = o.optLong("at"),
             matchVersion = o.optInt("mv"),
             unsure = o.optBoolean("u"),
+            skips = o.optJSONArray("skips")?.let { arr -> (0 until arr.length()).mapNotNull { i -> (arr.opt(i) as? Number)?.toLong() }.distinct().sorted() }.orEmpty(),
             anchors = o.optJSONArray("anchors")?.let { arr ->
                 // A damaged pair is skipped on its own, so it can't cost the pick, the nudge or the other anchors.
-                (0 until arr.length()).mapNotNull { i ->
-                    arr.optJSONArray(i)?.takeIf { it.length() == 2 && it.opt(0) is Number && it.opt(1) is Number }
-                        ?.let { Anchor(it.getLong(0), it.getLong(1)) }
-                }
+                (0 until arr.length()).mapNotNull { i -> AnchorJson.pair(arr.optJSONArray(i)) }
             }.orEmpty(),
         )
-        private val HASH = Regex("[0-9a-f]{64}")   // a cache file's name: a SHA-256 in hex
+        /** A cache file's name, and a fix's key in a backup: a SHA-256 in hex. */
+        internal val HASH = Regex("[0-9a-f]{64}")
 
         /** A track key as it's stored anywhere on disk: SHA-256, hex. */
         fun hash(key: String): String =

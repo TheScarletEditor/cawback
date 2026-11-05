@@ -47,9 +47,42 @@ class YourTimingTest {
         assertEquals(listOf(Anchor(20_000, 3_000), Anchor(50_000, 200)), twice)
     }
 
-    @Test fun movesStayWithinTenSeconds() {
-        assertEquals(10_000L, YourTiming.offsetAt(9_000, listOf(Anchor(0, 5_000)), 0))
-        assertEquals(listOf(Anchor(1_000, 10_000)), YourTiming.withAnchor(emptyList(), 0, 1_000, 60_000))
+    @Test fun aTappedLineMovesUpToAnHour() {
+        // 0.5.1 (owner Q53): a cut can move the rest of the song far; Earlier and Later keep 10 s (LyricsRepo.nudge).
+        assertEquals(14_000L, YourTiming.offsetAt(9_000, listOf(Anchor(0, 5_000)), 0))
+        assertEquals(listOf(Anchor(1_000, 60_000)), YourTiming.withAnchor(emptyList(), 0, 1_000, 60_000))
+        assertEquals(listOf(Anchor(1_000, YourTiming.ANCHOR_LIMIT_MS)), YourTiming.withAnchor(emptyList(), 0, 1_000, Long.MAX_VALUE / 2))
+    }
+
+    @Test fun earlierAndLaterStayWithinTenSecondsOfZero() {
+        assertEquals(10_000L, YourTiming.nudged(9_900, 250))
+        assertEquals(-10_000L, YourTiming.nudged(-9_900, -250))
+        // After Line up now moved it 30 s: back toward zero, never further out, never past -10 s.
+        assertEquals(29_750L, YourTiming.nudged(30_000, -250))
+        assertEquals(30_000L, YourTiming.nudged(30_000, 250))
+        assertEquals(-10_000L, YourTiming.nudged(-9_900, -250))
+    }
+
+    @Test fun aCutJumpsAtTheLongestPause() {
+        // The record is missing 20 s from 0:40 on: tapped lines before (no move) and after (20 s later).
+        val song = listOf(LyricLine(10_000, "a"), LyricLine(20_000, "b"), LyricLine(30_000, "c"), LyricLine(43_000, "d"),
+            LyricLine(45_000, "e"), LyricLine(48_000, "f"), LyricLine(60_000, "g"))
+        val a = listOf(Anchor(10_000, 0), Anchor(60_000, -20_000))
+        val moved = YourTiming.apply(song, 0, a).map { it.timeMs }
+        // The longest pause between the anchors is 30 s to 43 s: lines from "d" on take the whole 20 s, nothing before.
+        assertEquals(listOf(10_000L, 20_000L, 30_000L, 63_000L, 65_000L, 68_000L, 80_000L), moved)
+    }
+
+    @Test fun theJumpPointIsFoundBetweenTheTwoLines() {
+        val times = listOf(1_000L, 5_000, 5_000, 9_000, 20_000, 21_000, 40_000)
+        assertEquals(20_000L, YourTiming.stepAt(times, 5_000, 21_000))   // 9 s to 20 s is the longest pause
+        assertEquals(40_000L, YourTiming.stepAt(times, 21_000, 40_000))
+        assertEquals(null, YourTiming.stepAt(times, 22_000, 39_000))      // no two lines between
+    }
+
+    @Test fun aSmallDifferenceIsStillSpreadEvenly() {
+        val a = listOf(Anchor(10_000, 0), Anchor(30_000, -1_000))
+        assertEquals(20_500L, YourTiming.apply(lines, 0, a).first { it.text == "line 1" }.timeMs)
     }
 
     @Test fun theOrderOnScreenNeverChanges() {
@@ -85,12 +118,8 @@ class YourTimingTest {
     @Test fun theLineToTapStaysPutAndCantAlreadyHaveBeenSung() {
         // At 0:05 the first target is at least 10 s ahead on the lyrics' clock: the line at 0:20.
         assertEquals(1, YourTiming.firstTarget(lines, 5_000))
-        // Lyrics 3 s early: the target doesn't move on when the lyrics pass it; it stays until tapped.
-        val early = YourTiming.apply(lines, 3_000, emptyList())
-        assertFalse(YourTiming.missed(early, 1, 18_000))   // the lyrics passed line 1 at 0:17; it's heard at 0:20
-        // More than 10 s behind on the lyrics' clock: missed (it has been heard by now, however wrong the timing).
-        assertTrue(YourTiming.missed(lines, 1, 31_000))
-        assertFalse(YourTiming.missed(lines, 1, 29_000))
+        // 0.5.1: the target never moves on by the clock (a cut can put the timing far off either way); the user
+        // taps Now, Missed it or Not in this song.
         // After a tap, the next line with words.
         assertEquals(2, YourTiming.afterTap(lines, 1))
         assertEquals(null, YourTiming.afterTap(lines, 5))

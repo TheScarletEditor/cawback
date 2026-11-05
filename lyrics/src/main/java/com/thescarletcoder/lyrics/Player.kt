@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import androidx.core.content.edit
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -59,29 +60,35 @@ class LyricsSettings(context: Context) {
     var historyPausedUntil by mutableLongStateOf(p.getLong(History.PAUSED, 0)); private set
     /** Keep plays for this many days; 0 = forever. */
     var keepPlaysDays by mutableIntStateOf(p.getInt(History.KEEP, 0)); private set
+    /** Delete saved lyrics not opened for [UNUSED_DAYS] (owner, 0.5.1 Q48): off unless turned on. */
+    var cleanUnused by mutableStateOf(p.getBoolean("clean_unused", false)); private set
+    /** When Cawback began noting when saved lyrics are opened (0.5.1): the cleanup never counts from before it. */
+    val usedTrackedSince: Long = p.getLong("used_since", 0L).takeIf { it > 0 }
+        ?: System.currentTimeMillis().also { p.edit { putLong("used_since", it) } }
 
-    fun choosePlayer(pkg: String) { player = pkg; p.edit().putString("player", pkg).apply() }
-    fun followOnlyPlayer(on: Boolean) { onlyPlayer = on; p.edit().putBoolean("only_player", on).apply() }
+    fun choosePlayer(pkg: String) { player = pkg; p.edit { putString("player", pkg) } }
+    fun followOnlyPlayer(on: Boolean) { onlyPlayer = on; p.edit { putBoolean("only_player", on) } }
     fun setIgnored(pkg: String, ignore: Boolean) {
         ignored = if (ignore) ignored + pkg else ignored - pkg
-        p.edit().putStringSet("ignored", ignored).apply()
+        p.edit { putStringSet("ignored", ignored) }
     }
-    fun chooseTextSize(i: Int) { textSize = i.coerceIn(0, 3); p.edit().putInt("text_size", textSize).apply() }
-    fun keepOn(on: Boolean) { keepScreenOn = on; p.edit().putBoolean("keep_screen_on", on).apply() }
-    fun hidePastLines(on: Boolean) { hidePast = on; p.edit().putBoolean("hide_past", on).apply() }
-    fun chooseFollowDelay(s: Int) { followDelaySec = s; p.edit().putInt("follow_delay", s).apply() }
+    fun chooseTextSize(i: Int) { textSize = i.coerceIn(0, 3); p.edit { putInt("text_size", textSize) } }
+    fun keepOn(on: Boolean) { keepScreenOn = on; p.edit { putBoolean("keep_screen_on", on) } }
+    fun cleanUnusedLyrics(on: Boolean) { cleanUnused = on; p.edit { putBoolean("clean_unused", on) } }
+    fun hidePastLines(on: Boolean) { hidePast = on; p.edit { putBoolean("hide_past", on) } }
+    fun chooseFollowDelay(s: Int) { followDelaySec = s; p.edit { putInt("follow_delay", s) } }
     fun nudgeOutput(out: Output, deltaMs: Int) {
         val next = (delayFor(out) + deltaMs).coerceIn(-2000, 2000)
         when (out) {
-            Output.SPEAKER -> { delaySpeaker = next; p.edit().putInt("delay_speaker", next).apply() }
-            Output.WIRED -> { delayWired = next; p.edit().putInt("delay_wired", next).apply() }
-            Output.BLUETOOTH -> { delayBluetooth = next; p.edit().putInt("delay_bluetooth", next).apply() }
+            Output.SPEAKER -> { delaySpeaker = next; p.edit { putInt("delay_speaker", next) } }
+            Output.WIRED -> { delayWired = next; p.edit { putInt("delay_wired", next) } }
+            Output.BLUETOOTH -> { delayBluetooth = next; p.edit { putInt("delay_bluetooth", next) } }
         }
     }
-    fun chooseHistory(m: History.Mode) { historyMode = m; p.edit().putString(History.MODE, m.id).apply() }
+    fun chooseHistory(m: History.Mode) { historyMode = m; p.edit { putString(History.MODE, m.id) } }
     /** Pause for [ms] (or History.PAUSED_UNTIL_ON); 0 resumes. */
-    fun pauseHistory(untilMs: Long) { historyPausedUntil = untilMs; p.edit().putLong(History.PAUSED, untilMs).apply() }
-    fun chooseKeepPlays(days: Int) { keepPlaysDays = days; p.edit().putInt(History.KEEP, days).apply() }
+    fun pauseHistory(untilMs: Long) { historyPausedUntil = untilMs; p.edit { putLong(History.PAUSED, untilMs) } }
+    fun chooseKeepPlays(days: Int) { keepPlaysDays = days; p.edit { putInt(History.KEEP, days) } }
     fun historyPaused(now: Long = System.currentTimeMillis()) = now < historyPausedUntil
 
     fun delayFor(out: Output) = when (out) { Output.SPEAKER -> delaySpeaker; Output.WIRED -> delayWired; Output.BLUETOOTH -> delayBluetooth }
@@ -98,6 +105,8 @@ class LyricsSettings(context: Context) {
         val TEXT_SIZES = listOf("Small", "Medium", "Large", "Largest")
         /** Font scale for each text size step. */
         val TEXT_SCALE = listOf(0.85f, 1f, 1.18f, 1.36f)
+        /** The optional cleanup's age (owner, 0.5.1 Q48). */
+        const val UNUSED_DAYS = 90
 
         /**
          * A synced lyric line's font size and line height, in sp, for the layout ([compact]: a short window or Flex
@@ -132,6 +141,12 @@ object SessionPick {
 object MediaApps {
     data class App(val pkg: String, val label: String)
 
+    /** The Google app: it offers a media service but isn't a music player (owner, 0.5.1 Q51). */
+    private const val GOOGLE = "com.google.android.googlequicksearchbox"
+
+    /** What the lists show (owner, 0.5.1 Q60): [top] first, the rest folded away under "More apps". */
+    data class Lists(val top: List<App>, val more: List<App>)
+
     fun all(context: Context): List<App> {
         val pm = context.packageManager
         return pm.queryIntentServices(Intent("android.media.browse.MediaBrowserService"), 0)
@@ -140,6 +155,28 @@ object MediaApps {
             .map { App(it, label(context, it)) }
             .sortedBy { it.label.lowercase() }
     }
+
+    /**
+     * Any app that offers a media service is listed today, PDF readers and banking apps included, and Android has no
+     * reliable "music player" flag (Spotify doesn't declare one). So: apps playing now and the ones the user has set
+     * (chosen or ignored) come first; other apps with a home-screen icon are folded away; apps with no icon (the
+     * Bluetooth service) and the Google app aren't listed, unless the user set them before. Pure, so it is unit tested.
+     */
+    fun lists(all: List<App>, playing: Set<String>, set: Set<String>, launchable: Set<String>): Lists {
+        val (top, rest) = all.partition { it.pkg in set || (it.pkg in playing && it.pkg in launchable && it.pkg != GOOGLE) }
+        return Lists(top, rest.filter { it.pkg in launchable && it.pkg != GOOGLE })
+    }
+
+    /** Apps with a media session open now (playing or paused). Empty without notification access. */
+    fun playing(context: Context): Set<String> = runCatching {
+        context.getSystemService(android.media.session.MediaSessionManager::class.java)
+            .getActiveSessions(android.content.ComponentName(context, NowPlayingListener::class.java))
+            .map { it.packageName }.toSet()
+    }.getOrDefault(emptySet())
+
+    /** Of [pkgs], the ones with a home-screen icon. */
+    fun launchable(context: Context, pkgs: List<String>): Set<String> =
+        pkgs.filter { context.packageManager.getLaunchIntentForPackage(it) != null }.toSet()
 
     fun label(context: Context, pkg: String): String = runCatching {
         val pm = context.packageManager

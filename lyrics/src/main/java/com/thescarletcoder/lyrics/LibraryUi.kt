@@ -34,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,7 @@ import com.thescarletcoder.lyrics.library.LibraryKey
 import com.thescarletcoder.lyrics.library.LibraryRepo
 import com.thescarletcoder.lyrics.library.LibraryStats
 import com.thescarletcoder.lyrics.library.SongRow
+import com.thescarletcoder.lyrics.library.LibraryExport.clock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
@@ -108,11 +110,12 @@ private fun KeyGoneNotice(onStartFresh: () -> Unit) {
     }
 }
 
-private enum class LibTab(val label: String) { SONGS("Songs"), STATS("Stats") }
+internal enum class LibTab(val label: String) { SONGS("Songs"), STATS("Stats") }
 private enum class Sort(val label: String) { RECENT("Last played"), MOST("Most played"), AZ("A to Z") }
 
+/** [tab] lives with the screen, so going back from a song or the export lands on the same tab (finalize 0.5.1 R6). */
 @Composable
-fun LibraryPanel(onSong: (String) -> Unit, onExport: () -> Unit, onSettings: () -> Unit) {
+internal fun LibraryPanel(tab: LibTab, onTab: (LibTab) -> Unit, onSong: (String) -> Unit, onExport: () -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current
     val settings = LocalSettings.current
     val exists = remember { LibraryDatabase.exists(context) }
@@ -132,9 +135,8 @@ fun LibraryPanel(onSong: (String) -> Unit, onExport: () -> Unit, onSettings: () 
             return@Column
         }
         val repo = rememberLibrary() ?: return@Column
-        var tab by remember { mutableStateOf(LibTab.SONGS) }
-        Row(Modifier.padding(top = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            LibTab.entries.forEach { t -> Choice(t.label, tab == t) { tab = t } }
+        Box(Modifier.padding(top = 4.dp)) {   // the same tabs as Settings (0.5.1, owner Q49)
+            UnderlineTabs(LibTab.entries.map { it.label }, tab.ordinal) { onTab(LibTab.entries[it]) }
         }
         if (settings.historyMode == History.Mode.OFF) {
             Text("Listening history is off, so new plays aren't counted.", fontFamily = Inter, fontSize = 14.sp, color = L.soft,
@@ -319,7 +321,7 @@ fun SongPage(songUid: String?, pending: Track?, position: (() -> Long)?, onSeek:
             if (showEarlier) earlier.forEach { h ->
                 Column(Modifier.padding(top = 10.dp)) {
                     Text("Until " + day(context, h.replacedAt), fontFamily = Inter, fontSize = 13.sp, color = L.faint)
-                    Text(h.text, fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+                    SoftText(h.text)
                 }
             }
         }
@@ -417,7 +419,7 @@ fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: suspend (Long, String) -
         ) {
             Text("Bookmark ${clock(at)}", fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = L.text)
             if (saved) {
-                Text("Saved. It's in this song's Note and moments.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+                SoftText("Saved. It's in this song's Note and moments.")
             } else {
                 Text(if (failed) "Couldn't save that moment. Try again?" else "Saves the time and your label, not the words.", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
                 NoteField(label, singleLine = true, hint = "Label (optional)") { label = it }
@@ -438,4 +440,3 @@ fun MomentSheet(at: Long?, onClose: () -> Unit, onSave: suspend (Long, String) -
 
 private fun plays(n: Int) = if (n == 1) "1 play" else "$n plays"
 private fun day(context: android.content.Context, ms: Long): String = DateFormat.getMediumDateFormat(context).format(Date(ms))
-private fun clock(ms: Long) = "%d:%02d".format(ms / 60_000, (ms / 1000) % 60)

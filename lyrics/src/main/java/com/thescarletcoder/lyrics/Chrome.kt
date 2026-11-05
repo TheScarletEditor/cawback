@@ -36,8 +36,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
@@ -74,7 +74,7 @@ import com.thescarletcoder.scarlet.Tunables
 @Composable
 fun Header(
     track: Track?, art: AlbumLook?, playing: Boolean, onPlayPause: () -> Unit, onMore: () -> Unit, onBack: (() -> Unit)? = null,
-    backTo: String = "Lyrics", onSong: (() -> Unit)? = null, unsure: Boolean = false,
+    backTo: String = "lyrics", onSong: (() -> Unit)? = null, unsure: Boolean = false,
 ) {
     val compact = LocalCompact.current
     val swap = Motion.duration(LocalContext.current, Tunables.int(LyricsTuning.SWAP_MS))
@@ -239,19 +239,26 @@ fun SongSheet(
             SheetRow("Fix lines", "As the song plays, tap Now as each line starts. Lines you tap stay put; the rest follow.") { onClose(); onFix(FixMode.FIX) }
             // Only timing lined up by ear goes to LRCLIB (owner, 0.5.0).
             if (found.tapped) {
-                SheetRow("Share your fix", "Send your timing to LRCLIB so others get it too.") { onClose(); onShare() }
-                if (found.sentAt > 0) Text("Sent on " + java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault()).format(java.util.Date(found.sentAt)),
-                    fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(horizontal = 4.dp))
+                if (!ShareFix.shareable(found.candidate)) Text("This version has no title or artist on LRCLIB, so no one would find a fix " +
+                    "shared to it. To share, pick a named version in Other versions and fix that one.", fontFamily = Inter, fontSize = 14.sp,
+                    color = L.soft, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+                else {
+                    SheetRow("Share your fix", "Send your timing to LRCLIB so others get it too.") { onClose(); onShare() }
+                    if (found.sentAt > 0) Text("Sent on " + java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault()).format(java.util.Date(found.sentAt)),
+                        fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(horizontal = 4.dp))
+                }
             }
             Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-                if (found.offsetMs != 0L || found.anchors.isNotEmpty()) {
+                // Skipped lines count too: Clear my changes is the way to bring them back (finalize 0.5.1 C3).
+                if (found.offsetMs != 0L || found.anchors.isNotEmpty() || found.skips.isNotEmpty()) {
                     if (confirmClear) Column(Modifier.padding(top = 12.dp)) {
-                        Text("Clear your timing for this song? The version stays.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
+                        Text("Clear your changes to this song? Timing goes back to the version's own, hidden lines come back, " +
+                            "and the version stays.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
                         FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Washed("Clear", { confirmClear = false; onClear() })
                             Washed("Cancel", { confirmClear = false })
                         }
-                    } else Box(Modifier.padding(top = 12.dp)) { Washed("Clear my timing", { confirmClear = true }) }
+                    } else Box(Modifier.padding(top = 12.dp)) { Washed("Clear my changes", { confirmClear = true }) }
                 }
             }
         }
@@ -267,19 +274,32 @@ enum class FixMode { NONE, LINE_UP, FIX }
  * closes; Fix lines moves on to the next line with each tap, until Done.
  */
 @Composable
-fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outputDelayMs: Long, onNow: (lineMs: Long, offsetMs: Long) -> Unit, onDone: () -> Unit) {
-    var pos by remember { mutableLongStateOf(np.positionMs()) }
-    LaunchedEffect(Unit) { while (true) { pos = np.positionMs(); kotlinx.coroutines.delay(100) } }
+fun FixBar(
+    mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outputDelayMs: Long, onNow: (lineMs: Long, offsetMs: Long) -> Unit,
+    onSkip: (lineMs: Long, done: (saved: Boolean) -> Unit) -> Unit, onDone: () -> Unit,
+) {
     val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
-    var target by remember { mutableStateOf<Int?>(null) }
-    var started by remember { mutableStateOf(false) }
+    // Kept through a rotation or a font change, for this version only: after a cut the clock can't find the place again.
+    val version = s.candidate.id
+    var target by rememberSaveable(version) { mutableStateOf<Int?>(null) }
+    var started by rememberSaveable(version) { mutableStateOf(false) }
     LaunchedEffect(playing) {
         if (playing && !started) { target = YourTiming.firstTarget(timed, np.positionMs() + outputDelayMs); started = true }
     }
-    // A missed line is replaced once, by a new line that can't have been sung yet; the bar never drifts with the clock.
-    val missed = target?.let { YourTiming.missed(timed, it, pos + outputDelayMs) } == true
-    LaunchedEffect(missed) { if (missed) target = YourTiming.firstTarget(timed, np.positionMs() + outputDelayMs) }
-    val next = target.takeIf { !missed }
+    // The line stays until it's tapped, missed or marked (0.5.1): after a cut the timing can be off by far more than
+    // 10 s either way, so the clock can't tell a line still to come from one already sung. The user can.
+    val next = target?.takeIf { it in s.lines.indices }
+    // "Not in this song" waiting to be saved: the line's time in the record. Once it's among the skipped lines, the
+    // target moves to the first line after it with words, found by time (lines sharing that time went with it).
+    // Not saveable: a screen rebuilt while it saves has lost its answer, and must not keep the buttons hidden.
+    var skipping by remember(version) { mutableStateOf<Long?>(null) }
+    LaunchedEffect(s.skips) {
+        val k = skipping ?: return@LaunchedEffect
+        if (k !in s.skips) return@LaunchedEffect
+        target = YourTiming.nextLine(s.lines, k)   // record times: the first line after the skipped one with words
+        skipping = null
+    }
+    val canTap = playing && started && next != null && skipping == null
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(L.surface)
             // Taps on the bar stay on it (not the lyrics below), without making it one silent button for TalkBack;
@@ -289,8 +309,8 @@ fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outp
             .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
         when {
-            !playing || !started -> Text("Play the song to fix its timing.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
-            next == null -> Text("No more lines to fix.", fontFamily = Inter, fontSize = 15.sp, color = L.soft)
+            !playing || !started -> SoftText("Play the song to fix its timing.")
+            next == null -> SoftText("No more lines to fix.")
             else -> {
                 Text("Tap Now when you hear:", fontFamily = Inter, fontSize = 14.sp, color = L.soft)
                 Text(s.lines[next].text, fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 20.sp, color = L.text,
@@ -299,12 +319,19 @@ fun FixBar(mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outp
             }
         }
         FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (playing && started && next != null) Washed("Now", {
+            if (canTap) Washed("Now", {
                 // The line's time in the record, not on screen: the move is worked out against the record's own timing.
-                val lineMs = s.lines[next].timeMs ?: return@Washed
+                val lineMs = s.lines[next!!].timeMs ?: return@Washed
                 onNow(lineMs, YourTiming.offsetFromTap(lineMs, np.positionMs(), outputDelayMs, Tunables.int(LyricsTuning.REACTION_MS).toLong()))
                 target = YourTiming.afterTap(timed, next)
             })
+            // Fix lines only (owner, 0.5.1 Q53): a line in this version that the song doesn't have, hidden from now on.
+            if (mode == FixMode.FIX && canTap) Washed("Not in this song", {
+                val lineMs = s.lines[next!!].timeMs ?: return@Washed
+                skipping = lineMs
+                onSkip(lineMs) { saved -> if (!saved) skipping = null }   // not saved: the same line stays, to try again
+            })
+            if (canTap) Washed("Missed it", { target = YourTiming.afterTap(timed, next!!) })
             Washed(if (mode == FixMode.LINE_UP && next != null) "Cancel" else "Done", onDone)
         }
     }
