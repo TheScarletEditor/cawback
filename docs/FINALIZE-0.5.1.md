@@ -16,7 +16,7 @@ Built in six slices with /prep (`docs/LYRICS-0.5.1-PLAN.md`, answers Q47 to Q60 
 | 4 | QA | done | Pass 1 (at e7418e5): 145/145 unit tests (debug and release); lintRelease 0 errors but two new UseKtx warnings (Q1-1, fixed). Pass 2 (at 625259b), clean: 145/145 (debug and release); lintRelease 0 errors, 38 warnings, all older than the base; release, personal and smoke builds pass (R8); release APK 0.5.1 / 6, label Cawback, no suffix, not debuggable, permissions as 0.5.0, 9.68 MB unsigned (0.5.0: 9.65 MB signed); labtest 8/8 on the tablet (test copy removed). Pass 3 (at ba6502e, after the owner's "Clear my changes" rename, D-064, a code change after QA), clean: 145/145 (debug and release); lintRelease 0 errors, 39 warnings (the one more than pass 2 is a dependency-version notice, nothing in the changed files); release, personal and smoke builds pass; release APK 0.5.1 / 6, label Cawback, no suffix, not debuggable, permissions as 0.5.0, 9.68 MB unsigned; labtest 8/8 on the tablet (test copy removed). |
 | 5 | Smoke test | done (Part 2 pending: it gates only Publish, the owner 2026-11-04) | Part 1 (rule 11), smoke copy 810653d with the emulator-only stand-in player, light and dark, on phone (with the upgrade from a 0.5.0 smoke copy built from its tag: a 0.50 s nudge kept), small phone at font 1.3, tablet, and phone at 200%: Fix lines shows Now, Not in this song, Missed it and Done; Missed it moves to the next line; Not in this song hides the line and moves past it; the place in Fix lines survives the app being killed and restored; This song shows the timing, Clear my timing and Share (rows below the fold at large fonts, the sheet scrolls); the Share preview carries the version's names; Player: no Bluetooth or Google, "More apps" folds and unfolds; Privacy: the cleanup setting and its note, On and Off; About: Open source licenses lists six parts, the Apache text opens, Back returns to the list. No crash or ANR. Not covered on emulators: the Library's Songs and Stats tabs (need real plays), TalkBack speech for the new buttons (labels and roles checked in code and the UI tree), the note for a version with no title or artist (needs such a record), a real cut song by ear. Part 2: 0.5.1-DEVICE-TESTS.md.. Part 1 again for the rename (2026-11-04, smoke copy at ba6502e with an emulator-only stand-in player, phone): with no change the button is not shown; after Later it reads "Clear my changes", the confirm line is word for word D-064, Cancel keeps the change, Clear puts the timing back and the button goes; the same at 200% font in dark. No crash. Part 2 handed to the owner in the chat 2026-11-04. |
 | 6 | Ship | done (Publish and the site push wait on Part 2, the owner 2026-11-04) | Install: both devices already 0.5.1+ba6502e (dac54fa adds only this report). Pushed, signed by the owner, signature and upgrade checked, tag v0.5.1 on dac54fa, draft release, merged to main (PR #4, 5577a7a). |
-| 7 | Wrap-up | pending | |
+| 7 | Wrap-up | done | 2026-11-04 |
 
 ## Findings
 
@@ -84,6 +84,6 @@ Built in six slices with /prep (`docs/LYRICS-0.5.1-PLAN.md`, answers Q47 to Q60 
 
 ## Wrap-up
 
-- Backups:
-- STATUS-AUDIT updated:
-- hq-log:
+- Backups: 2026-11-04, both drives VERIFIED after the release build (details in the owner's private notes), device backups pulled from the tablet and the phone.
+- STATUS-AUDIT updated: not applicable (STATUS-AUDIT is Command-only; the backup line lives in scarlet-hq).
+- hq-log: 2026-11-04, scarlet-lyrics and resilience-backups.
