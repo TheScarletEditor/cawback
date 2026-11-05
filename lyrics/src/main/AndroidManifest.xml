@@ -36,6 +36,19 @@
             </intent-filter>
         </activity>
 
+        <!-- Line up now and Fix lines from split screen (D-062): not resizable and in a task of its own, so phones
+             leave split screen to show it. Tablets ignore resizeableActivity; the screen then asks for room. -->
+        <activity
+            android:name=".FixLinesActivity"
+            android:exported="false"
+            android:resizeableActivity="false"
+            android:taskAffinity="${applicationId}.fixlines"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:label="@string/app_name" />
+
         <!-- Library > Export: hands the export file you chose to share to the app you pick, for that one share only.
              Not exported; it serves nothing but the exports folder in Cawback's own cache. -->
         <provider
