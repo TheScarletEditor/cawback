@@ -249,15 +249,16 @@ fun SongSheet(
                 }
             }
             Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-                // Skipped lines count too: Clear my timing is the way to bring them back (finalize 0.5.1 C3).
+                // Skipped lines count too: Clear my changes is the way to bring them back (finalize 0.5.1 C3).
                 if (found.offsetMs != 0L || found.anchors.isNotEmpty() || found.skips.isNotEmpty()) {
                     if (confirmClear) Column(Modifier.padding(top = 12.dp)) {
-                        Text("Clear your timing for this song? The version stays.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
+                        Text("Clear your changes to this song? Timing goes back to the version's own, hidden lines come back, " +
+                            "and the version stays.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
                         FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Washed("Clear", { confirmClear = false; onClear() })
                             Washed("Cancel", { confirmClear = false })
                         }
-                    } else Box(Modifier.padding(top = 12.dp)) { Washed("Clear my timing", { confirmClear = true }) }
+                    } else Box(Modifier.padding(top = 12.dp)) { Washed("Clear my changes", { confirmClear = true }) }
                 }
             }
         }

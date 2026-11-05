@@ -258,7 +258,7 @@ class LyricsRepo(private val store: LyricsStore) {
         }
     }
 
-    /** "Clear my timing": no nudge, no anchors and no skipped lines for this song; the version stays. */
+    /** "Clear my changes" (was "Clear my timing" before 0.5.1): no nudge, no anchors and no skipped lines for this song; the version stays. */
     suspend fun clearTiming(t: Track): Boolean = edit {
         store.load(t.key)?.let { store.save(t.key, it.copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0, skips = emptyList())) } != null
     } == true

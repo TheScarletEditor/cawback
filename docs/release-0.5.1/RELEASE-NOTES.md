@@ -13,7 +13,7 @@ Cawback fixes timing for songs whose lyrics were cut differently, makes shared f
 - When two tapped lines are far apart in timing, the change happens all at once at the longest pause between them, where the cut is, instead of being spread over every line.
 - Fix lines has two new buttons: "Not in this song" hides a line the song doesn't have, and "Missed it" moves on to the next line. The line to tap stays put until you tap one of them or Now.
 - Earlier and Later still move the lyrics up to 10 seconds either way.
-- Clear my timing brings back any lines you hid.
+- Clear my timing is now Clear my changes, and it brings back any lines you hid.
 
 **Sharing a fix**
 - Share your fix now sends the version you fixed under its own title, artist, album and length, so LRCLIB updates that version instead of adding a near-copy.
