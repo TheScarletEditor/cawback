@@ -4,7 +4,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** "Not this song": offered only for a hand-picked version, and it asks first only when timing changes would go. */
+/** "Undo my pick": offered only for a hand-picked version, and it asks first only when timing changes would go. */
 class UndoPickTest {
     @Test fun onlyForAVersionPickedByHand() {
         assertTrue(UndoPick.offered(pinned = true))

@@ -236,12 +236,12 @@ fun SongSheet(
         // by itself, which may be "No lyrics found". The same as Other versions > Go back to the automatic match.
         if (found != null && UndoPick.offered(found.pinned)) {
             if (confirmUndo) Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 10.dp)) {
-                Text("Undo your pick? Your timing changes to this version go with it.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
+                Text("Undo your pick? The timing fixes you made to it go too.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
                 FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Washed("Undo pick", { confirmUndo = false; onClose(); onUndoPick() })
                     Washed("Cancel", { confirmUndo = false })
                 }
-            } else SheetRow("Not this song", "Undo your pick. Cawback goes back to what it finds by itself, even if that's no lyrics.") {
+            } else SheetRow("Undo my pick", "Cawback goes back to what it finds by itself, even if that's no lyrics.") {
                 if (UndoPick.asksFirst(found.offsetMs, found.anchors.size, found.skips.size)) confirmUndo = true
                 else { onClose(); onUndoPick() }
             }

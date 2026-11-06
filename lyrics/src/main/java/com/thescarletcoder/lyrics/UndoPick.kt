@@ -1,6 +1,6 @@
 package com.thescarletcoder.lyrics
 
-/** "Not this song" in This song (owner, 0.5.1 device tests). Pure, so it is unit tested. */
+/** "Undo my pick" in This song (owner, 0.5.1 device tests; wording 2026-11-06). Pure, so it is unit tested. */
 object UndoPick {
     /** Only for a version picked by hand: an automatic match has nothing to undo. */
     fun offered(pinned: Boolean): Boolean = pinned
