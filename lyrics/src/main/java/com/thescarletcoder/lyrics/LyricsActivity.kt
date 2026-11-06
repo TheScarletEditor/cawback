@@ -568,6 +568,8 @@ private fun LyricsScreen(
                 } },
             onFix = { fixMode = it },
             onShare = { SettingsWork.runner.clear(SettingsWork.SHARE); panel = Panel.SHARE },
+            // As Other versions > Go back to the automatic match does.
+            onUndoPick = { val t = track; if (t != null) scope.launch { shown = null; shown = repo.unpin(t) } },
             onClear = { val t = track; val s = shown
                 if (t != null && s is Shown.Found) scope.launch {
                     if (repo.clearTiming(t)) updateIf(s.candidate.id) { it.withSkips(emptyList()).copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0) }

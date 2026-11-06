@@ -214,10 +214,11 @@ private fun BottomSheet(open: Boolean, onClose: () -> Unit, content: @Composable
 @Composable
 fun SongSheet(
     open: Boolean, shown: Shown?, onClose: () -> Unit, onWrong: () -> Unit, onNudge: (Long) -> Unit, onClear: () -> Unit,
-    onFix: (FixMode) -> Unit, onShare: () -> Unit,
+    onFix: (FixMode) -> Unit, onShare: () -> Unit, onUndoPick: () -> Unit,
 ) {
     // Reset with the song too, so a confirm left open can never clear the next song's timing.
     var confirmClear by remember(open, (shown as? Shown.Found)?.candidate?.id) { mutableStateOf(false) }
+    var confirmUndo by remember(open, (shown as? Shown.Found)?.candidate?.id) { mutableStateOf(false) }
     BottomSheet(open, onClose) {
         // A visible way out beside the title; Back and a tap outside still close it too (owner, finalize 0.5.1 S1).
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -231,6 +232,20 @@ fun SongSheet(
             fontFamily = Inter, fontSize = 14.sp, color = L.soft, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
         )
         SheetRow("Other versions", "Find a synced or different version, or search by hand.") { onClose(); onWrong() }
+        // A version picked by hand that turns out wrong (owner, 0.5.1 device tests): one step back to what Cawback finds
+        // by itself, which may be "No lyrics found". The same as Other versions > Go back to the automatic match.
+        if (found != null && UndoPick.offered(found.pinned)) {
+            if (confirmUndo) Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 10.dp)) {
+                Text("Undo your pick? The timing fixes you made to it go too.", fontFamily = Inter, fontSize = 16.sp, color = L.text)
+                FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Washed("Undo pick", { confirmUndo = false; onClose(); onUndoPick() })
+                    Washed("Cancel", { confirmUndo = false })
+                }
+            } else SheetRow("Undo my pick", "Cawback goes back to what it finds by itself, even if that's no lyrics.") {
+                if (UndoPick.asksFirst(found.offsetMs, found.anchors.size, found.skips.size)) confirmUndo = true
+                else { onClose(); onUndoPick() }
+            }
+        }
         if (found != null && found.synced) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 10.dp)) {
                 Text("Timing", fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 17.sp, color = L.text)
