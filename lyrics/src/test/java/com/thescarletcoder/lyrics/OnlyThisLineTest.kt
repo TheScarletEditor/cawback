@@ -3,7 +3,7 @@ package com.thescarletcoder.lyrics
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Only this line (owner, 2026-11-05): a line sung a little off moves alone; the lines either side stay where they were. */
+/** This line only (owner, 2026-11-05): a line sung a little off moves alone; the lines either side stay where they were. */
 class OnlyThisLineTest {
     // A made-up synced record: a line every 10 s from 0:10 to 1:00.
     private val lines = (1..6).map { LyricLine(it * 10_000L, "line $it") }
@@ -48,7 +48,7 @@ class OnlyThisLineTest {
 
     @Test fun aJumpAtALongPauseStaysWhereItWas() {
         // A made-up record with one long pause, 0:30 to 0:45. Two taps 5 s apart in their moves make the change one jump
-        // at that pause (0.5.1 Q53). Only this line on either side of the pause moves that line alone, and the jump stays.
+        // at that pause (0.5.1 Q53). This line only on either side of the pause moves that line alone, and the jump stays.
         val gapped = listOf(10_000L, 20_000L, 30_000L, 45_000L, 50_000L, 60_000L).mapIndexed { i, t -> LyricLine(t, "line ${i + 1}") }
         val gTimes = gapped.map { it.timeMs!! }
         fun gShown(a: List<Anchor>) = YourTiming.apply(gapped, 0, a).map { it.timeMs!! }
@@ -63,7 +63,7 @@ class OnlyThisLineTest {
     }
 
     @Test fun aSkippedLineIsNotANeighbour() {
-        // Line 3 (0:30) is marked not in this song, so it's left out of the times, as the repo does. Only this line on
+        // Line 3 (0:30) is marked not in this song, so it's left out of the times, as the repo does. This line only on
         // line 4 pins lines 2 and 5, never the hidden line, and every line still showing keeps its time.
         val visible = lines.filter { it.timeMs != 30_000L }
         val vTimes = visible.map { it.timeMs!! }

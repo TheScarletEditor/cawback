@@ -103,7 +103,7 @@ object YourTiming {
         (anchors.filter { it.lineMs != lineMs } + Anchor(lineMs, offsetMs.coerceIn(-ANCHOR_LIMIT_MS, ANCHOR_LIMIT_MS) - baseMs)).sortedBy { it.lineMs }
 
     /**
-     * Only this line (owner, 2026-11-05): the line at [lineMs] moves [offsetMs] in all, and the lines either side of it
+     * This line only (owner, 2026-11-05): the line at [lineMs] moves [offsetMs] in all, and the lines either side of it
      * stay where they show now, so a line sung a little early or late doesn't pull the rest of the song with it. The
      * neighbours are pinned with their current move (a tap of their own stays as it is). [times]: the record's line
      * times as on screen (sorted); lines sharing a time count as one.

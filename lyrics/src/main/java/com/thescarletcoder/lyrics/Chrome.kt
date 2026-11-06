@@ -332,7 +332,7 @@ fun FixBar(
                 target = YourTiming.afterTap(timed, next)
             })
             // Fix lines only (owner, 2026-11-05): Now for a line sung a little off; the lines either side stay put.
-            if (mode == FixMode.FIX && canTap) Washed("Only this line", {
+            if (mode == FixMode.FIX && canTap) Washed("This line only", {
                 val lineMs = s.lines[next!!].timeMs ?: return@Washed
                 onNow(lineMs, YourTiming.offsetFromTap(lineMs, np.positionMs(), outputDelayMs, Tunables.int(LyricsTuning.REACTION_MS).toLong()), true)
                 target = YourTiming.afterTap(timed, next)
