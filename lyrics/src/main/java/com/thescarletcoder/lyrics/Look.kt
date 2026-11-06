@@ -117,6 +117,12 @@ object Icons {
             drawCircle(c, w * 0.12f, Offset(w * knob, h * y))
         }
     }
+    /** Close: an X (This song's way out, owner, finalize 0.5.1 S1). */
+    val close: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit = { c ->
+        val w = size.width; val h = size.height
+        val s = androidx.compose.ui.graphics.drawscope.Stroke(w * 0.14f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawPath(Path().apply { moveTo(w * 0.18f, h * 0.18f); lineTo(w * 0.82f, h * 0.82f); moveTo(w * 0.82f, h * 0.18f); lineTo(w * 0.18f, h * 0.82f) }, c, style = s)
+    }
     val more: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit = { c ->
         val r = size.width * 0.1f
         listOf(0.18f, 0.5f, 0.82f).forEach { x -> drawCircle(c, r, Offset(size.width * x, size.height / 2)) }

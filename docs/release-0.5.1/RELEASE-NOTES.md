@@ -19,6 +19,10 @@ Cawback fixes timing for songs whose lyrics were cut differently, makes shared f
 - Share your fix now sends the version you fixed under its own title, artist, album and length, so LRCLIB updates that version instead of adding a near-copy.
 - A version with no title or artist on LRCLIB can't usefully be shared; This song says so and points you to a named version.
 
+**Getting around**
+- This song and the More menu have a close button at the top.
+- Library's sort and filter buttons are smaller and sit in one row you can slide, so the song list has more room.
+
 **Settings**
 - Your music app lists the apps playing now and the ones you've chosen first; other apps are under "More apps". Bluetooth and the Google app are no longer listed.
 - Library's Songs and Stats tabs match the Settings tabs.
