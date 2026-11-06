@@ -219,7 +219,12 @@ fun SongSheet(
     // Reset with the song too, so a confirm left open can never clear the next song's timing.
     var confirmClear by remember(open, (shown as? Shown.Found)?.candidate?.id) { mutableStateOf(false) }
     BottomSheet(open, onClose) {
-        Text("This song", fontFamily = Fraunces, fontSize = 22.sp, color = L.text, modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp))
+        // A visible way out beside the title; Back and a tap outside still close it too (owner, finalize 0.5.1 S1).
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("This song", fontFamily = Fraunces, fontSize = 22.sp, color = L.text,
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 6.dp))
+            IconButton(36.dp, "Close", onClose, draw = Icons.close)
+        }
         val found = shown as? Shown.Found
         if (found?.unsure == true) Text(
             "The timing may be off: the versions on LRCLIB don't agree, or don't fit this song. Try another version or fix the timing.",
@@ -345,6 +350,8 @@ fun MoreSheet(
 ) {
     val settings = LocalSettings.current
     BottomSheet(open, onClose) {
+                // The same visible way out as This song (owner, finalize 0.5.1 Q10).
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { IconButton(36.dp, "Close", onClose, draw = Icons.close) }
                 if (hasTrack && shown !is Shown.NoAccess) SheetRow("Note and moments", "Your note on this song, and bookmarked times.") { onClose(); onSongPage() }
                 SheetRow("Library", null) { onClose(); onLibrary() }
                 // Pausing is on the lyrics screen, not buried in Settings (scope section 6).
