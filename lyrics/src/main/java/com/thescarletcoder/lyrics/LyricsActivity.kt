@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Color.TRANSPARENT
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -77,7 +78,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class LyricsActivity : ComponentActivity() {
+/** The lyrics screen. [FixLinesActivity] is the same screen, opened only to fix a song's timing (D-062). */
+open class LyricsActivity : ComponentActivity() {
+    /** True in [FixLinesActivity]: the window that only fixes timing, opened from split screen. */
+    protected open val fixOnly: Boolean get() = false
     private lateinit var nowPlaying: NowPlaying
     private lateinit var settings: LyricsSettings
     private lateinit var route: AudioRoute
@@ -90,9 +94,16 @@ class LyricsActivity : ComponentActivity() {
     private var checkPlayer = false
     // OPEN_PLAYER arrived: open the music app in onStart, once what's playing is known ("whatever is playing" needs it).
     private var openPlayerPending = false
+    /** Back from the fixing window (D-062): open the music app beside Cawback once Cawback has focus. */
+    private val splitReturn = SplitReturn()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The fixing window: which tool, for which song. Nothing asked for (a stale relaunch): nothing to do.
+        val fixStart = if (!fixOnly) FixMode.NONE
+            else runCatching { FixMode.valueOf(intent.getStringExtra(FixLinesActivity.EXTRA_MODE).orEmpty()) }.getOrDefault(FixMode.NONE)
+        val fixSong = if (fixOnly) intent.getStringExtra(FixLinesActivity.EXTRA_SONG) else null
+        if (fixOnly && (fixStart == FixMode.NONE || fixSong == null)) { finish(); return }
         LyricsTuning.init(this)
         val prefs = LyricsPrefs(this)
         settings = LyricsSettings(this)
@@ -104,10 +115,11 @@ class LyricsActivity : ComponentActivity() {
                 combine(nowPlaying.track, nowPlaying.playing) { t, p -> t to p }.collect { (t, p) -> recorder.onState(t, p) }
             }
         }
-        if (savedInstanceState == null && settings.keepPlaysDays > 0 && LibraryDatabase.exists(this)) {
+        // The fixing window leaves the housekeeping, the music app and the shortcuts to the lyrics screen.
+        if (!fixOnly && savedInstanceState == null && settings.keepPlaysDays > 0 && LibraryDatabase.exists(this)) {
             lifecycleScope.launch(Dispatchers.IO) { runCatching { LibraryRepo(this@LyricsActivity).prune(settings.keepPlaysDays) } }
         }
-        if (savedInstanceState == null) lifecycleScope.launch(Dispatchers.IO) {
+        if (!fixOnly && savedInstanceState == null) lifecycleScope.launch(Dispatchers.IO) {
             runCatching { LyricsStore(this@LyricsActivity).sealOldFiles() }   // 0.2.0's plain cache files, encrypted
             // The optional cleanup (owner, 0.5.1 Q48): off unless turned on; never the user's own picks or timing.
             if (settings.cleanUnused) runCatching {
@@ -118,9 +130,9 @@ class LyricsActivity : ComponentActivity() {
             File(cacheDir, "exports").listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 86_400_000L }?.forEach { it.delete() }
         }
         val repo = LyricsRepo(LyricsStore(this))
-        if (savedInstanceState == null) checkPlayer = !maybeOpenPlayer(intent)
+        if (!fixOnly && savedInstanceState == null) checkPlayer = !backFromFix(intent) && !maybeOpenPlayer(intent)
         watchFold()
-        updateShortcuts()
+        if (!fixOnly) updateShortcuts()
         setContent {
             var choice by remember { mutableStateOf(prefs.theme) }
             val uiMode = LocalConfiguration.current.uiMode // the system flipping light/dark recomposes this
@@ -144,6 +156,8 @@ class LyricsActivity : ComponentActivity() {
                         output = route.output, foldTop = foldTop.value,
                         onFollowChanged = { nowPlaying.refresh(); updateShortcuts() },
                         onPinShortcut = ::pinShortcut,
+                        fix = if (fixOnly) FixOnly(fixStart, fixSong.orEmpty(), onDone = ::fixWindowDone) else null,
+                        onFixFullScreen = ::openFixWindow,
                     )
                 }
             }
@@ -152,11 +166,14 @@ class LyricsActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (fixOnly) return   // already fixing; the lyrics screen underneath is covered
+        if (backFromFix(intent)) return
         if (!maybeOpenPlayer(intent) && intent.action == Intent.ACTION_MAIN) checkPlayer = true   // opened again from the launcher
     }
 
     override fun onStart() {
         super.onStart()
+        screens.start()
         access.value = nowPlaying.hasAccess()
         nowPlaying.start()
         route.start()
@@ -175,8 +192,20 @@ class LyricsActivity : ComponentActivity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        if (fixOnly && isFinishing) fixWindowClosing()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!fixOnly && splitReturn.onFocus(hasFocus, SystemClock.elapsedRealtime())) openPlayerAfterFix()
+    }
+
     override fun onStop() {
-        recorder.close()
+        splitReturn.onStop()
+        // Moving between the lyrics screen and the fixing window isn't leaving Cawback: the listen ends with the last one.
+        if (screens.stop()) recorder.close()
         nowPlaying.stop()
         route.stop()
         super.onStop()
@@ -196,9 +225,58 @@ class LyricsActivity : ComponentActivity() {
         return true
     }
 
+    /**
+     * The fixing window closed and wants the split back (D-062). True if this was that. The music app opens once this
+     * screen has focus (SplitReturn): any earlier and Android pairs it with the closing window instead.
+     */
+    private fun backFromFix(i: Intent?): Boolean {
+        if (i == null || !i.getBooleanExtra(EXTRA_BACK_FROM_FIX, false)) return false
+        i.removeExtra(EXTRA_BACK_FROM_FIX)
+        val focused = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && hasWindowFocus()
+        if (splitReturn.ask(focused, SystemClock.elapsedRealtime())) openPlayerAfterFix()
+        return true
+    }
+
+    /** Your music app beside Cawback after the fixing window; with "whatever is playing", the app from before it opened. */
+    private fun openPlayerAfterFix() {
+        openPlayerAlongsideOf(splitReturn.player(settings.effectivePlayer(), nowPlaying.currentPackage) ?: return)
+    }
+
+    /**
+     * From split screen: Line up now or Fix lines in their own full-screen window (owner, D-062). It can't share the
+     * screen, so on phones Android leaves split screen to show it; where Android keeps the split, it asks for room.
+     */
+    private fun openFixWindow(mode: FixMode, song: String) {
+        val i = Intent(this, FixLinesActivity::class.java)
+            .putExtra(FixLinesActivity.EXTRA_MODE, mode.name).putExtra(FixLinesActivity.EXTRA_SONG, song)
+            .putExtra(FixLinesActivity.EXTRA_FROM_SPLIT, isInMultiWindowMode)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)   // a window left behind starts over
+        // "Whatever is playing": right after the window closes, what's playing isn't known again yet (PR #7 emulator run).
+        splitReturn.opening(isInMultiWindowMode, nowPlaying.currentPackage)
+        runCatching { startActivity(i) }
+    }
+
+    /** The fixing window is done (D-062). */
+    private fun fixWindowDone() = finish()
+
+    /**
+     * The fixing window is closing, however it closes (Done, Back, Cancel, giving up). Before the lyrics screen shows
+     * again: it reads the song's timing again (a nudge or Clear in the This song sheet here counts too), and, as the
+     * window was opened from split screen, it opens your music app beside it again, as "Cawback + your app" does.
+     */
+    private fun fixWindowClosing() {
+        SettingsWork.lyricsChanged()
+        if (intent.getBooleanExtra(FixLinesActivity.EXTRA_FROM_SPLIT, false)) runCatching {
+            startActivity(Intent(this, LyricsActivity::class.java).putExtra(EXTRA_BACK_FROM_FIX, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
     /** Your music app (or, with "whatever is playing", the app playing now) in the other half of the screen. */
     private fun openPlayerAlongside() {
-        val pkg = settings.effectivePlayer() ?: nowPlaying.currentPackage ?: return
+        openPlayerAlongsideOf(settings.effectivePlayer() ?: nowPlaying.currentPackage ?: return)
+    }
+
+    private fun openPlayerAlongsideOf(pkg: String) {
         val launch = packageManager.getLaunchIntentForPackage(pkg) ?: return
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
         runCatching { startActivity(launch) }
@@ -254,8 +332,12 @@ class LyricsActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OPEN_SPOTIFY = "com.thescarletcoder.lyrics.OPEN_SPOTIFY"
         const val EXTRA_OPEN_PLAYER = "com.thescarletcoder.lyrics.OPEN_PLAYER"
+        /** From the fixing window as it closes (D-062): bring the split back. */
+        private const val EXTRA_BACK_FROM_FIX = "com.thescarletcoder.lyrics.BACK_FROM_FIX"
         private const val ACTION_WITH_PLAYER = "com.thescarletcoder.lyrics.WITH_PLAYER"
         private const val SHORTCUT_ID = "with_player"
+        /** Cawback screens on screen now (the lyrics screen, the fixing window); main thread only. */
+        private val screens = OpenScreens()
     }
 }
 
@@ -271,11 +353,15 @@ internal enum class Panel {
     }
 }
 
+/** The fixing window's job (D-062): [mode] for [song] (title and artist, as LyricsScreen keys a song); [onDone] closes it. */
+internal class FixOnly(val mode: FixMode, val song: String, val onDone: () -> Unit)
+
 @Composable
 private fun LyricsScreen(
     np: NowPlaying, repo: LyricsRepo, hasAccess: Boolean, theme: ThemeChoice, onTheme: (ThemeChoice) -> Unit,
     onGrant: () -> Unit, onPlayer: () -> Unit, playerLabel: String?, output: Output, foldTop: Int?,
     onFollowChanged: () -> Unit, onPinShortcut: () -> Unit,
+    fix: FixOnly? = null, onFixFullScreen: (FixMode, String) -> Unit = { _, _ -> },
 ) {
     val settings = LocalSettings.current
     val context = LocalContext.current
@@ -437,6 +523,26 @@ private fun LyricsScreen(
     // Fixing needs synced lyrics: words only, a miss or offline closes the bar (a brief reload doesn't).
     LaunchedEffect(shown) { val s = shown; if (s != null && (s !is Shown.Found || !s.synced)) fixMode = FixMode.NONE }
 
+    // The fixing window (D-062): starts the tool it was opened for once that song's synced lyrics show, and closes
+    // when the tool does (Done, Back, a Line up's one Now, the song changing), after any tap's save has finished.
+    var fixArmed by rememberSaveable { mutableStateOf(false) }
+    var fixSaves by remember { mutableIntStateOf(0) }   // taps, nudges and clears still being saved; closing waits for them
+    fun fixSave(block: suspend () -> Unit) {
+        fixSaves++
+        scope.launch { try { block() } finally { fixSaves-- } }
+    }
+    if (fix != null) {
+        LaunchedEffect(song, shown, fixArmed) {
+            if (fixArmed) return@LaunchedEffect
+            when (FixWindow.start(fix.song, song, loaded = shown != null, synced = (shown as? Shown.Found)?.synced == true)) {
+                FixWindow.Start.WAIT -> Unit
+                FixWindow.Start.NOW -> { sheetSong = song; fixMode = fix.mode; fixArmed = true }
+                FixWindow.Start.GIVE_UP -> fix.onDone()
+            }
+        }
+        LaunchedEffect(fixArmed, fixMode, fixSaves) { if (fixArmed && fixMode == FixMode.NONE && fixSaves == 0) fix.onDone() }
+    }
+
     val inSplit = (context as? android.app.Activity)?.isInMultiWindowMode == true
     // The sheets sit outside the safe-area padding, so their dimming covers the whole screen, status bar included.
     Box(
@@ -460,6 +566,9 @@ private fun LyricsScreen(
     ) {
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
             val compact = maxHeight < 560.dp
+            // Read here: a split that changes size recomposes this, and the fixing window waits for room (D-062).
+            val where = FixWindow.where((context as? android.app.Activity)?.isInMultiWindowMode == true, fix != null, maxHeight.value)
+            val needsRoom = fix != null && where == FixWindow.Where.NEEDS_ROOM
             val density = LocalDensity.current
             // Flex mode: the fold's position inside this box (it's measured in window pixels).
             var boxTop by remember { mutableIntStateOf(0) }
@@ -485,6 +594,11 @@ private fun LyricsScreen(
                     Box(if (flexTop != null) Modifier.height((flexTop - pageTop).coerceAtLeast(0.dp)).fillMaxWidth() else Modifier.weight(1f).fillMaxWidth()) {
                         val t = track
                         when {
+                            needsRoom && panel == Panel.NONE -> EmptyState(
+                                "Fix lines needs the full screen",
+                                "Drag the divider to give Cawback the whole screen. Fixing starts as soon as there's room.",
+                                "Cancel", { if (fixArmed) fixMode = FixMode.NONE else fix?.onDone() },
+                            )
                             panel == Panel.TUNING -> TuningPage()
                             panel == Panel.LICENSES -> LicensesPage(licenseReading) { licenseReading = it }
                             panel == Panel.SETTINGS -> SettingsPanel(repo, hasAccess, theme, onTheme, onGrant,
@@ -530,10 +644,10 @@ private fun LyricsScreen(
                         }
                         // Fixing the timing: at the bottom of the lyrics area, so in Flex mode it stays above the fold.
                         val fixing = shown as? Shown.Found
-                        if (fixMode != FixMode.NONE && fixing != null && panel == Panel.NONE && songShowing && !songSheet && !sheet) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                        if (fixMode != FixMode.NONE && fixing != null && panel == Panel.NONE && songShowing && !songSheet && !sheet && !needsRoom) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
                             FixBar(fixMode, fixing, np, playing, settings.delayFor(output).toLong(),
                                 onNow = { lineMs, offsetMs -> val t = track
-                                    if (t != null) scope.launch {
+                                    if (t != null) fixSave {
                                         if (fixMode == FixMode.LINE_UP) {
                                             fixMode = FixMode.NONE   // closes the bar at once: one Now per Line up
                                             val base = repo.lineUp(t, lineMs, offsetMs)
@@ -544,7 +658,7 @@ private fun LyricsScreen(
                                         }
                                     } },
                                 onSkip = { lineMs, done -> val t = track
-                                    if (t == null) done(false) else scope.launch {
+                                    if (t == null) done(false) else fixSave {
                                         val e = repo.skipLine(t, lineMs)
                                         if (e != null) updateIf(fixing.candidate.id) { it.withSkips(e.skips).copy(anchors = e.anchors, tapped = true, sentAt = 0) }
                                         done(e != null)
@@ -562,14 +676,20 @@ private fun LyricsScreen(
             // Applied to what shows now, and only if it's still the same version: a song that changed meanwhile keeps its
             // own, and quick taps all count.
             onNudge = { d -> val t = track; val s = shown
-                if (t != null && s is Shown.Found) scope.launch {
+                if (t != null && s is Shown.Found) fixSave {
                     val next = repo.nudge(t, d)
                     if (next != null) updateIf(s.candidate.id) { it.copy(offsetMs = next, sentAt = 0) }
                 } },
-            onFix = { fixMode = it },
+            // From split screen the tools open full screen (D-062); checked at the tap, as the split may have changed.
+            onFix = { m ->
+                val split = (context as? android.app.Activity)?.isInMultiWindowMode == true
+                val s = song
+                if (s != null && FixWindow.where(split, fix != null, 0f) == FixWindow.Where.FULL_SCREEN) { songSheet = false; onFixFullScreen(m, s) }
+                else fixMode = m
+            },
             onShare = { SettingsWork.runner.clear(SettingsWork.SHARE); panel = Panel.SHARE },
             onClear = { val t = track; val s = shown
-                if (t != null && s is Shown.Found) scope.launch {
+                if (t != null && s is Shown.Found) fixSave {
                     if (repo.clearTiming(t)) updateIf(s.candidate.id) { it.withSkips(emptyList()).copy(offsetMs = 0, anchors = emptyList(), tapped = false, sentAt = 0) }
                 } },
         )
