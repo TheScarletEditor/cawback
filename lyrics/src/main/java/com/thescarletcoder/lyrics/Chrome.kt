@@ -280,7 +280,8 @@ enum class FixMode { NONE, LINE_UP, FIX }
  */
 @Composable
 fun FixBar(
-    mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outputDelayMs: Long, onNow: (lineMs: Long, offsetMs: Long) -> Unit,
+    mode: FixMode, s: Shown.Found, np: NowPlaying, playing: Boolean, outputDelayMs: Long,
+    onNow: (lineMs: Long, offsetMs: Long, onlyLine: Boolean) -> Unit,
     onSkip: (lineMs: Long, done: (saved: Boolean) -> Unit) -> Unit, onDone: () -> Unit,
 ) {
     val timed = remember(s) { YourTiming.apply(s.lines, s.offsetMs, s.anchors) }
@@ -327,7 +328,13 @@ fun FixBar(
             if (canTap) Washed("Now", {
                 // The line's time in the record, not on screen: the move is worked out against the record's own timing.
                 val lineMs = s.lines[next!!].timeMs ?: return@Washed
-                onNow(lineMs, YourTiming.offsetFromTap(lineMs, np.positionMs(), outputDelayMs, Tunables.int(LyricsTuning.REACTION_MS).toLong()))
+                onNow(lineMs, YourTiming.offsetFromTap(lineMs, np.positionMs(), outputDelayMs, Tunables.int(LyricsTuning.REACTION_MS).toLong()), false)
+                target = YourTiming.afterTap(timed, next)
+            })
+            // Fix lines only (owner, 2026-11-05): Now for a line sung a little off; the lines either side stay put.
+            if (mode == FixMode.FIX && canTap) Washed("This line only", {
+                val lineMs = s.lines[next!!].timeMs ?: return@Washed
+                onNow(lineMs, YourTiming.offsetFromTap(lineMs, np.positionMs(), outputDelayMs, Tunables.int(LyricsTuning.REACTION_MS).toLong()), true)
                 target = YourTiming.afterTap(timed, next)
             })
             // Fix lines only (owner, 0.5.1 Q53): a line in this version that the song doesn't have, hidden from now on.
