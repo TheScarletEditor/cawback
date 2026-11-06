@@ -93,6 +93,8 @@ open class LyricsActivity : ComponentActivity() {
     private var checkPlayer = false
     // OPEN_PLAYER arrived: open the music app in onStart, once what's playing is known ("whatever is playing" needs it).
     private var openPlayerPending = false
+    /** Back from the fixing window (D-062): open the music app beside Cawback once Cawback has focus. */
+    private val splitReturn = SplitReturn()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,7 +129,7 @@ open class LyricsActivity : ComponentActivity() {
             File(cacheDir, "exports").listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 86_400_000L }?.forEach { it.delete() }
         }
         val repo = LyricsRepo(LyricsStore(this))
-        if (!fixOnly && savedInstanceState == null) checkPlayer = !maybeOpenPlayer(intent)
+        if (!fixOnly && savedInstanceState == null) checkPlayer = !backFromFix(intent) && !maybeOpenPlayer(intent)
         watchFold()
         if (!fixOnly) updateShortcuts()
         setContent {
@@ -164,6 +166,7 @@ open class LyricsActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (fixOnly) return   // already fixing; the lyrics screen underneath is covered
+        if (backFromFix(intent)) return
         if (!maybeOpenPlayer(intent) && intent.action == Intent.ACTION_MAIN) checkPlayer = true   // opened again from the launcher
     }
 
@@ -193,7 +196,13 @@ open class LyricsActivity : ComponentActivity() {
         if (fixOnly && isFinishing) fixWindowClosing()
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!fixOnly && splitReturn.onFocus(hasFocus)) openPlayerAfterFix()
+    }
+
     override fun onStop() {
+        splitReturn.onStop()
         // Moving between the lyrics screen and the fixing window isn't leaving Cawback: the listen ends with the last one.
         if (screens.stop()) recorder.close()
         nowPlaying.stop()
@@ -216,6 +225,25 @@ open class LyricsActivity : ComponentActivity() {
     }
 
     /**
+     * The fixing window closed and wants the split back (D-062). True if this was that. The music app opens once this
+     * screen has focus (SplitReturn): any earlier and Android pairs it with the closing window instead.
+     */
+    private fun backFromFix(i: Intent?): Boolean {
+        if (i == null || !i.getBooleanExtra(EXTRA_BACK_FROM_FIX, false)) return false
+        i.removeExtra(EXTRA_BACK_FROM_FIX)
+        val focused = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && hasWindowFocus()
+        if (splitReturn.ask(focused)) openPlayerAfterFix()
+        return true
+    }
+
+    /** Your music app beside Cawback after the fixing window; with "whatever is playing", the app from before it opened. */
+    private fun openPlayerAfterFix() {
+        val pkg = SplitReturn.player(settings.effectivePlayer(), playingWhenFixOpened, nowPlaying.currentPackage)
+        playingWhenFixOpened = null
+        openPlayerAlongside(pkg ?: return)
+    }
+
+    /**
      * From split screen: Line up now or Fix lines in their own full-screen window (owner, D-062). It can't share the
      * screen, so on phones Android leaves split screen to show it; where Android keeps the split, it asks for room.
      */
@@ -224,6 +252,8 @@ open class LyricsActivity : ComponentActivity() {
             .putExtra(FixLinesActivity.EXTRA_MODE, mode.name).putExtra(FixLinesActivity.EXTRA_SONG, song)
             .putExtra(FixLinesActivity.EXTRA_FROM_SPLIT, isInMultiWindowMode)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)   // a window left behind starts over
+        // "Whatever is playing": right after the window closes, what's playing isn't known again yet (PR #7 emulator run).
+        if (isInMultiWindowMode) playingWhenFixOpened = nowPlaying.currentPackage
         runCatching { startActivity(i) }
     }
 
@@ -238,13 +268,16 @@ open class LyricsActivity : ComponentActivity() {
     private fun fixWindowClosing() {
         SettingsWork.lyricsChanged()
         if (intent.getBooleanExtra(FixLinesActivity.EXTRA_FROM_SPLIT, false)) runCatching {
-            startActivity(Intent(this, LyricsActivity::class.java).putExtra(EXTRA_OPEN_PLAYER, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivity(Intent(this, LyricsActivity::class.java).putExtra(EXTRA_BACK_FROM_FIX, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }
 
     /** Your music app (or, with "whatever is playing", the app playing now) in the other half of the screen. */
     private fun openPlayerAlongside() {
-        val pkg = settings.effectivePlayer() ?: nowPlaying.currentPackage ?: return
+        openPlayerAlongside(settings.effectivePlayer() ?: nowPlaying.currentPackage ?: return)
+    }
+
+    private fun openPlayerAlongside(pkg: String) {
         val launch = packageManager.getLaunchIntentForPackage(pkg) ?: return
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
         runCatching { startActivity(launch) }
@@ -300,6 +333,10 @@ open class LyricsActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OPEN_SPOTIFY = "com.thescarletcoder.lyrics.OPEN_SPOTIFY"
         const val EXTRA_OPEN_PLAYER = "com.thescarletcoder.lyrics.OPEN_PLAYER"
+        /** From the fixing window as it closes (D-062): bring the split back. */
+        private const val EXTRA_BACK_FROM_FIX = "com.thescarletcoder.lyrics.BACK_FROM_FIX"
+        /** The app playing when the fixing window opened from split screen, for "whatever is playing"; main thread only. */
+        private var playingWhenFixOpened: String? = null
         private const val ACTION_WITH_PLAYER = "com.thescarletcoder.lyrics.WITH_PLAYER"
         private const val SHORTCUT_ID = "with_player"
         /** Cawback screens on screen now (the lyrics screen, the fixing window); main thread only. */
