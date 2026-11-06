@@ -50,12 +50,20 @@ class SplitReturnTest {
         assertEquals("now.app", s.player(null, "now.app"))
     }
 
-    @Test fun nothingIsRememberedOutsideSplitOrOnceBackOnScreen() {
+    @Test fun nothingIsRememberedOutsideSplit() {
         val s = SplitReturn()
-        s.opening(inSplit = false, playing = "before.app")
-        assertNull(s.player(null, null))
         s.opening(inSplit = true, playing = "before.app")
-        s.onFocus(true, 0)                                   // back on screen with nothing asked
+        s.opening(inSplit = false, playing = "other.app")   // a later fixing window from full screen
         assertNull(s.player(null, null))
+    }
+
+    @Test fun aMomentOfFocusWhileTheWindowOpensKeepsTheApp() {
+        // Re-check of 50de844: leaving split screen for the fixing window may hand the lyrics screen focus for a moment.
+        val s = SplitReturn()
+        s.opening(inSplit = true, playing = "before.app")
+        s.onFocus(true, 0); s.onFocus(false, 50)
+        s.ask(focused = false, nowMs = 2_000)
+        assertTrue(s.onFocus(true, 2_400))
+        assertEquals("before.app", s.player(null, null))
     }
 }

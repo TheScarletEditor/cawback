@@ -29,11 +29,9 @@ class SplitReturn(private val waitMs: Long = WAIT_MS) {
 
     /** True once, when the lyrics screen's window gets focus soon enough after [ask]: open the music app beside it now. */
     fun onFocus(hasFocus: Boolean, nowMs: Long): Boolean {
-        val at = askedAt
-        if (at == null) {
-            if (hasFocus) whenOpened = null   // back on screen with nothing asked: the remembered app is stale
-            return false
-        }
+        // Nothing asked: the remembered app stays. The phone may hand focus back for a moment while it leaves split screen
+        // to show the fixing window (re-check of 50de844); it's cleared when used, when a request lapses, or outside split.
+        val at = askedAt ?: return false
         if (nowMs - at > waitMs) { askedAt = null; whenOpened = null; return false }
         if (!hasFocus) return false
         askedAt = null
